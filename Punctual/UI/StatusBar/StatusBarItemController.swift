@@ -164,9 +164,12 @@ final class StatusBarItemController {
 
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusMenuBarAction)
+        // Both halves of both buttons: macOS 27 may deliver only one half of a
+        // click, and `StatusItemClickPolicy` acts on whichever arrives first and
+        // swallows its partner.
         statusItem.button?.sendAction(on: [
-            NSEvent.EventTypeMask.rightMouseDown, NSEvent.EventTypeMask.leftMouseUp,
-            NSEvent.EventTypeMask.leftMouseDown
+            NSEvent.EventTypeMask.rightMouseDown, NSEvent.EventTypeMask.rightMouseUp,
+            NSEvent.EventTypeMask.leftMouseUp, NSEvent.EventTypeMask.leftMouseDown
         ])
 
         // Temporary icon before app delegate setup
