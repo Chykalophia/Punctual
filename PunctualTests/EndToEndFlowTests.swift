@@ -202,6 +202,15 @@ class EndToEndFlowTestCase: BaseTestCase {
         return EndToEndHarness(store: store)
     }
 
+    /// Seconds from `now` until the start of tomorrow. Tests that need an
+    /// event to land TODAY cap their offsets with this, so a run late in the
+    /// evening (CI runs on UTC) doesn't push a "today" event past midnight.
+    fileprivate func secondsUntilTomorrow(from now: Date) -> TimeInterval {
+        let calendar = Calendar.current
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+        return startOfTomorrow.timeIntervalSince(now)
+    }
+
     fileprivate func makeEvent(
         id: String,
         startingIn startOffset: TimeInterval,
@@ -366,9 +375,10 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
     func testEventsFlowFromStoreIntoMenu() async {
         configureDisplayDefaults()
         let now = Date()
+        let untilTomorrow = secondsUntilTomorrow(from: now)
         let harness = makeHarness(events: [
-            makeEvent(id: "E1", startingIn: 300, now: now),
-            makeEvent(id: "E2", startingIn: 3600, now: now)
+            makeEvent(id: "E1", startingIn: min(300, untilTomorrow / 3), now: now),
+            makeEvent(id: "E2", startingIn: min(3600, untilTomorrow * 2 / 3), now: now)
         ])
         defer { harness.stop() }
 
@@ -883,7 +893,7 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
             .date(byAdding: .day, value: 1, to: now)!
             .timeIntervalSince(now)
         let harness = makeHarness(events: [
-            makeEvent(id: "TODAY", startingIn: 300, now: now),
+            makeEvent(id: "TODAY", startingIn: min(300, secondsUntilTomorrow(from: now) / 2), now: now),
             makeEvent(id: "TMRW", startingIn: tomorrowOffset, now: now)
         ])
         defer { harness.stop() }
@@ -909,14 +919,15 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
     }
 
     /// Two tomorrow events so "only the first" is distinguishable from "all".
+    /// One event later today and two tomorrow morning, whatever the time of
+    /// day: "now + 1 day + 1 hour" lands on the day AFTER tomorrow when the
+    /// suite runs in the last hour before midnight.
     private func makeTwoDayHarness(now: Date) -> EndToEndHarness {
-        let tomorrowOffset = Calendar.current
-            .date(byAdding: .day, value: 1, to: now)!
-            .timeIntervalSince(now)
+        let untilTomorrow = secondsUntilTomorrow(from: now)
         return makeHarness(events: [
-            makeEvent(id: "TODAY", startingIn: 300, now: now),
-            makeEvent(id: "TMRWA", startingIn: tomorrowOffset, now: now),
-            makeEvent(id: "TMRWB", startingIn: tomorrowOffset + 3600, now: now)
+            makeEvent(id: "TODAY", startingIn: min(300, untilTomorrow / 2), now: now),
+            makeEvent(id: "TMRWA", startingIn: untilTomorrow + 9 * 3600, now: now),
+            makeEvent(id: "TMRWB", startingIn: untilTomorrow + 10 * 3600, now: now)
         ])
     }
 
@@ -979,7 +990,7 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
             .date(byAdding: .day, value: 1, to: now)!
             .timeIntervalSince(now)
         let harness = makeHarness(events: [
-            makeEvent(id: "TODAY", startingIn: 300, now: now),
+            makeEvent(id: "TODAY", startingIn: min(300, secondsUntilTomorrow(from: now) / 2), now: now),
             makeEvent(id: "TMRWA", startingIn: tomorrowOffset, now: now)
         ])
         defer { harness.stop() }

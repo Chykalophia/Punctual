@@ -9,6 +9,7 @@
 //  adopt the shared `.preferenceIndent()` modifier for dependent-row indents;
 //  Preferences UX overhaul Phase 0 replaces the synchronous, main-thread-blocking
 //  `checkNotificationSettings()` with the cached async `NotificationSettingsMonitor`.
+//  Punctual, 2026-11-05: read notification settings off the main actor (Xcode 16 SDK).
 //
 
 import AppKit
@@ -45,9 +46,16 @@ final class NotificationSettingsMonitor {
     private init() {}
 
     func refresh() async {
+        delivery = await Self.currentDelivery()
+    }
+
+    /// Reads the settings off the main actor and returns only the resolved
+    /// value: `UNNotificationSettings` isn't `Sendable` in every SDK this
+    /// builds with, so it must not cross into the main actor.
+    nonisolated private static func currentDelivery() async -> NotificationDelivery {
         // https://developer.apple.com/documentation/usernotifications/unusernotificationcenter/notificationsettings()
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        delivery = NotificationDeliveryPolicy.resolve(
+        return NotificationDeliveryPolicy.resolve(
             authorization: NotificationAuthorization(settings.authorizationStatus),
             staysOnscreen: settings.alertStyle == .alert
         )

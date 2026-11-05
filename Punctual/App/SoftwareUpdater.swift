@@ -60,11 +60,18 @@ final class SoftwareUpdater: NSObject, ObservableObject {
 
     private func refreshNotificationAuthorization() {
         Task { @MainActor in
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            let allowed = settings.authorizationStatus == .authorized
-                || settings.authorizationStatus == .provisional
-            notificationsAuthorized = allowed && settings.alertStyle != .none
+            notificationsAuthorized = await Self.notificationsCanAlert()
         }
+    }
+
+    /// Reads the settings off the main actor and hands back only a Bool:
+    /// `UNNotificationSettings` isn't `Sendable` in every SDK this builds
+    /// with, so it must not cross into the main actor.
+    nonisolated private static func notificationsCanAlert() async -> Bool {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let allowed = settings.authorizationStatus == .authorized
+            || settings.authorizationStatus == .provisional
+        return allowed && settings.alertStyle != .none
     }
 
     /// Debug builds run from Xcode/DerivedData would otherwise check the
