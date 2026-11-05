@@ -299,32 +299,75 @@ final class StatusBarItemController {
     @objc
     func statusMenuBarAction(sender _: NSStatusItem) {
         let event = NSApp.currentEvent
+        let input = Self.clickInput(for: event)
+        let outcome = StatusItemClickPolicy.outcome(
+            for: input,
+            controlKeyHeld: event?.modifierFlags.contains(.control) ?? false,
+            lastDown: lastHandledStatusItemDown,
+            now: Date()
+        )
+        // Recorded AFTER acting, not before: the quick-actions menu is modal, so
+        // `showQuickActionsMenu()` returns only once it has closed. Timing the
+        // pairing window from then means a mouse-up delivered after a long look
+        // at the menu is still recognised as the end of the click that opened it.
+        defer {
+            if outcome != .ignore {
+                lastHandledStatusItemDown = StatusItemClickPolicy.handledDown(
+                    after: input,
+                    now: Date()
+                )
+            }
+        }
 
-        if event?.type == .rightMouseUp {
+        switch outcome {
+        case .ignore:
+            return
+        case .secondary:
             // Right button click → compact quick-actions menu. Still an NSMenu,
             // and rightly so: it is a short list of verbs, which is exactly what
             // a menu is for.
             showQuickActionsMenu()
-            return
+        case .primary:
+            // The Join chip is drawn INTO the item's title, not added as a
+            // control: a status item is one button, and its click opens the
+            // panel. So the chip's rect is tested here instead. The same rect the
+            // overlay drew, so the target cannot drift from the capsule the user
+            // is aiming at. Only a real mouse event has a location to test;
+            // macOS 27's event-less click opens the panel.
+            if let event, input != .nonMouse, isActionChipClick(event) {
+                joinNextMeeting()
+                return
+            }
+            toggleDropdownPanel()
         }
-        guard event == nil || event?.type == .leftMouseDown || event?.type == .leftMouseUp else {
-            return
-        }
-        // The status-item button sends its action on BOTH left-mouse-down and
-        // left-mouse-up, and the panel sees both, so a single click would toggle
-        // it twice. Act on the down edge (and on the shortcut's synthetic nil
-        // event) only.
-        guard event?.type != .leftMouseUp else { return }
+    }
 
-        // The Join chip is drawn INTO the item's title, not added as a control:
-        // a status item is one button, and its click opens the panel. So the
-        // chip's rect is tested here instead. The same rect the overlay drew, so
-        // the target cannot drift from the capsule the user is aiming at.
-        if let event, isActionChipClick(event) {
-            joinNextMeeting()
-            return
+    /// The mouse-down `statusMenuBarAction` last acted on. See
+    /// `StatusItemClickPolicy` for why clicks are paired by time rather than by
+    /// acting on one fixed edge.
+    private var lastHandledStatusItemDown: StatusItemClickPolicy.HandledDown?
+
+    /// Reduces AppKit's current event to the policy's input. Anything that is
+    /// not a mouse button event — including no event at all, which is how
+    /// macOS 27 delivers some status-item clicks — is `.nonMouse`.
+    private static func clickInput(for event: NSEvent?) -> StatusItemClickPolicy.Input {
+        switch event?.type {
+        case .leftMouseDown: .leftMouseDown
+        case .leftMouseUp: .leftMouseUp
+        case .rightMouseDown: .rightMouseDown
+        case .rightMouseUp: .rightMouseUp
+        default: .nonMouse
         }
-        toggleDropdownPanel()
+    }
+
+    /// Draws the status item as selected (or not), the pill a real menu gets
+    /// while it is open. Deferred one run-loop turn: the button runs its own
+    /// highlight tracking for the click that opened or closed the panel, and
+    /// setting the state inside that click would be overwritten as it ends.
+    func setStatusItemHighlighted(_ highlighted: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.statusItem?.button?.highlight(highlighted)
+        }
     }
 
     /// Whether `event` landed on the Join chip.

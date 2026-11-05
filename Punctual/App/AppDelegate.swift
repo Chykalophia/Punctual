@@ -83,6 +83,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         statusBarItem = StatusBarItemController()
+        // The status item shows as selected for as long as its panel is up, the
+        // way it does for a real menu. macOS 27 no longer infers that for an app
+        // that shows its own window, so without this the item looks idle while
+        // the panel hangs off it.
+        windowCoordinator.onDropdownPanelVisibilityChange = { [weak self] isOpen in
+            self?.statusBarItem?.setStatusItemHighlighted(isOpen)
+        }
 
         NSAppleEventManager.shared().setEventHandler(
             self,

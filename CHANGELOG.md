@@ -4,6 +4,17 @@ Punctual (formerly MeetingBarNG) is built on [MeetingBar](https://github.com/lei
 by Andrii Leitsius and the MeetingBar contributors. This file lists Punctual's own releases.
 Versions 0.2.0 and 0.3.0 shipped under the name MeetingBarNG.
 
+## Unreleased
+
+* **macOS 27: clicks on the menu bar icon work again.** macOS 27 changed how a click on a
+  menu bar item reaches the app: sometimes with no mouse event behind it, sometimes as the
+  release half only. Punctual ignored both, so a click could do nothing, most often after the
+  right-click menu had been used. Every click now opens the panel or the menu exactly once.
+* **The menu bar icon stays highlighted while the panel is open**, as it does for a menu.
+  macOS 27 no longer draws that for an app showing its own window.
+* Control-click on the menu bar icon now opens the right-click menu, as it does elsewhere on
+  the Mac. It used to open the panel.
+
 ## 1.1.0 (2026-10-01)
 
 * **Automatic updates.** Punctual now updates itself, using

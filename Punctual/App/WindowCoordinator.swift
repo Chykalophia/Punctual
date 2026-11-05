@@ -380,6 +380,12 @@ final class WindowCoordinator {
     /// second invocation should leave it open rather than dismiss it.
     var isDropdownPanelOpen: Bool { dropdownPanel != nil }
 
+    /// Told `true` once the dropdown panel is on screen and `false` as it
+    /// closes, however it closes (status-item click, Escape, click-away, an
+    /// action inside it). The app uses it to keep the status item highlighted
+    /// while the panel is open.
+    var onDropdownPanelVisibilityChange: (@MainActor (Bool) -> Void)?
+
     private weak var preferencesWindow: NSWindow?
 
     /// Live move/resize observers for the Preferences window. Held so a second
@@ -470,6 +476,7 @@ final class WindowCoordinator {
         )
         window.onClose = { [weak self] in
             self?.dropdownPanelClosedAt = Date()
+            self?.onDropdownPanelVisibilityChange?(false)
             // Release on the NEXT run-loop turn: `onClose` fires from inside
             // `close()`, where AppKit is still using the window. Dropping the
             // last reference there is exactly the over-release that crashed.
@@ -483,6 +490,7 @@ final class WindowCoordinator {
         window.orderFrontRegardless()
 
         dropdownPanel = window
+        onDropdownPanelVisibilityChange?(true)
     }
 
     /// Installs the panel's visible surface into `window` and reports the height
