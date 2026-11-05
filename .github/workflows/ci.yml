@@ -54,7 +54,7 @@ jobs:
             build/SourcePackages
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/org.swift.swiftpm
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift', 'MeetingBar.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift', 'Punctual.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
 
