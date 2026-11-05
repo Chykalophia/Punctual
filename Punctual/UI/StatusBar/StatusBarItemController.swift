@@ -306,21 +306,11 @@ final class StatusBarItemController {
         let outcome = StatusItemClickPolicy.outcome(
             for: input,
             controlKeyHeld: event?.modifierFlags.contains(.control) ?? false,
-            lastDown: lastHandledStatusItemDown,
-            now: Date()
+            pendingDown: pendingStatusItemDown
         )
-        // Recorded AFTER acting, not before: the quick-actions menu is modal, so
-        // `showQuickActionsMenu()` returns only once it has closed. Timing the
-        // pairing window from then means a mouse-up delivered after a long look
-        // at the menu is still recognised as the end of the click that opened it.
-        defer {
-            if outcome != .ignore {
-                lastHandledStatusItemDown = StatusItemClickPolicy.handledDown(
-                    after: input,
-                    now: Date()
-                )
-            }
-        }
+        // Updated AFTER acting, whatever the outcome: a consumed mouse-up clears
+        // the pairing so it cannot swallow the next click too.
+        defer { pendingStatusItemDown = StatusItemClickPolicy.pendingDown(after: input) }
 
         switch outcome {
         case .ignore:
@@ -345,10 +335,10 @@ final class StatusBarItemController {
         }
     }
 
-    /// The mouse-down `statusMenuBarAction` last acted on. See
-    /// `StatusItemClickPolicy` for why clicks are paired by time rather than by
-    /// acting on one fixed edge.
-    private var lastHandledStatusItemDown: StatusItemClickPolicy.HandledDown?
+    /// The button whose mouse-down `statusMenuBarAction` acted on and whose
+    /// mouse-up is still to come. See `StatusItemClickPolicy` for why clicks are
+    /// paired rather than acted on at one fixed edge.
+    private var pendingStatusItemDown: StatusItemClickPolicy.Button?
 
     /// Reduces AppKit's current event to the policy's input. Anything that is
     /// not a mouse button event — including no event at all, which is how

@@ -6,10 +6,11 @@ Versions 0.2.0 and 0.3.0 shipped under the name MeetingBarNG.
 
 ## Unreleased
 
-* **macOS 27: clicks on the menu bar icon work again.** macOS 27 changed how a click on a
-  menu bar item reaches the app: sometimes with no mouse event behind it, sometimes as the
-  release half only. Punctual ignored both, so a click could do nothing, most often after the
-  right-click menu had been used. Every click now opens the panel or the menu exactly once.
+* **macOS 27: clicks on the menu bar icon should register again.** macOS 27 changed how a
+  click on a menu bar item reaches the app, at times as the release half only or alongside an
+  event that is not a mouse event. Punctual ignored both, so a click could do nothing. Each
+  click is now acted on exactly once: it opens or closes the panel, joins via the Join chip,
+  or opens the right-click menu.
 * **The menu bar icon stays highlighted while the panel is open**, as it does for a menu.
   macOS 27 no longer draws that for an app showing its own window.
 * Control-click on the menu bar icon now opens the right-click menu, as it does elsewhere on

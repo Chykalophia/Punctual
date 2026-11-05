@@ -11,27 +11,23 @@ import XCTest
 @testable import PunctualLogic
 
 final class StatusItemClickPolicyTests: XCTestCase {
-    private let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
-
     private func outcome(
         _ input: StatusItemClickPolicy.Input,
         control: Bool = false,
-        lastDown: StatusItemClickPolicy.HandledDown? = nil,
-        at time: Date? = nil
+        pending: StatusItemClickPolicy.Button? = nil
     ) -> StatusItemClickPolicy.Outcome {
-        StatusItemClickPolicy.outcome(
-            for: input,
-            controlKeyHeld: control,
-            lastDown: lastDown,
-            now: time ?? now
-        )
+        StatusItemClickPolicy.outcome(for: input, controlKeyHeld: control, pendingDown: pending)
     }
 
-    private func down(
-        _ button: StatusItemClickPolicy.HandledDown.Button,
-        secondsAgo: TimeInterval
-    ) -> StatusItemClickPolicy.HandledDown {
-        .init(button: button, at: now.addingTimeInterval(-secondsAgo))
+    /// Runs a sequence of inputs through the policy the way the controller
+    /// does, carrying the pending down from one call to the next.
+    private func run(_ inputs: [StatusItemClickPolicy.Input]) -> [StatusItemClickPolicy.Outcome] {
+        var pending: StatusItemClickPolicy.Button?
+        return inputs.map { input in
+            let result = outcome(input, pending: pending)
+            pending = StatusItemClickPolicy.pendingDown(after: input)
+            return result
+        }
     }
 
     // MARK: - Primary clicks
@@ -40,8 +36,9 @@ final class StatusItemClickPolicyTests: XCTestCase {
         XCTAssertEqual(outcome(.leftMouseDown), .primary)
     }
 
+    /// Also covers a press held for any length of time: pairing is by order.
     func testTheMouseUpOfAHandledClickIsIgnored() {
-        XCTAssertEqual(outcome(.leftMouseUp, lastDown: down(.left, secondsAgo: 0.1)), .ignore)
+        XCTAssertEqual(outcome(.leftMouseUp, pending: .left), .ignore)
     }
 
     /// macOS 27: the click arrives as a mouse-up only. Before, this did nothing.
@@ -49,27 +46,52 @@ final class StatusItemClickPolicyTests: XCTestCase {
         XCTAssertEqual(outcome(.leftMouseUp), .primary)
     }
 
-    func testAMouseUpLongAfterTheLastDownIsANewClick() {
-        XCTAssertEqual(outcome(.leftMouseUp, lastDown: down(.left, secondsAgo: 5)), .primary)
-    }
-
-    /// macOS 27: the click arrives with no mouse event at all (also the path the
-    /// keyboard shortcut takes). Before, any non-mouse event was dropped.
+    /// macOS 27: the click arrives with no mouse event at all, or alongside a
+    /// non-mouse event (also the path the keyboard shortcut takes). There is no
+    /// modifier state worth trusting there, so ⌃ does not change it.
     func testAnEventlessClickOpensThePanel() {
         XCTAssertEqual(outcome(.nonMouse), .primary)
-        XCTAssertEqual(outcome(.nonMouse, lastDown: down(.left, secondsAgo: 0.1)), .primary)
+        XCTAssertEqual(outcome(.nonMouse, pending: .left), .primary)
+        XCTAssertEqual(outcome(.nonMouse, control: true), .primary)
     }
 
     /// The reported macOS 27 bug: after the right-click menu was used once,
     /// left clicks stopped working. A right-click must never swallow the next
     /// left click.
     func testARightClickNeverSwallowsTheNextLeftClick() {
-        XCTAssertEqual(outcome(.leftMouseUp, lastDown: down(.right, secondsAgo: 0.1)), .primary)
-        XCTAssertEqual(outcome(.leftMouseDown, lastDown: down(.right, secondsAgo: 0.1)), .primary)
+        XCTAssertEqual(outcome(.leftMouseUp, pending: .right), .primary)
+        XCTAssertEqual(outcome(.leftMouseDown, pending: .right), .primary)
     }
 
-    func testAClockThatRanBackwardsDoesNotSwallowAClick() {
-        XCTAssertEqual(outcome(.leftMouseUp, lastDown: down(.left, secondsAgo: -10)), .primary)
+    // MARK: - Sequences
+
+    func testAFullClickActsOnce() {
+        XCTAssertEqual(run([.leftMouseDown, .leftMouseUp]), [.primary, .ignore])
+    }
+
+    /// Consuming the up clears the pairing, so two up-only clicks in a row
+    /// after a full click both register.
+    func testAConsumedMouseUpDoesNotSwallowTheNextClick() {
+        XCTAssertEqual(
+            run([.leftMouseDown, .leftMouseUp, .leftMouseUp, .leftMouseUp]),
+            [.primary, .ignore, .primary, .primary]
+        )
+    }
+
+    func testTwoFullClicksToggleTwice() {
+        XCTAssertEqual(
+            run([.leftMouseDown, .leftMouseUp, .leftMouseDown, .leftMouseUp]),
+            [.primary, .ignore, .primary, .ignore]
+        )
+    }
+
+    /// The right-click menu is modal and can eat its own mouse-up, leaving the
+    /// right down pending. The next left click must still land.
+    func testALeftClickAfterARightClickWhoseUpWasEatenLands() {
+        XCTAssertEqual(
+            run([.rightMouseDown, .leftMouseDown, .leftMouseUp]),
+            [.secondary, .primary, .ignore]
+        )
     }
 
     // MARK: - Secondary clicks
@@ -77,34 +99,22 @@ final class StatusItemClickPolicyTests: XCTestCase {
     func testARightClickOpensTheMenuOnWhicheverHalfArrivesFirst() {
         XCTAssertEqual(outcome(.rightMouseDown), .secondary)
         XCTAssertEqual(outcome(.rightMouseUp), .secondary)
-    }
-
-    func testTheMouseUpOfAHandledRightClickIsIgnored() {
-        XCTAssertEqual(outcome(.rightMouseUp, lastDown: down(.right, secondsAgo: 0.2)), .ignore)
+        XCTAssertEqual(run([.rightMouseDown, .rightMouseUp]), [.secondary, .ignore])
     }
 
     func testAControlClickOpensTheMenu() {
         XCTAssertEqual(outcome(.leftMouseDown, control: true), .secondary)
         XCTAssertEqual(outcome(.leftMouseUp, control: true), .secondary)
-        XCTAssertEqual(
-            outcome(.leftMouseUp, control: true, lastDown: down(.left, secondsAgo: 0.1)),
-            .ignore
-        )
+        XCTAssertEqual(outcome(.leftMouseUp, control: true, pending: .left), .ignore)
     }
 
     // MARK: - What gets remembered
 
     func testOnlyAMouseDownIsRemembered() {
-        XCTAssertEqual(
-            StatusItemClickPolicy.handledDown(after: .leftMouseDown, now: now),
-            .init(button: .left, at: now)
-        )
-        XCTAssertEqual(
-            StatusItemClickPolicy.handledDown(after: .rightMouseDown, now: now),
-            .init(button: .right, at: now)
-        )
-        XCTAssertNil(StatusItemClickPolicy.handledDown(after: .leftMouseUp, now: now))
-        XCTAssertNil(StatusItemClickPolicy.handledDown(after: .rightMouseUp, now: now))
-        XCTAssertNil(StatusItemClickPolicy.handledDown(after: .nonMouse, now: now))
+        XCTAssertEqual(StatusItemClickPolicy.pendingDown(after: .leftMouseDown), .left)
+        XCTAssertEqual(StatusItemClickPolicy.pendingDown(after: .rightMouseDown), .right)
+        XCTAssertNil(StatusItemClickPolicy.pendingDown(after: .leftMouseUp))
+        XCTAssertNil(StatusItemClickPolicy.pendingDown(after: .rightMouseUp))
+        XCTAssertNil(StatusItemClickPolicy.pendingDown(after: .nonMouse))
     }
 }

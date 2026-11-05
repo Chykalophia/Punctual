@@ -14,8 +14,8 @@
 //  click could do nothing at all — most visibly after the right-click menu had
 //  been used once, which is the same failure other menu-bar apps reported.
 //
-//  The rule now: act on the FIRST half of a primary click that arrives, and
-//  swallow the second half only when its partner was actually seen. A lone
+//  The rule now: act on the FIRST half of a click that arrives, and swallow
+//  the second half only when its partner was actually seen. A lone
 //  mouse-up (no down delivered) therefore still opens the panel, and a click
 //  with no mouse event at all is treated as a plain left click.
 //
@@ -23,8 +23,6 @@
 //
 //  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
-
-import Foundation
 
 enum StatusItemClickPolicy {
     /// The event AppKit reports as current when the status item's action fires,
@@ -48,31 +46,24 @@ enum StatusItemClickPolicy {
         case ignore
     }
 
-    /// The mouse-down this policy last acted on, so its mouse-up can be
-    /// recognised as the second half of the same click.
-    struct HandledDown: Equatable, Sendable {
-        enum Button: Equatable, Sendable { case left, right }
-        var button: Button
-        var at: Date
-    }
-
-    /// How long after a handled mouse-down its mouse-up is still treated as the
-    /// same click. Generous: a press held on the item is still one click, and
-    /// the cost of a too-long window is only that a SECOND deliberate click,
-    /// arriving as a lone mouse-up within it, is ignored.
-    static let clickPairingWindow: TimeInterval = 1.5
+    /// The button whose mouse-down this policy last acted on, so its mouse-up
+    /// can be recognised as the second half of the same click.
+    enum Button: Equatable, Sendable { case left, right }
 
     /// - Parameters:
     ///   - input: the event behind this action call.
     ///   - controlKeyHeld: whether ⌃ was held, which makes a left click a
     ///     secondary click, as it does everywhere else on the Mac.
-    ///   - lastDown: the mouse-down last acted on, if any.
-    ///   - now: the current time.
+    ///   - pendingDown: the button whose mouse-down was acted on and whose
+    ///     mouse-up has not arrived yet, if any.
+    ///
+    /// Pairing is by order, not by time: a press held on the item for as long
+    /// as you like is still one click. A down whose up never arrives can cost at
+    /// most one later lone-up click, since consuming an up clears the pairing.
     static func outcome(
         for input: Input,
         controlKeyHeld: Bool,
-        lastDown: HandledDown?,
-        now: Date
+        pendingDown: Button?
     ) -> Outcome {
         switch input {
         case .leftMouseDown:
@@ -80,36 +71,28 @@ enum StatusItemClickPolicy {
         case .rightMouseDown:
             return .secondary
         case .leftMouseUp:
-            if pairs(.left, with: lastDown, now: now) { return .ignore }
+            if pendingDown == .left { return .ignore }
             return controlKeyHeld ? .secondary : .primary
         case .rightMouseUp:
             // Up to macOS 26 the button delivered a right click on its up edge
             // only; whichever half arrives first opens the menu, once.
-            if pairs(.right, with: lastDown, now: now) { return .ignore }
+            if pendingDown == .right { return .ignore }
             return .secondary
         case .nonMouse:
+            // No mouse event means no reliable modifier state to read, so this
+            // is always the plain click.
             return .primary
         }
     }
 
-    /// The value to remember after acting on `input` at `now`: a mouse-down is
-    /// recorded so its mouse-up can be swallowed; anything else clears it, so a
-    /// stale down can never swallow a later, unrelated click.
-    static func handledDown(after input: Input, now: Date) -> HandledDown? {
+    /// What to remember after `input`, whatever its outcome: a mouse-down is
+    /// remembered so its mouse-up can be swallowed; anything else clears it,
+    /// so a consumed or stale down can never swallow a later click.
+    static func pendingDown(after input: Input) -> Button? {
         switch input {
-        case .leftMouseDown: HandledDown(button: .left, at: now)
-        case .rightMouseDown: HandledDown(button: .right, at: now)
+        case .leftMouseDown: .left
+        case .rightMouseDown: .right
         case .leftMouseUp, .rightMouseUp, .nonMouse: nil
         }
-    }
-
-    private static func pairs(
-        _ button: HandledDown.Button,
-        with lastDown: HandledDown?,
-        now: Date
-    ) -> Bool {
-        guard let lastDown, lastDown.button == button else { return false }
-        let elapsed = now.timeIntervalSince(lastDown.at)
-        return elapsed >= 0 && elapsed < clickPairingWindow
     }
 }
