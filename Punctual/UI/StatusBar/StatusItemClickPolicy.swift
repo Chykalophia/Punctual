@@ -74,8 +74,8 @@ enum StatusItemClickPolicy {
             if pendingDown == .left { return .ignore }
             return controlKeyHeld ? .secondary : .primary
         case .rightMouseUp:
-            // Up to macOS 26 the button delivered a right click on its up edge
-            // only; whichever half arrives first opens the menu, once.
+            // Whichever half of a right click arrives first opens the menu,
+            // once.
             if pendingDown == .right { return .ignore }
             return .secondary
         case .nonMouse:
