@@ -66,6 +66,7 @@ let package = Package(
                 "UI/StatusBar/MeetingProgress.swift",
                 "UI/StatusBar/TimelineSpan.swift",
                 "UI/StatusBar/StatusBarTickPolicy.swift",
+                "UI/StatusBar/StatusItemClickPolicy.swift",
                 // Preferences (hostless core only; the tab Views are app-target)
                 "Preferences/AlertsPresentation.swift",
                 "Preferences/SettingsIndex.swift",
