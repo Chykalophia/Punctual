@@ -4,7 +4,7 @@ Punctual (formerly MeetingBarNG) is built on [MeetingBar](https://github.com/lei
 by Andrii Leitsius and the MeetingBar contributors. This file lists Punctual's own releases.
 Versions 0.2.0 and 0.3.0 shipped under the name MeetingBarNG.
 
-## Unreleased
+## 1.1.1 (2026-11-08)
 
 * **macOS 27: clicks on the menu bar icon should register again.** macOS 27 changed how a
   click on a menu bar item reaches the app, at times as the release half only or alongside an

@@ -77,6 +77,27 @@ enum ReleaseNotes {
     /// dropped.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.1.1",
+            date: "November 2026",
+            highlights: [
+                ChangeEntry(
+                    kind: .fix,
+                    text: "Clicking Punctual in the menu bar works again on macOS 27. Every click now "
+                        + "opens or closes the panel, including right after using the right-click menu."
+                ),
+                ChangeEntry(
+                    kind: .improvement,
+                    text: "The menu bar icon stays highlighted while the panel is open, so you can "
+                        + "tell at a glance that it's showing."
+                ),
+                ChangeEntry(
+                    kind: .improvement,
+                    text: "Control-click the menu bar icon to open the quick-actions menu, just like "
+                        + "a right-click."
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.1.0",
             date: "October 2026",
             highlights: [
