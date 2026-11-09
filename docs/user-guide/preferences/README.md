@@ -7,14 +7,14 @@ Open Preferences from the right-click menu, the dropdown's gear, the command bar
   <img src="../images/app/preferences-calendars-light.png" alt="The Preferences window" width="720">
 </picture>
 
-The sidebar lists eight panes, plus **About & Support** at the bottom. The search field at the top of the sidebar searches every setting by name, help text, and common synonyms (try "duplicate", "OOO", or "screen share"); click a result to jump to its pane.
+The sidebar lists eight panes, plus **About & Support** at the bottom. The search field at the top of the sidebar searches the indexed settings (see below) by name, help text, and common synonyms (try "duplicate", "OOO", or "screen share"); click a result to jump to its pane.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/app/preferences-search-dark.png">
   <img src="../images/app/preferences-search-light.png" alt="Searching settings" width="720">
 </picture>
 
-Each pane ends with **Reset this section…**, which returns that pane to its defaults. **Reset all settings…** in General resets every pane. Neither touches your calendar choices, saved links, or browser setups.
+Each pane ends with **Reset this section…**, which returns that pane's indexed settings to their defaults. **Reset all settings…** in General resets every pane. Neither touches your calendar choices, saved links, or browser setups.
 
 | Pane | What it decides |
 |---|---|
