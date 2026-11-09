@@ -45,7 +45,7 @@ App source: direct
 
 ## Google sign-in confirmation page
 
-When you connect Google Calendar (during [setup](getting-started.md) or in [Preferences ▸ Calendars](preferences/calendars.md)), Google's sign-in opens in your browser. After you approve, the browser returns to Punctual and shows this page, served from your own Mac (127.0.0.1) only while sign-in is in progress. It follows the browser's light or dark appearance, and shows the account you connected.
+When you connect Google Calendar (during [setup](getting-started.md) or in [Preferences ▸ Calendars](preferences/calendars.md)), Google's sign-in opens in your browser. After you approve, the browser returns to Punctual and shows this page, served from your own Mac on the loopback address (127.0.0.1), never from the network. The small page server stays up after sign-in, so a reload still shows the page, and stops when you next sign in or sign out. It follows the browser's light or dark appearance, and shows the account you connected.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/web/oauth-complete-dark.png">
