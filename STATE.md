@@ -4,13 +4,13 @@
 > attribution in `NOTICE`. This file is the "where are we / what's next" handoff so any
 > fresh session is self-sufficient without chat history.
 
-**Repo:** `/Users/peterkrzyzek/Development/MeetingBarNG` · remote `github.com/Chykalophia/MeetingBarNG`, being renamed to `github.com/Chykalophia/Punctual` (built on `github.com/leits/MeetingBar`, Apache-2.0)
+**Repo:** `/Users/peterkrzyzek/Development/Punctual` · remote `github.com/Chykalophia/Punctual` (renamed from `MeetingBarNG`; GitHub redirects the old URL) (built on `github.com/leits/MeetingBar`, Apache-2.0)
 **What it is:** Punctual, a Swift 6 / AppKit + SwiftUI macOS menu-bar meeting app by Peter Krzyzek / Chykalophia, built on MeetingBar by Andrii Leitsius. Homepage: https://chykalophia.com/punctual.
 
 ---
 
 ## ⚠️ Session setup (read first)
-- **Root your session at this repo** (`/Users/peterkrzyzek/Development/MeetingBarNG`). A prior
+- **Root your session at this repo** (`/Users/peterkrzyzek/Development/Punctual`). A prior
   session was mis-rooted at a sibling (`SendBriefs`), which is why paths here are absolute.
 - Build/test: `make build`, `make test`, `make test-logic`, `make lint` (needs Xcode + SwiftLint;
   local signing via git-ignored `XCConfig/DevTeamOverride.xcconfig`).
