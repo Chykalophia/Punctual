@@ -164,9 +164,12 @@ final class StatusBarItemController {
 
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusMenuBarAction)
+        // Both halves of both buttons: macOS 27 may deliver only one half of a
+        // click, and `StatusItemClickPolicy` acts on whichever arrives first and
+        // swallows its partner.
         statusItem.button?.sendAction(on: [
-            NSEvent.EventTypeMask.rightMouseDown, NSEvent.EventTypeMask.leftMouseUp,
-            NSEvent.EventTypeMask.leftMouseDown
+            NSEvent.EventTypeMask.rightMouseDown, NSEvent.EventTypeMask.rightMouseUp,
+            NSEvent.EventTypeMask.leftMouseUp, NSEvent.EventTypeMask.leftMouseDown
         ])
 
         // Temporary icon before app delegate setup
@@ -299,32 +302,65 @@ final class StatusBarItemController {
     @objc
     func statusMenuBarAction(sender _: NSStatusItem) {
         let event = NSApp.currentEvent
+        let input = Self.clickInput(for: event)
+        let outcome = StatusItemClickPolicy.outcome(
+            for: input,
+            controlKeyHeld: event?.modifierFlags.contains(.control) ?? false,
+            pendingDown: pendingStatusItemDown
+        )
+        // Updated AFTER acting, whatever the outcome: a consumed mouse-up clears
+        // the pairing so it cannot swallow the next click too.
+        defer { pendingStatusItemDown = StatusItemClickPolicy.pendingDown(after: input) }
 
-        if event?.type == .rightMouseUp {
+        switch outcome {
+        case .ignore:
+            return
+        case .secondary:
             // Right button click → compact quick-actions menu. Still an NSMenu,
             // and rightly so: it is a short list of verbs, which is exactly what
             // a menu is for.
             showQuickActionsMenu()
-            return
+        case .primary:
+            // The Join chip is drawn INTO the item's title, not added as a
+            // control: a status item is one button, and its click opens the
+            // panel. So the chip's rect is tested here instead. The same rect the
+            // overlay drew, so the target cannot drift from the capsule the user
+            // is aiming at. Only a real mouse event has a location to test;
+            // macOS 27's event-less click opens the panel.
+            if let event, input != .nonMouse, isActionChipClick(event) {
+                joinNextMeeting()
+                return
+            }
+            toggleDropdownPanel()
         }
-        guard event == nil || event?.type == .leftMouseDown || event?.type == .leftMouseUp else {
-            return
-        }
-        // The status-item button sends its action on BOTH left-mouse-down and
-        // left-mouse-up, and the panel sees both, so a single click would toggle
-        // it twice. Act on the down edge (and on the shortcut's synthetic nil
-        // event) only.
-        guard event?.type != .leftMouseUp else { return }
+    }
 
-        // The Join chip is drawn INTO the item's title, not added as a control:
-        // a status item is one button, and its click opens the panel. So the
-        // chip's rect is tested here instead. The same rect the overlay drew, so
-        // the target cannot drift from the capsule the user is aiming at.
-        if let event, isActionChipClick(event) {
-            joinNextMeeting()
-            return
+    /// The button whose mouse-down `statusMenuBarAction` acted on and whose
+    /// mouse-up is still to come. See `StatusItemClickPolicy` for why clicks are
+    /// paired rather than acted on at one fixed edge.
+    private var pendingStatusItemDown: StatusItemClickPolicy.Button?
+
+    /// Reduces AppKit's current event to the policy's input. Anything that is
+    /// not a mouse button event — including no event at all, which is how
+    /// macOS 27 delivers some status-item clicks — is `.nonMouse`.
+    private static func clickInput(for event: NSEvent?) -> StatusItemClickPolicy.Input {
+        switch event?.type {
+        case .leftMouseDown: .leftMouseDown
+        case .leftMouseUp: .leftMouseUp
+        case .rightMouseDown: .rightMouseDown
+        case .rightMouseUp: .rightMouseUp
+        default: .nonMouse
         }
-        toggleDropdownPanel()
+    }
+
+    /// Draws the status item as selected (or not), the pill a real menu gets
+    /// while it is open. Deferred one run-loop turn: the button runs its own
+    /// highlight tracking for the click that opened or closed the panel, and
+    /// setting the state inside that click would be overwritten as it ends.
+    func setStatusItemHighlighted(_ highlighted: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.statusItem?.button?.highlight(highlighted)
+        }
     }
 
     /// Whether `event` landed on the Join chip.
