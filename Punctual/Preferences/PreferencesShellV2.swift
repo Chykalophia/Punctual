@@ -49,11 +49,22 @@ enum SidebarSelection: Hashable {
 }
 
 struct PreferencesShellV2: View {
-    @State private var selection: SidebarSelection = .tab(.defaultSelection)
-    @State private var searchQuery = ""
+    @State private var selection: SidebarSelection
+    @State private var searchQuery: String
     @Environment(\.colorScheme) private var colorScheme
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private let navigation = PreferencesNavigation.shared
+
+    /// - Parameters:
+    ///   - initialSelection: The pane shown first. The user guide's screenshots open each pane in turn.
+    ///   - initialSearchQuery: Text already in the settings search field.
+    init(
+        initialSelection: SidebarSelection = .tab(.defaultSelection),
+        initialSearchQuery: String = ""
+    ) {
+        _selection = State(initialValue: initialSelection)
+        _searchQuery = State(initialValue: initialSearchQuery)
+    }
 
     private var trimmedQuery: String {
         searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
