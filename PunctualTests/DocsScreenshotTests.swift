@@ -27,8 +27,10 @@ final class DocsScreenshotTests: BaseTestCase {
     private var harness: AppModelTestHarness!
     private var calendarSync: CalendarSync!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    /// Skips unless a screenshot run asked for it, then pins the clock and loads the sample calendars.
+    ///
+    /// Called from each test rather than `setUp`, which `BaseTestCase` declares nonisolated.
+    private func prepare() throws {
         guard let dir = ProcessInfo.processInfo.environment["PUNCTUAL_DOCS_SCREENSHOT_DIR"] else {
             throw XCTSkip("PUNCTUAL_DOCS_SCREENSHOT_DIR not set")
         }
@@ -39,6 +41,10 @@ final class DocsScreenshotTests: BaseTestCase {
         PreviewFixtures.pinnedNow = Calendar.current.date(
             bySettingHour: 9, minute: 35, second: 0, of: Date()
         )
+        addTeardownBlock { @MainActor in
+            PreviewFixtures.pinnedNow = nil
+        }
+
         let calendars = [PreviewFixtures.workCalendar, PreviewFixtures.personalCalendar, PreviewFixtures.focusCalendar]
         harness = AppModelTestHarness(now: PreviewFixtures.now)
         harness.publishCalendars(calendars)
@@ -50,16 +56,10 @@ final class DocsScreenshotTests: BaseTestCase {
         settle()
     }
 
-    override func tearDown() {
-        PreviewFixtures.pinnedNow = nil
-        harness = nil
-        calendarSync = nil
-        super.tearDown()
-    }
-
     // MARK: - Preferences
 
     func testPreferencesPanes() throws {
+        try prepare()
         var selections = PreferencesTab.allCases.map { (slug(for: $0), SidebarSelection.tab($0)) }
         selections.append(("about", .about))
         for (name, selection) in selections {
@@ -70,6 +70,7 @@ final class DocsScreenshotTests: BaseTestCase {
     }
 
     func testPreferencesSearch() throws {
+        try prepare()
         try captureEachAppearance("preferences-search") {
             self.preferencesWindow(PreferencesShellV2(initialSearchQuery: "notification"))
         }
@@ -78,6 +79,7 @@ final class DocsScreenshotTests: BaseTestCase {
     // MARK: - Onboarding
 
     func testOnboardingSteps() throws {
+        try prepare()
         let steps: [(String, OnboardingStep)] = [
             ("welcome", .welcome),
             ("authorization", .authorization),
@@ -111,6 +113,7 @@ final class DocsScreenshotTests: BaseTestCase {
     // MARK: - Dropdown
 
     func testDropdownStates() throws {
+        try prepare()
         let variants: [(String, Bool)] = [("dropdown", false), ("dropdown-with-finished", true)]
         for (name, includeFinished) in variants {
             try captureEachAppearance(name) {
@@ -131,6 +134,7 @@ final class DocsScreenshotTests: BaseTestCase {
     // MARK: - Windows
 
     func testCommandBar() throws {
+        try prepare()
         try captureEachAppearance("command-bar") {
             let viewModel = CommandBarViewModel(
                 handlers: CommandBarHandlers(
@@ -151,6 +155,7 @@ final class DocsScreenshotTests: BaseTestCase {
     }
 
     func testCalendarWindow() throws {
+        try prepare()
         for mode in [CalendarGridMode.month, .week] {
             try captureEachAppearance("calendar-window-\(mode == .month ? "month" : "week")") {
                 let viewModel = CalendarGridViewModel(
@@ -171,6 +176,7 @@ final class DocsScreenshotTests: BaseTestCase {
     }
 
     func testEventEditor() throws {
+        try prepare()
         let modes: [(String, EventEditorMode)] = [
             ("new", .create),
             ("edit", .edit(PreviewFixtures.sampleEvents[0]))
@@ -194,6 +200,7 @@ final class DocsScreenshotTests: BaseTestCase {
     }
 
     func testWorldClock() throws {
+        try prepare()
         Defaults[.worldClockPanelZones] = ["America/Los_Angeles", "America/New_York", "Europe/London", "Asia/Tokyo"]
         try captureEachAppearance("world-clock") {
             self.window(
@@ -205,6 +212,7 @@ final class DocsScreenshotTests: BaseTestCase {
     }
 
     func testChangelog() throws {
+        try prepare()
         try captureEachAppearance("whats-new") {
             self.window(
                 ChangelogView(),
@@ -216,6 +224,7 @@ final class DocsScreenshotTests: BaseTestCase {
     }
 
     func testFullscreenNotification() throws {
+        try prepare()
         // Always dark, as in the app.
         let fullscreen = window(
             FullscreenNotification(event: PreviewFixtures.sampleEvents[0], window: nil),
