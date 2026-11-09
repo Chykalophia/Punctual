@@ -5,24 +5,7 @@
 //  Created by Andrii Leitsius on 24.04.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  remove the StoreKit patronage service and its lifecycle wiring; add the month
-//  calendar window entry point (builds the fetch/join handlers and wires
-//  openCalendar into the status-bar dependencies); add the in-app event editor
-//  entry points (build create/update/delete handlers over the EventKit writer,
-//  refresh the sync after each write, and wire newEvent/editEvent/deleteEvent
-//  into the status-bar dependencies); add the camera/mic pre-call preview entry
-//  point (builds the join handlers over the AppModel and wires openCameraPreview
-//  into the status-bar dependencies); add the multi-zone world-clock panel window
-//  entry point (wires openWorldClock into the status-bar dependencies); wire the
-//  SwiftUI dropdown panel (openDropdownPanel — the default dropdown) into the
-//  status-bar dependencies; request
-//  EventKit calendar access on a normal post-onboarding launch when it is still
-//  undetermined, so the app prompts and registers with TCC instead of silently
-//  holding no access.
-//  Punctual, 2026-10-01: log each launch that presents setup, so a mid-setup
-//  relaunch is visible in the system log.
-//  Punctual, 2026-10-01: start the Sparkle updater at launch (SoftwareUpdater).
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -36,9 +19,7 @@ import UserNotifications
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: StatusBarItemController!
     var calendarSync: CalendarSync!
-    /// Reminders live in their own EventKit store so their permission is
-    /// requested independently (and only on opt-in). Shared instance so the
-    /// preferences toggle, sync, and write paths all target the same store.
+    /// Separate EventKit store, so Reminders permission is requested independently and only on opt-in.
     let remindersStore = RemindersStore.shared
     private var remindersSync: RemindersSync!
     let notificationScheduler = NotificationScheduler()
@@ -56,11 +37,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_: Notification) {
-        // When launched as a test host, skip the entire launch flow so tests
-        // don't trigger onboarding, status bar setup, or calendar sync.
+        // Skip the launch flow when running as a test host.
         guard !AppMessageCenter.shouldSuppressSystemUI() else { return }
 
-        // Migrate legacy per-provider browser keys → providerBrowsers map
         MeetingOpenPreferencesMigration.migrateDefaultsIfNeeded()
         StatusBarTitleFormatMigration.migrateDefaultsIfNeeded()
         TimeFormatDefaultMigration.migrateDefaultsIfNeeded()
@@ -68,25 +47,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MenuBarTimeFormatDefaultsMigration.migrateDefaultsIfNeeded()
         DropdownModuleMergeMigration.migrateDefaultsIfNeeded()
 
-        // Sparkle: scheduled update checks and "Check for Updates…".
         SoftwareUpdater.shared.start()
 
-        // Handle windows closing closing
         NotificationCenter.default.addObserver(
             self, selector: #selector(AppDelegate.windowClosed),
             name: NSWindow.willCloseNotification, object: nil
         )
-        //
 
         if let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
             Defaults[.appVersion] = appVersion
         }
 
         statusBarItem = StatusBarItemController()
-        // The status item shows as selected for as long as its panel is up, the
-        // way it does for a real menu. macOS 27 no longer infers that for an app
-        // that shows its own window, so without this the item looks idle while
-        // the panel hangs off it.
+        // Highlight the status item while the panel is open; macOS 27 no longer does this
+        // for an app that shows its own window.
         windowCoordinator.onDropdownPanelVisibilityChange = { [weak self] isOpen in
             self?.statusBarItem?.setStatusItemHighlighted(isOpen)
         }
@@ -120,9 +94,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// incomplete.
     func presentOnboardingWindow() {
         guard let appModel else { return }
-        // One line per launch with setup unfinished. Seeing it twice inside one
-        // setup attempt means the app was relaunched mid-setup (the symptom of
-        // automatic termination, which Info.plist now opts out of).
+        // Logged once per launch with setup unfinished, so relaunches mid-setup are visible.
         PunctualLogger.onboarding.info("Presenting setup (launch with setup unfinished)")
         windowCoordinator.openOnboardingWindow(
             appModel: appModel,
@@ -130,9 +102,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let appModel else {
                     return .failed("Application state is unavailable")
                 }
-                // Onboarding's pick is exclusive: it answers "where do my
-                // meetings come from", and a fresh install already has macOS
-                // Calendar connected.
                 return await appModel.selectSoleProvider(provider)
             },
             onComplete: { [weak appModel] provider in
@@ -163,10 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             openDropdown: { [weak self] in
                 guard let self else { return }
-                // Same entry point the status-item click uses, so a deep link and
-                // a click cannot diverge — but idempotent: `openDropdownPanel`
-                // toggles, and asking to open something already open should not
-                // close it.
+                // Idempotent: `toggleDropdownPanel` would close an already-open panel.
                 guard !self.windowCoordinator.isDropdownPanelOpen else { return }
                 self.statusBarItem?.toggleDropdownPanel()
             },
@@ -220,8 +186,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         statusBarItem.configure(dependencies: statusBarDependencies)
 
-        // Drive status bar from AppModel state: update title and menu whenever
-        // events change.
         model.$state
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -270,31 +234,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if triggerInitialRefresh {
             model.handleLaunch()
             requestCalendarAccessIfNeeded(model: model)
-            // Only fetch reminders at launch when the feature is enabled AND
-            // access is already granted — the permission prompt is exclusively
-            // triggered from the preferences toggle, never here.
+            // Never prompts here: the Reminders permission prompt comes only from the Preferences toggle.
             if Defaults[.showRemindersInMenu], remindersStore.isAccessGranted {
                 sync.refreshSubject.send()
             }
         }
     }
 
-    /// On a normal (post-onboarding) launch the provider switch that would
-    /// otherwise trigger the EventKit permission prompt never runs, so a fresh
-    /// install / TCC reset / newly code-signed binary can silently hold no
-    /// calendar access — and, because the app never registers with TCC, there
-    /// is nothing to toggle in System Settings ▸ Privacy ▸ Calendars.
-    ///
-    /// When macOS Calendar is the active provider and its authorization is still
-    /// `.notDetermined`, request access now by routing through the existing
-    /// `.changeProvider` action (switchProvider → signIn →
-    /// requestFullAccessToEvents), so macOS prompts, the app registers with TCC,
-    /// and the resulting calendar/event fetch + state wiring all run.
-    ///
-    /// No-op when access is already granted (`.authorized`, a redundant prompt)
-    /// or `.denied`/`.restricted` (a request would not prompt — the user must
-    /// grant it in System Settings). Fires once per launch: `setup()` guards on
-    /// `appModel == nil`, and this only runs on the initial-refresh path.
+    /// Requests EventKit access on a normal launch when macOS Calendar is active and
+    /// authorization is `.notDetermined`, so the app prompts and registers with TCC.
+    /// Routed through `.changeProvider` so the resulting fetch and state wiring run.
     private func requestCalendarAccessIfNeeded(model: AppModel) {
         guard model.state.activeProvider == .macOSEventKit,
               PermissionReporter.calendarAuthorizationStatus() == .notDetermined else {
@@ -314,10 +263,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startAsyncLoops() {
         statusLoopTask?.cancel()
 
-        // Redraw status bar item on hh:mm:00
+        // Redraw the status bar title at each minute boundary.
         statusLoopTask = Task(priority: .utility) { [weak self] in
             while let self, !Task.isCancelled {
-                // Compute now & next minute boundary
                 let now = Date()
                 let calendar = Calendar.current
                 let nextMinute = calendar.nextDate(
@@ -326,7 +274,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     matchingPolicy: .nextTime
                 )!
 
-                // Sleep until that boundary
                 let interval = nextMinute.timeIntervalSince(now)
                 do {
                     try await Task.sleep(
@@ -336,7 +283,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                // Once we hit hh:mm:00, redraw
                 await MainActor.run {
                     self.statusBarItem.updateTitle()
                 }
@@ -385,12 +331,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// Events in `[from, to)` across the user's selected calendars, independent
-    /// of the main today/tomorrow sync.
-    ///
-    /// Shared by the calendar WINDOW and the dropdown's compact month grid. It
-    /// was inline in `openCalendarWindow`; the panel needing the same data is
-    /// exactly the moment to name it rather than write it twice.
+    /// Fetches events in `[from, to)` across the selected calendars, independent of the
+    /// main sync. Used by the calendar window and the dropdown month grid.
     private func dateRangeEventFetch() -> @MainActor (Date, Date) async throws -> [MBEvent] {
         let sync = calendarSync
         return { [weak sync] from, to in
@@ -417,18 +359,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// Opens the multi-zone world-clock panel window. It reads its zones and
-    /// time-format from `Defaults` and refreshes each minute on its own, so no
-    /// handlers are threaded through.
+    /// Opens the world-clock panel window.
     func openWorldClockWindow() {
         windowCoordinator.openWorldClockWindow()
     }
 
-    /// Opens the camera/mic pre-call preview ("mirror check"). When `event` is
-    /// non-nil the preview shows a contextual "Join meeting" button that forwards
-    /// to the AppModel's join action; opened standalone (event == nil) there is no
-    /// Join button. Camera/mic access is requested lazily inside the preview
-    /// controller on first open, never here.
+    /// Opens the camera/mic preview. With an `event`, it shows a Join button that
+    /// forwards to the model's join action.
     func openCameraPreviewWindow(event: MBEvent?) {
         let model = appModel
         windowCoordinator.openCameraPreviewWindow(
@@ -457,9 +394,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// Deletes `event` via the EventKit writer and refreshes the menu. Called
-    /// from the per-event "Delete…" menu item after its NSAlert confirmation.
-    /// `span` scopes a recurring delete (this occurrence vs this-and-future).
+    /// Deletes `event` via the EventKit writer and refreshes the sync.
+    /// - Parameter span: which occurrences of a recurring event to delete.
     func deleteEvent(_ event: MBEvent, span: EventEditSpan) {
         let sync = calendarSync
         Task {
@@ -474,10 +410,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Builds the editor handlers: each write forwards to the EventKit writer and,
-    /// on success, triggers a `CalendarSync` refresh so the menu updates. The
-    /// `dismiss` here is a placeholder — `WindowCoordinator` injects the real
-    /// window-close closure since it owns the window.
+    /// Builds the editor handlers; each write refreshes `CalendarSync` on success.
+    /// `dismiss` is replaced by `WindowCoordinator`, which owns the window.
     private func makeEventEditorHandlers() -> EventEditorHandlers {
         let sync = calendarSync
         return EventEditorHandlers(
@@ -509,8 +443,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApplication.shared.terminate(self)
             },
             onChangelogClosed: {
-                // No redraw needed: the panel reads the acknowledgement when it
-                // next opens, which is what decides whether "What's new?" shows.
                 AppSettings.acknowledgeCurrentChangelog()
             }
         )
@@ -530,9 +462,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
               let url = URL(string: string) else { return }
 
         #if DEBUG
-        // Intercepted ahead of the router: a development-only URL should not
-        // acquire an `AppRoute` case and an `AppEnvironment` closure that the
-        // release build still compiles. See `DropdownInspectorWindow`.
+        // DEBUG URLs are intercepted here so release builds carry no route for them.
         if DropdownInspectorWindow.matches(url) {
             toggleDropdownInspectorWindow()
             return
@@ -547,9 +477,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     #if DEBUG
-    /// Shows (or hides) the dropdown panel in a window that stays open, so it can
-    /// be screenshotted and inspected. Reached only via
-    /// `punctual://dropdown-debug`.
+    /// Toggles the non-dismissing dropdown inspector (`punctual://dropdown-debug`).
     private func toggleDropdownInspectorWindow() {
         guard let snapshot = statusBarItem?.dropdownPanelSnapshotForInspector() else { return }
         windowCoordinator.toggleDropdownInspectorWindow(
@@ -565,9 +493,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         windowCoordinator.openDebugHarnessWindow(
             handlers: DebugHarnessHandlers(
                 apply: { [weak self] scenario in
-                    // A scenario with no builder is "go back to the real
-                    // calendar", which is `nil` rather than an empty list —
-                    // an empty list is itself a scenario.
+                    // `nil` restores the real calendar; an empty list is itself a scenario.
                     self?.statusBarItem?.debugOverrideEvents(scenario.build.map { $0(Date()) })
                 },
                 summary: { [weak self] in
@@ -585,11 +511,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(self)
     }
 
-    /// Relaunching an already-running instance (Finder, Dock, `open`, CLI) sends
-    /// a reopen event. MeetingBarNG is a menu-bar (accessory) app with no main
-    /// window, so that would otherwise do nothing visible — leaving the app
-    /// unreachable when its status-bar icon is hidden (e.g. overflowed under the
-    /// notch). Surface Preferences instead so there's always a way back in.
+    /// Opens Preferences on reopen (Finder, Dock, `open`), so the app is reachable even
+    /// when its status item is hidden, e.g. behind the notch.
     func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows _: Bool) -> Bool {
         // While onboarding is still open, leave that window in charge.
         guard Defaults[.onboardingCompleted] else { return true }

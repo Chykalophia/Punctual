@@ -1,9 +1,8 @@
 //
 //  PanelThemeTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the panel theme (MeetingBarNG): lenient decoding, and the
-//  distinction between "follow the system" and "force light".
+//  Tests for the panel theme: lenient decoding and system versus forced appearance.
 //
 
 import XCTest
@@ -20,8 +19,6 @@ final class PanelThemeTests: XCTestCase {
     }
 
     func testUnknownAppearanceFallsBackToSystem() {
-        // An older build or a hand-edited plist should cost the user their theme,
-        // not leave the panel unable to draw.
         XCTAssertEqual(PanelThemePolicy.appearance(fromRaw: "solarized"), .system)
         XCTAssertEqual(PanelThemePolicy.appearance(fromRaw: ""), .system)
     }
@@ -38,17 +35,14 @@ final class PanelThemeTests: XCTestCase {
     }
 
     func testDecodingIsCaseSensitive() {
-        // Raw values are written by the app, never typed by a user, so a
-        // case-insensitive match would only ever paper over a real bug.
+        // Matching is case-sensitive on purpose: raw values are only ever written by the app.
         XCTAssertEqual(PanelThemePolicy.appearance(fromRaw: "Dark"), .system)
     }
 
     // MARK: - Forcing
 
     func testSystemDoesNotForceAnAppearance() {
-        // nil is NOT the same as forcing light: a window with no explicit
-        // appearance keeps following the system as it changes, where a pinned
-        // one would freeze until the next relaunch.
+        // nil, not light: a window with no explicit appearance keeps following the system.
         XCTAssertNil(PanelThemePolicy.forcedAppearance(.system))
     }
 
@@ -72,7 +66,6 @@ final class PanelThemeTests: XCTestCase {
     // MARK: - Defaults
 
     func testTheDefaultOfBothAxesIsSystem() {
-        // The shipping panel must be unchanged until someone chooses otherwise.
         XCTAssertEqual(PanelAppearance.allCases.first, .system)
         XCTAssertEqual(PanelAccent.allCases.first, .system)
     }

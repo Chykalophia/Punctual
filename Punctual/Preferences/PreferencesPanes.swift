@@ -1,75 +1,32 @@
 //
 //  PreferencesPanes.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The eight panes of the Phase 2 Preferences IA, assembled from the section
-//  views that already existed. The old tabs were containers whose names carried
-//  no routing information — "Display" and "Events" in particular could not be
-//  told apart, because in a calendar app every setting is about displaying
-//  events. The sections themselves were fine; only their homes were wrong.
+//  Thin pane wrappers (Dropdown, Calendar Window) and the About & Support view.
+//  Panes with substantial content live in their own files.
 //
-//  So this file is deliberately thin: it re-homes existing sections under the
-//  routing rule, and does NOT rewrite their internals. Content refinement (the
-//  label pass, per-pane reset UI, and the sections that still need splitting
-//  apart) follows pane by pane, so each step leaves a working app.
-//
-//  The routing rule, applied with zero exceptions:
-//    which meetings exist        → Filters
-//    how one surface draws them  → that surface's pane
-//    what happens when you act   → Joining / Alerts
-//    the app itself              → General
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026
-//  (Preferences UX overhaul, Phase 2 — the IA restructure).
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import SwiftUI
 
 // MARK: - Filters
-//
-// `FiltersTab` has left this file: it is no longer a re-homing of two old
-// sections but a pane of its own, so it lives in `FiltersTab.swift` with the
-// preset chips, the one Show / Dim / Hide vocabulary and the title-pattern
-// tester. The sections it used to compose (`EventsSection`,
-// `FilterEventRegexesSection`) are deleted — they had no second reader.
 
 // MARK: - Menu Bar
-//
-// `MenuBarTab` has left this file too: it is no longer a re-homing of the two
-// old menu-bar sections but a pane of its own, so it lives in `MenuBarTab.swift`
-// with the preset cards, one block list holding the complete inventory, and
-// One line / Two lines. The sections it used to compose (`StatusBarSection`,
-// `MenuBarComposerSection`) are deleted — they had no second reader.
 
 // MARK: - Dropdown
 
-/// What you see when you click MeetingBarNG. Keeps the two-pane layout: the
-/// settings scroll on the left, the live preview stays pinned on the right.
-///
-/// The preview mounts the real `DropdownPanelView` against fixtures (Phase 3),
-/// so the preview and the live dropdown share one implementation and cannot
-/// drift apart.
+/// The Dropdown pane: settings on the left and, when the window is wide enough,
+/// a live preview of the real `DropdownPanelView` on the right.
 struct DropdownTab: View {
-    /// The preview cannot shrink: it mounts the real `DropdownPanelView`, which is
-    /// a fixed `DropdownMetrics.standard.panelWidth`. So when the window gets
-    /// narrow, something has to give — and it must be the preview, not the form.
-    /// Previously neither yielded: the form refused to compress below its own
-    /// segmented controls, the `HStack` overflowed, and the detail column clipped
-    /// the overflow off its trailing edge, silently truncating the preview.
-    ///
-    /// Derived from the panel it displays plus its own gutter, rather than being
-    /// an independent literal that could drift away from what it is showing.
+    /// Fixed width of the preview column: the dropdown panel width plus a gutter.
     private static let previewWidth = DropdownMetrics.standard.panelWidth + 10
 
-    /// What the form needs before it starts crushing its own controls. The widest
-    /// is the five-segment picker in `DropdownDisplaySection` ("5 / 10 / 15 /
-    /// No limit / Custom"); the block-composer rows — a label plus up to four
-    /// icon buttons — are close behind.
+    /// Narrowest the form can be before its widest control (the five-segment
+    /// picker in `DropdownDisplaySection`) is crushed.
     private static let formMinimumWidth: CGFloat = 400
 
-    /// Composed from the two requirements above rather than asserted as a single
-    /// hand-computed number, so widening the preview or growing the form moves
-    /// the threshold with it instead of leaving a stale constant behind.
+    /// Detail width below which the preview is hidden instead of truncating the form.
     static var minimumTwoColumnWidth: CGFloat {
         formMinimumWidth + previewWidth
     }
@@ -78,10 +35,6 @@ struct DropdownTab: View {
         GeometryReader { proxy in
             HStack(spacing: 0) {
                 PreferencesGroupedForm {
-                    // Says where the preview went. Without this the pane simply
-                    // looks different at different window sizes with no
-                    // explanation, which reads as breakage rather than as a
-                    // deliberate trade.
                     if !showsPreview(detailWidth: proxy.size.width) {
                         Section {
                             PreferenceCallout(
@@ -114,10 +67,7 @@ struct DropdownTab: View {
         }
     }
 
-    /// Dropped rather than crushed below the threshold. The settings are the
-    /// point of the pane; the preview is the luxury, so the luxury yields. The
-    /// default window size sits comfortably above this, so it is visible unless
-    /// the user has deliberately made the window small.
+    /// Whether the detail column is wide enough for both the form and the preview.
     private func showsPreview(detailWidth: CGFloat) -> Bool {
         detailWidth >= Self.minimumTwoColumnWidth
     }
@@ -125,11 +75,7 @@ struct DropdownTab: View {
 
 // MARK: - Calendar Window
 
-/// The month/week window MeetingBarNG opens — not Apple's Calendar app.
-///
-/// Dim weekends stays in Preferences as a display option, and the routing
-/// rule earns this surface its own pane. Filled out with first day of the
-/// week, week numbers, and the per-day event cap.
+/// The Calendar Window pane: settings for the app's own month/week window, not Apple's Calendar.
 struct CalendarWindowTab: View {
     var body: some View {
         PreferencesGroupedForm {
@@ -140,30 +86,16 @@ struct CalendarWindowTab: View {
 }
 
 // MARK: - Joining / Alerts
-//
-// Both have left this file. They are no longer thin wrappers around the old
-// Meetings and Notifications tabs: they own the labels, the disclosures and the
-// two halves of the deleted Advanced tab (its meeting-link patterns went to
-// `JoiningTab.swift`, its AppleScript hooks to `AlertsTab.swift`).
 
 // MARK: - About & Support
 
-/// Who made this, what changed, and how to get unstuck.
+/// App info, links, diagnostics copy and software updates, shown from the sidebar footer.
 ///
-/// A pinned sidebar FOOTER item rather than a pane, so it can never become the
-/// leftovers bin that "Advanced" was — and so opening Preferences shows a
-/// setting rather than credits. It is deliberately NOT a `PreferencesTab` case.
-///
-/// Not wrapped in `PreferencesGroupedForm`: this is one card, not a settings
-/// list, and inside a grouped form it needed three modifiers to fight the row
-/// chrome it did not want (`listRowInsets`, `listRowBackground`, and a Section
-/// that existed only to hold it).
+/// Not a `PreferencesTab` case, and not a `PreferencesGroupedForm`: it is a card, not a settings list.
 struct AboutSupportView: View {
     @EnvironmentObject var appModel: AppModel
 
-    /// Drives the transient "Copied" acknowledgement beside the diagnostics
-    /// button. Copying to the pasteboard is otherwise completely silent, so the
-    /// button read as broken.
+    /// Shows the transient "Copied" confirmation beside the diagnostics button.
     @State private var didCopyDiagnostics = false
 
     var body: some View {

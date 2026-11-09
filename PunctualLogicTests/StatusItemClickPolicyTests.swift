@@ -2,8 +2,7 @@
 //  StatusItemClickPolicyTests.swift
 //  PunctualLogicTests
 //
-//  Pins how a status-item click is read, including the ways macOS 27 delivers
-//  one: with no mouse event behind it, or as a lone mouse-up.
+//  Tests for reading a status-item click, including macOS 27's eventless and up-only clicks.
 //
 
 import XCTest
@@ -41,23 +40,19 @@ final class StatusItemClickPolicyTests: XCTestCase {
         XCTAssertEqual(outcome(.leftMouseUp, pending: .left), .ignore)
     }
 
-    /// macOS 27: the click arrives as a mouse-up only. Before, this did nothing.
+    /// macOS 27 can deliver the click as a lone mouse-up.
     func testALoneMouseUpStillOpensThePanel() {
         XCTAssertEqual(outcome(.leftMouseUp), .primary)
     }
 
-    /// macOS 27: the click arrives with no mouse event at all, or alongside a
-    /// non-mouse event (also the path the keyboard shortcut takes). There is no
-    /// modifier state worth trusting there, so ⌃ does not change it.
+    /// macOS 27 can deliver the click with no mouse event, as can the keyboard shortcut;
+    /// there is no trustworthy modifier state there, so ⌃ does not change it.
     func testAnEventlessClickOpensThePanel() {
         XCTAssertEqual(outcome(.nonMouse), .primary)
         XCTAssertEqual(outcome(.nonMouse, pending: .left), .primary)
         XCTAssertEqual(outcome(.nonMouse, control: true), .primary)
     }
 
-    /// The reported macOS 27 bug: after the right-click menu was used once,
-    /// left clicks stopped working. A right-click must never swallow the next
-    /// left click.
     func testARightClickNeverSwallowsTheNextLeftClick() {
         XCTAssertEqual(outcome(.leftMouseUp, pending: .right), .primary)
         XCTAssertEqual(outcome(.leftMouseDown, pending: .right), .primary)
@@ -69,8 +64,6 @@ final class StatusItemClickPolicyTests: XCTestCase {
         XCTAssertEqual(run([.leftMouseDown, .leftMouseUp]), [.primary, .ignore])
     }
 
-    /// Consuming the up clears the pairing, so two up-only clicks in a row
-    /// after a full click both register.
     func testAConsumedMouseUpDoesNotSwallowTheNextClick() {
         XCTAssertEqual(
             run([.leftMouseDown, .leftMouseUp, .leftMouseUp, .leftMouseUp]),
@@ -85,8 +78,7 @@ final class StatusItemClickPolicyTests: XCTestCase {
         )
     }
 
-    /// The right-click menu is modal and can eat its own mouse-up, leaving the
-    /// right down pending. The next left click must still land.
+    /// The modal right-click menu can eat its own mouse-up, leaving the right down pending.
     func testALeftClickAfterARightClickWhoseUpWasEatenLands() {
         XCTAssertEqual(
             run([.rightMouseDown, .leftMouseDown, .leftMouseUp]),

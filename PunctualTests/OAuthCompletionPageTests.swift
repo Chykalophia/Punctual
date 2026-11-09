@@ -1,9 +1,8 @@
 //
 //  OAuthCompletionPageTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  The page the browser lands on after Google hands back the code, replacing
-//  AppAuth's hardcoded "Authorization complete. Return to the app."
+//  Tests for the page shown in the browser after the Google OAuth redirect.
 //
 
 import XCTest
@@ -19,8 +18,6 @@ final class OAuthCompletionPageTests: XCTestCase {
         XCTAssertTrue(html.contains("peter@example.com"))
     }
 
-    /// The account is optional — the ID token may carry no email — and the page
-    /// must not render an empty line where an address would be.
     func test_pageOmitsTheAccountLineWhenThereIsNoEmail() {
         for empty in [nil, ""] as [String?] {
             let html = OAuthCompletionPage.html(accountEmail: empty)
@@ -29,15 +26,12 @@ final class OAuthCompletionPageTests: XCTestCase {
     }
 
     func test_pageTellsTheUserWhatToDoNext() {
-        // The specific failing of AppAuth's page: it says the authorization
-        // finished but not that the tab is now disposable.
         let html = OAuthCompletionPage.html(accountEmail: nil)
         XCTAssertTrue(html.lowercased().contains("close this tab"))
     }
 
     func test_pageIsSelfContained() {
-        // The socket closes immediately after this response, so a second
-        // request for a stylesheet or an image would simply fail.
+        // The socket closes after this response, so the page cannot load other resources.
         let html = OAuthCompletionPage.html(accountEmail: "a@b.com")
         XCTAssertFalse(html.contains("<link"))
         XCTAssertFalse(html.contains("src=\"http"))
@@ -50,9 +44,6 @@ final class OAuthCompletionPageTests: XCTestCase {
     }
 
     // MARK: - Escaping
-    //
-    // The address comes out of Google's ID token, so it is not ours to trust
-    // unescaped in markup.
 
     func test_accountEmailIsHTMLEscaped() {
         let html = OAuthCompletionPage.html(accountEmail: "<script>alert(1)</script>@x.com")
@@ -67,8 +58,6 @@ final class OAuthCompletionPageTests: XCTestCase {
         )
     }
 
-    /// Ampersand must be replaced FIRST or the escapes of the other characters
-    /// get double-escaped into visible mojibake.
     func test_ampersandIsNotDoubleEscaped() {
         XCTAssertEqual(OAuthCompletionPage.escape("a&lt;b"), "a&amp;lt;b")
     }
@@ -94,7 +83,6 @@ final class OAuthCompletionPageTests: XCTestCase {
             http.value(forHTTPHeaderField: "Content-Type"),
             "text/html; charset=utf-8"
         )
-        // The page names an account, so it must not be cached.
         XCTAssertEqual(http.value(forHTTPHeaderField: "Cache-Control"), "no-store")
 
         let body = try XCTUnwrap(String(data: data, encoding: .utf8))
@@ -102,9 +90,6 @@ final class OAuthCompletionPageTests: XCTestCase {
         XCTAssertTrue(body.contains("<!doctype html>"))
     }
 
-    /// Any path gets the page: the only client is a browser this app just
-    /// redirected, and a 404 on a stray path would be a worse outcome than an
-    /// extra copy of a static page.
     func test_anyPathServesThePage() async throws {
         let server = OAuthCompletionPageServer()
         defer { server.stop() }

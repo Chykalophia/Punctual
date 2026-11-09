@@ -1,6 +1,6 @@
 //
 //  MeetingOpeningPolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest

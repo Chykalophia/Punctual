@@ -2,14 +2,8 @@
 //  MeetingPrepLinks.swift
 //  MeetingBar
 //
-//  Pure, Foundation-only extractor for "meeting-prep links" (Dot parity): the
-//  useful reference URLs buried in an event invite — Figma, Notion, GitHub,
-//  Google Docs/Sheets/Slides/Drive, Linear, Jira, Confluence, Loom, and generic
-//  links — surfaced separately from the meeting JOIN link so the user does not
-//  have to dig through the description.
-//
-//  No AppKit / no host dependencies, so it lives in the MeetingBarLogic package
-//  and is unit-tested hostlessly, mirroring `MeetingLinkDetector`.
+//  Extracts meeting-prep links (docs, design files, repos, tickets) from an invite,
+//  excluding the join link. Foundation-only, so it is unit-tested hostlessly.
 //
 
 import Foundation
@@ -39,9 +33,7 @@ struct PrepLink: Equatable {
 }
 
 enum MeetingPrepLinks {
-    /// Upper bound on surfaced links so a link-dump description can't flood the
-    /// event submenu. Extraction stops once this many distinct, non-excluded,
-    /// non-join links are collected (first-seen order preserved).
+    /// Maximum links returned, so a link-dump description can't flood the submenu.
     static let maxLinks = 8
 
     /// Finds every http(s) URL across `notes` + `location`, drops the meeting
@@ -86,10 +78,8 @@ enum MeetingPrepLinks {
 
     // MARK: - URL scan
 
-    // A well-tested URL regex (kept deliberately hostless/testable): match an
-    // http(s) scheme through to the first whitespace or a delimiter that can't
-    // appear unencoded in a URL (quotes, angle brackets, closing brackets), so
-    // `href="…"` markup and `<…>`/`(…)` wrapping don't bleed into the match.
+    // Stops at whitespace, quotes, angle brackets and closing brackets so HTML attributes
+    // and wrapping punctuation don't bleed into the match.
     private static let urlRegex = try? NSRegularExpression(
         pattern: #"https?://[^\s"'<>)\]}]+"#,
         options: [.caseInsensitive]
@@ -104,9 +94,7 @@ enum MeetingPrepLinks {
         }
     }
 
-    /// Trailing sentence punctuation the regex greedily absorbs when a URL ends a
-    /// sentence (e.g. `…/Spec.`). Closing brackets/quotes are already excluded by
-    /// the regex character class, so only these need stripping.
+    /// Strips sentence punctuation the regex absorbs when a URL ends a sentence.
     private static func trimTrailingPunctuation(_ raw: String) -> String {
         var trimmed = raw[...]
         let trailing: Set<Character> = [".", ",", ";", ":", "!", "?"]
@@ -139,11 +127,8 @@ enum MeetingPrepLinks {
 
     // MARK: - Meeting-join hosts (excluded)
 
-    /// Real-time meeting-join hosts whose links are the "join" action, not prep
-    /// material. Mirrors the services `MeetingLinkDetector` knows about, kept as
-    /// a small local list so this file stays Foundation-only and deterministic.
-    /// Note these are host-scoped: `meet.google.com` is a join host, but
-    /// `docs.google.com`/`drive.google.com` are prep hosts and stay.
+    /// Hosts whose links are join actions, not prep material. Host-scoped, so
+    /// `meet.google.com` is excluded while `docs.google.com` is kept.
     private static let meetingJoinHosts: [String] = [
         "meet.google.com",
         "zoom.us",

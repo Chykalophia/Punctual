@@ -1,36 +1,27 @@
 //
 //  DropdownPanelNavigation.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless keyboard-navigation model for the SwiftUI dropdown panel (Phase B of
-//  the dropdown modernization). Pure value types + ordering/clamping math only —
-//  no AppKit/SwiftUI/Defaults — so "Up/Down walks the interactive rows in visual
-//  order and stops at the ends" is unit-testable without a UI test.
+//  Hostless keyboard-navigation model for the dropdown panel: the ordered list
+//  of interactive rows and arrow-key stepping over it.
 //
-//  `DropdownPanelView` supplies a `DropdownPanelContent` describing what it is
-//  about to render (the already-resolved module order plus the ids in each
-//  module) and drives its selection highlight off the returned row list.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
-/// One keyboard-reachable row of the dropdown panel, identified by what it acts
-/// on rather than by index, so a selection survives a re-render that only
-/// reorders neighbours.
-/// Which agenda section a row belongs to. The two cap and expand independently,
-/// so revealing a packed today does not also unfold tomorrow.
+/// Which agenda section a row belongs to. Each section caps and expands independently.
 enum AgendaDay: Hashable {
     case today
     case tomorrow
 }
 
+/// One keyboard-reachable row of the dropdown panel, identified by what it acts
+/// on rather than by index, so a selection survives a reorder.
 enum DropdownPanelRow: Hashable {
     /// The next/current meeting summary card.
     case meetingSummary(String)
-    /// The agenda's "+N more" row, shown when a section is withholding events
-    /// behind the row cap. Selecting it reveals them in place.
+    /// The agenda's "+N more" row; selecting it reveals the capped events in place.
     case showMoreEvents(AgendaDay)
     /// The meeting module's repair/refresh row, shown instead of the card when
     /// there is no meeting to display.
@@ -57,22 +48,19 @@ enum DropdownPanelMoveDirection {
     case down
 }
 
-/// A hostless description of what the panel is rendering: the resolved, visible
-/// modules in order plus the identifiers inside each. Deliberately made of plain
-/// strings/counts so the navigation math never needs `MBEvent`/`Defaults`.
+/// What the panel is rendering: the visible modules in order plus the
+/// identifiers inside each.
 struct DropdownPanelContent: Equatable {
     /// The visible modules, already resolved by `DropdownCompositionPolicy` and
     /// filtered to the ones with content.
     var modules: [DropdownModule] = []
     /// The event shown in the meeting-control card, when there is one.
     var meetingEventID: String?
-    /// Only the events actually rendered — already capped. Navigation must not
-    /// walk onto a row the panel decided not to draw.
+    /// Only the events actually rendered, after the row cap.
     var todayEventIDs: [String] = []
     var reminderIDs: [String] = []
     var tomorrowEventIDs: [String] = []
-    /// Whether each section is withholding events behind a "+N more" row. Flags
-    /// rather than counts: navigation only needs to know the row is there.
+    /// Whether each section shows a "+N more" row.
     var todayHasHiddenEvents: Bool = false
     var tomorrowHasHiddenEvents: Bool = false
     /// The event the join module's "Join …" row would join, when present.
@@ -83,28 +71,23 @@ struct DropdownPanelContent: Equatable {
 }
 
 enum DropdownPanelNavigation {
-    /// The interactive rows the panel renders, in visual order: one pass over the
-    /// resolved modules, then the pinned footer (which is never a module, so the
-    /// user can always reach Preferences/Quit with the keyboard).
+    /// The interactive rows the panel renders, in visual order: the modules, then
+    /// the pinned footer.
     static func interactiveRows(for content: DropdownPanelContent) -> [DropdownPanelRow] {
         var rows: [DropdownPanelRow] = []
 
         for module in content.modules {
             switch module {
             case .greeting, .timeline, .calendar:
-                // Presentation-only modules: nothing for Up/Down to land on.
-                // The calendar has its own internal hit targets (day cells, month
-                // arrows), which arrow keys cannot address without stealing them
-                // from the list — a grid needs four directions and this model has
-                // two. Reaching a specific day is what the calendar WINDOW is for.
+                // Not arrow-key reachable. The calendar grid keeps its own mouse
+                // targets; a two-direction list model cannot address a grid.
                 continue
             case .meeting:
                 rows.append(
                     content.meetingEventID.map(DropdownPanelRow.meetingSummary) ?? .emptyStateAction
                 )
             case .agenda:
-                // Each "+N more" row sits directly under the events it unfolds,
-                // matching where the panel draws it.
+                // Each "+N more" row sits directly under the events it unfolds.
                 rows += content.todayEventIDs.map(DropdownPanelRow.event)
                 if content.todayHasHiddenEvents { rows.append(.showMoreEvents(.today)) }
                 rows += content.reminderIDs.map(DropdownPanelRow.reminder)
@@ -126,11 +109,11 @@ enum DropdownPanelNavigation {
         return rows
     }
 
-    /// The selection index after one arrow-key step, clamped at both ends (a
-    /// menu never wraps around). `nil` in, `nil` out only when there is nothing
-    /// to select; otherwise a first press selects the first row going down and
-    /// the last row going up. An out-of-range `current` (rows changed under the
-    /// selection) snaps back into bounds.
+    /// The selection index after one arrow-key step, clamped at both ends (no wrap).
+    ///
+    /// With no current selection, Down selects the first row and Up the last. An
+    /// out-of-range `current` snaps back into bounds without stepping.
+    /// - Returns: `nil` only when `count` is zero.
     static func next(
         from current: Int?,
         direction: DropdownPanelMoveDirection,

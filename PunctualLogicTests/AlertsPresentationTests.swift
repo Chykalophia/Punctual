@@ -1,11 +1,8 @@
 //
 //  AlertsPresentationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the Alerts pane's permission-state mapping (Preferences
-//  UX overhaul, Phase 2). The pane must say what macOS actually allows — and
-//  must say NOTHING when everything is fine, because a warning that is always
-//  on screen is wallpaper and stops being read.
+//  Tests for the Alerts pane's notification permission-state mapping.
 //
 
 import XCTest
@@ -13,9 +10,8 @@ import XCTest
 @testable import PunctualLogic
 
 final class AlertsPresentationTests: XCTestCase {
-    /// The English catalog, parsed from the repo (not a bundle): these tests run
-    /// under `swift test` with no host app, so there is no bundle to read.
-    /// NOTE: those directory names contain real trailing spaces.
+    /// The English catalog, parsed from the repo because `swift test` has no host bundle.
+    /// Those directory names contain real trailing spaces.
     private static let englishCatalog: [String: String] = {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // PunctualLogicTests
@@ -44,8 +40,6 @@ final class AlertsPresentationTests: XCTestCase {
     }
 
     func testNotDeterminedIsTreatedAsBlocked() {
-        // Nothing arrives until macOS has been asked and said yes, so the pane
-        // must not claim the alerts below it are working.
         XCTAssertEqual(
             NotificationDeliveryPolicy.resolve(authorization: .notDetermined, staysOnscreen: true),
             .blocked
@@ -83,7 +77,7 @@ final class AlertsPresentationTests: XCTestCase {
 
     func testOnlyBlockedReadsAsAProblem() {
         XCTAssertTrue(NotificationDelivery.blocked.isProblem)
-        // Banners still arrive — that is advice, not a failure.
+        // Banners still arrive, so this is advice rather than a failure.
         XCTAssertFalse(NotificationDelivery.disappearing.isProblem)
     }
 

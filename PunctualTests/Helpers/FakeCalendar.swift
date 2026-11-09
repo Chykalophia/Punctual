@@ -1,6 +1,6 @@
 //
 //  FakeCalendar.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import AppKit

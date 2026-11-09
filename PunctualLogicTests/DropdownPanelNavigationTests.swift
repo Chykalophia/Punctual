@@ -1,11 +1,8 @@
 //
 //  DropdownPanelNavigationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the SwiftUI dropdown panel's keyboard-navigation model
-//  (MeetingBarNG, Phase B): the flattened list of interactive rows and the
-//  clamped selection math. Keeps the panel's keyboard behavior verifiable
-//  without a UI test.
+//  Tests for the dropdown panel's keyboard navigation: interactive rows and selection math.
 //
 
 import XCTest
@@ -53,11 +50,7 @@ final class DropdownPanelNavigationTests: XCTestCase {
     }
 
     // MARK: - Row cap overflow
-    //
-    // The panel caps each agenda section and offers a "+N more" row. Navigation
-    // must walk onto that row (it is the only way to reach the withheld events
-    // with the keyboard) and must NOT walk onto the events still hidden behind
-    // it — `todayEventIDs`/`tomorrowEventIDs` arrive already capped.
+    // `todayEventIDs`/`tomorrowEventIDs` arrive already capped; the "+N more" row is navigable.
 
     func testOverflowRowFollowsTheEventsItUnfolds() {
         let rows = DropdownPanelNavigation.interactiveRows(
@@ -195,8 +188,7 @@ final class DropdownPanelNavigationTests: XCTestCase {
     }
 
     func testNextClampsAnOutOfRangeSelection() {
-        // A stale index (rows shrank under the selection) snaps back in bounds
-        // instead of walking further out.
+        // A stale out-of-range index snaps back in bounds.
         XCTAssertEqual(DropdownPanelNavigation.next(from: 99, direction: .down, count: 3), 2)
         XCTAssertEqual(DropdownPanelNavigation.next(from: 99, direction: .up, count: 3), 2)
         XCTAssertEqual(DropdownPanelNavigation.next(from: -5, direction: .up, count: 3), 0)

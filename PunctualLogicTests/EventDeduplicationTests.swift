@@ -1,8 +1,8 @@
 //
 //  EventDeduplicationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for cross-calendar duplicate collapsing (MeetingBarNG).
+//  Tests for cross-calendar duplicate collapsing.
 //
 
 import XCTest
@@ -47,12 +47,6 @@ final class EventDeduplicationTests: XCTestCase {
         XCTAssertEqual(EventDeduplication.keptIndices(events), [0])
     }
 
-    /// THE REGRESSION THIS FILE EXISTS FOR.
-    ///
-    /// Two rows reading "12:00 PM · Peter: Lunch" survived on real data purely
-    /// because the providers disagreed about an identifier the user cannot see.
-    /// The identifier is now one of two signals, not a short circuit: matching
-    /// EITHER the identifier or the visible composite collapses the pair.
     func test_differentExternalIdentifiersStillCollapseWhenTheRowsLookIdentical() {
         let events = [
             event(0, externalIdentifier: "id-1", title: "Peter: Lunch", start: date(12), end: date(13)),
@@ -61,8 +55,6 @@ final class EventDeduplicationTests: XCTestCase {
         XCTAssertEqual(EventDeduplication.keptIndices(events), [0])
     }
 
-    /// The identifier still earns its keep: different ids AND a visibly different
-    /// row must stay two events. This is the guard against over-merging.
     func test_differentExternalIdentifiersAreKeptWhenTheRowsDiffer() {
         let events = [
             event(0, externalIdentifier: "id-1", title: "Lunch", start: date(12), end: date(13)),
@@ -71,7 +63,6 @@ final class EventDeduplicationTests: XCTestCase {
         XCTAssertEqual(EventDeduplication.keptIndices(events), [0, 1])
     }
 
-    /// Same start minute, different titles — genuinely two meetings, kept.
     func test_concurrentDifferentMeetingsAreKept() {
         let events = [
             event(0, title: "Design review", start: date(12), end: date(13)),
@@ -153,11 +144,7 @@ final class EventDeduplicationTests: XCTestCase {
     }
 
     // MARK: - Copies that disagree about details the user cannot see
-    //
-    // Each of these produced two rows that rendered identically in the dropdown —
-    // same title, same displayed start — because the row shows the start time
-    // only unless `showEventEndTime` is on, and it is off by default. A key
-    // stricter than what the user can actually see reads as a plain bug.
+    // The row shows only the start time by default, so copies that match on it collapse.
 
     func test_sameTitleAndStartCollapsesEvenWhenDurationsDiffer() {
         // A 30-minute lunch on one calendar and a 60-minute one on another.
@@ -196,7 +183,7 @@ final class EventDeduplicationTests: XCTestCase {
     // MARK: - Still distinct
 
     func test_differentStartMinutesAreStillKept() {
-        // Tolerance is sub-minute only — a real back-to-back pair must survive.
+        // Tolerance is sub-minute only, so a real back-to-back pair survives.
         let events = [
             event(0, title: "Peter: Lunch", start: date(12), end: date(13)),
             event(1, title: "Peter: Lunch", start: date(12, 30), end: date(13))
@@ -215,26 +202,20 @@ final class EventDeduplicationTests: XCTestCase {
     }
 
     // MARK: - Source priority (multi-source: Apple + Google connected at once)
-    //
-    // With both sources connected the same invite arrives twice. Which copy
-    // survives is not cosmetic: the direct Google copy carries real attendee
-    // response status and Google's own conferencing data, where EventKit's
-    // mirrored copy routinely flattens attendee status and leaves the conference
-    // link recoverable only by scraping the notes. Lower `sourcePriority` wins.
+    // The same invite arrives from both sources; the lower `sourcePriority` wins.
 
     func test_lowerSourcePriorityWinsEvenWhenItArrivesSecond() {
         let events = [
             // EventKit copy, first in the array.
             event(0, title: "Standup", start: date(10), end: date(10, 15), sourcePriority: 1),
-            // Google copy, second — but preferred.
+            // Google copy, second, but preferred.
             event(1, title: "Standup", start: date(10), end: date(10, 15), sourcePriority: 0)
         ]
         XCTAssertEqual(EventDeduplication.keptIndices(events), [1])
     }
 
     func test_equalSourcePriorityStillKeepsTheFirst() {
-        // Two calendars within ONE source: no preference exists, so the
-        // historical first-wins behaviour must be exactly preserved.
+        // Two calendars within one source: no preference, so the first wins.
         let events = [
             event(0, title: "Standup", start: date(10), end: date(10, 15), sourcePriority: 1),
             event(1, title: "Standup", start: date(10), end: date(10, 15), sourcePriority: 1)
@@ -252,7 +233,6 @@ final class EventDeduplicationTests: XCTestCase {
     }
 
     func test_priorityDoesNotMergeGenuinelyDifferentMeetings() {
-        // Preference must never be a reason to collapse two distinct meetings.
         let events = [
             event(0, title: "Design review", start: date(12), end: date(13), sourcePriority: 1),
             event(1, title: "1:1 with Sam", start: date(12), end: date(13), sourcePriority: 0)
@@ -264,7 +244,7 @@ final class EventDeduplicationTests: XCTestCase {
         let events = [
             event(0, title: "Standup", start: date(10), end: date(11), sourcePriority: 1),
             event(1, title: "Retro", start: date(14), end: date(15), sourcePriority: 1),
-            // Google copy of Standup, preferred — wins over index 0.
+            // Google copy of Standup, preferred, so it wins over index 0.
             event(2, title: "Standup", start: date(10), end: date(11), sourcePriority: 0)
         ]
         // Retro (position 1) precedes the winning Standup copy (position 2).
@@ -272,11 +252,7 @@ final class EventDeduplicationTests: XCTestCase {
     }
 
     // MARK: - Transitive grouping
-    //
-    // A~B by composite and B~C by identifier makes all three one meeting. The
-    // previous single-pass walk dropped B for matching A, which meant B's
-    // identifier was never recorded and C survived as a third row of the same
-    // meeting.
+    // A~B by composite and B~C by identifier makes all three one meeting.
 
     func test_chainedMatchesCollapseToASingleEvent() {
         let events = [

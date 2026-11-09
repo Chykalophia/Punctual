@@ -2,24 +2,9 @@
 //  StatusItemClickPolicy.swift
 //  Punctual
 //
-//  Decides what a click on the status item means, from the event AppKit hands
-//  the button's action (or the lack of one).
-//
-//  Why this exists: macOS 27 changed how a status-item click reaches the app.
-//  A click can now arrive through the status item's own one-shot action path,
-//  which calls the action with NO mouse event behind it (`NSApp.currentEvent`
-//  is nil, or is whatever non-mouse event happened to be current), or with only
-//  the mouse-up half of the click. The old handler acted on left-mouse-DOWN
-//  only and dropped everything that was not a mouse event, so on macOS 27 a
-//  click could do nothing at all — most visibly after the right-click menu had
-//  been used once, which is the same failure other menu-bar apps reported.
-//
-//  The rule now: act on the FIRST half of a click that arrives, and swallow
-//  the second half only when its partner was actually seen. A lone
-//  mouse-up (no down delivered) therefore still opens the panel, and a click
-//  with no mouse event at all is treated as a plain left click.
-//
-//  Pure so it is testable without a window server.
+//  Decides what a click on the status item means from the event behind the
+//  button's action. On macOS 27 a click may arrive with no mouse event or only
+//  its mouse-up, so the first half to arrive acts and its partner is swallowed.
 //
 //  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
@@ -32,8 +17,7 @@ enum StatusItemClickPolicy {
         case leftMouseUp
         case rightMouseDown
         case rightMouseUp
-        /// No current event, or one that is not a mouse button event at all.
-        /// macOS 27's one-shot action path delivers clicks like this.
+        /// No current event, or not a mouse button event (macOS 27 action path).
         case nonMouse
     }
 
@@ -50,16 +34,15 @@ enum StatusItemClickPolicy {
     /// can be recognised as the second half of the same click.
     enum Button: Equatable, Sendable { case left, right }
 
-    /// - Parameters:
-    ///   - input: the event behind this action call.
-    ///   - controlKeyHeld: whether ⌃ was held, which makes a left click a
-    ///     secondary click, as it does everywhere else on the Mac.
-    ///   - pendingDown: the button whose mouse-down was acted on and whose
-    ///     mouse-up has not arrived yet, if any.
+    /// What a status-item action call should do.
     ///
-    /// Pairing is by order, not by time: a press held on the item for as long
-    /// as you like is still one click. A down whose up never arrives can cost at
-    /// most one later lone-up click, since consuming an up clears the pairing.
+    /// Downs and ups are paired by order, not time.
+    ///
+    /// - Parameters:
+    ///   - input: The event behind this action call.
+    ///   - controlKeyHeld: Whether Control was held, making a left click secondary.
+    ///   - pendingDown: The button whose mouse-down was acted on and whose
+    ///     mouse-up has not arrived yet, if any.
     static func outcome(
         for input: Input,
         controlKeyHeld: Bool,
@@ -74,20 +57,16 @@ enum StatusItemClickPolicy {
             if pendingDown == .left { return .ignore }
             return controlKeyHeld ? .secondary : .primary
         case .rightMouseUp:
-            // Whichever half of a right click arrives first opens the menu,
-            // once.
             if pendingDown == .right { return .ignore }
             return .secondary
         case .nonMouse:
-            // No mouse event means no reliable modifier state to read, so this
-            // is always the plain click.
+            // No reliable modifier state without a mouse event.
             return .primary
         }
     }
 
-    /// What to remember after `input`, whatever its outcome: a mouse-down is
-    /// remembered so its mouse-up can be swallowed; anything else clears it,
-    /// so a consumed or stale down can never swallow a later click.
+    /// The pending mouse-down to remember after `input`: set by a down, cleared
+    /// by anything else.
     static func pendingDown(after input: Input) -> Button? {
         switch input {
         case .leftMouseDown: .left

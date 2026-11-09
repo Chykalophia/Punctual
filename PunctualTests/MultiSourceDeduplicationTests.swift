@@ -1,13 +1,9 @@
 //
 //  MultiSourceDeduplicationTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  With macOS Calendar and the direct Google provider connected at the same
-//  time, the same invite arrives twice. `EventDeduplication` collapses it, and
-//  `sourcePriority` decides which copy survives — these tests drive that through
-//  the real fetch pipeline rather than the pure deduplicator, because the wiring
-//  between them (calendar `provider`, per-source selection, the priority
-//  lookup) is where it can silently go wrong.
+//  Duplicate invites from macOS Calendar and Google, driven through the real fetch pipeline
+//  so the provider, per-source selection and priority wiring are covered.
 //
 
 import Combine
@@ -91,7 +87,6 @@ final class MultiSourceDeduplicationTests: BaseTestCase {
         await fulfillment(of: [exp], timeout: 2.0)
     }
 
-    /// The headline behaviour: one row, and it is Google's copy.
     func testTheGoogleCopyOfADuplicatedMeetingSurvives() async {
         let start = Date().addingTimeInterval(600)
         let harness = makeHarness(
@@ -107,9 +102,6 @@ final class MultiSourceDeduplicationTests: BaseTestCase {
             "the surviving copy carries Google's richer payload")
     }
 
-    /// Copies that disagree about duration still collapse — a 30-minute block on
-    /// one source and 60 on the other is one meeting, and the row shows only the
-    /// start time by default.
     func testCopiesWithDifferentEndTimesStillCollapse() async {
         let start = Date().addingTimeInterval(600)
         let harness = makeHarness(
@@ -121,7 +113,6 @@ final class MultiSourceDeduplicationTests: BaseTestCase {
         XCTAssertEqual(harness.sync.events.first?.id, "g-copy")
     }
 
-    /// Genuinely different meetings from the two sources both survive.
     func testDistinctMeetingsFromBothSourcesAreBothKept() async {
         let start = Date().addingTimeInterval(600)
         let harness = makeHarness(
@@ -135,7 +126,6 @@ final class MultiSourceDeduplicationTests: BaseTestCase {
             "deduplication must not merge two different meetings that merely overlap")
     }
 
-    /// The opt-out still applies across sources.
     func testTurningDeduplicationOffShowsBothCopies() async {
         let start = Date().addingTimeInterval(600)
         let harness = makeHarness(
@@ -143,17 +133,13 @@ final class MultiSourceDeduplicationTests: BaseTestCase {
         Defaults[.deduplicateEvents] = false
 
         await waitForEvents(harness.sync)
-        // The setting is a refresh trigger, so the first published set may
-        // predate it; force one more cycle.
+        // The setting is a refresh trigger, so force one more cycle after it.
         try? await harness.sync.refreshSources()
         try? await Task.sleep(nanoseconds: 400_000_000)
 
         XCTAssertEqual(Set(harness.sync.events.map(\.id)), ["ek-copy", "g-copy"])
     }
 
-    /// Both sources' calendars reach the merged list, each filtered against its
-    /// OWN selection. Filtering the merged list against one provider's ID list
-    /// would silently drop the other source entirely.
     func testEachSourceIsFilteredAgainstItsOwnSelection() async {
         let start = Date().addingTimeInterval(600)
         let harness = makeHarness(

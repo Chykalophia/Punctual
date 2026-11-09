@@ -1,11 +1,8 @@
 //
 //  GoogleEventColorsTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Google's per-event colour palette — the detail that lets the dropdown's
-//  timeline show a day the way Google Calendar does, rather than one flat
-//  colour per calendar. EventKit has no equivalent, so this is direct-provider
-//  only.
+//  Tests for Google's per-event colour palette.
 //
 
 import XCTest
@@ -32,10 +29,6 @@ final class GoogleEventColorsTests: XCTestCase {
         XCTAssertEqual(palette.background(forEventColorID: "11"), "#dc2127")
     }
 
-    /// Calendar colours arrive on the calendarList entries as a literal
-    /// `backgroundColor`, so the calendar palette is a second way to learn
-    /// something already known — and mixing the two would colour events with
-    /// the wrong set entirely.
     func test_calendarPaletteIsNotUsedForEvents() {
         let palette = GoogleColorPalette.parse(response)
         XCTAssertNotEqual(
@@ -44,10 +37,7 @@ final class GoogleEventColorsTests: XCTestCase {
     }
 
     // MARK: - Falling back rather than inventing
-    //
-    // Every one of these means "use the calendar's colour", which is what the
-    // app did before per-event colours existed. A wrong colour would be worse
-    // than the old flat one.
+    // Every case here falls back to the calendar's colour.
 
     func test_noColorIDMeansNoOverride() {
         let palette = GoogleColorPalette.parse(response)

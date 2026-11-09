@@ -1,34 +1,19 @@
 //
 //  DropdownInspectorWindow.swift
-//  MeetingBarNG
+//  Punctual
 //
 //  DEBUG-only development aid: hosts the real dropdown panel in a window that
 //  STAYS OPEN, so the panel can be screenshotted and inspected from another
 //  process.
 //
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 #if DEBUG
 import AppKit
 
-/// A dropdown panel that does not dismiss itself.
-///
-/// The real `DropdownPanelWindow` closes the instant anything else takes focus —
-/// correct for a menu, and fatal for inspecting it, since `screencapture` (and
-/// any other tool driving the app from outside) takes focus by existing. The
-/// `debugPinDropdownPanel` default was an attempt to suppress that dismissal in
-/// place; this is the replacement, and it works because the panel it opens was
-/// never a menu to begin with.
-///
-/// Deliberately borderless rather than titled, even though a titled window would
-/// come with a close button: the whole point is to look at the panel's own
-/// surface — corner radius, glass rim, shadow, backdrop blend — and a titlebar
-/// would either cover the header or change the rounding being judged. What you
-/// see here is pixel-for-pixel what a click on the status item draws.
-///
-/// Dismissal, since there is no close button: Escape, or re-running the deep
-/// link (it toggles).
+/// A borderless copy of the dropdown panel that stays open when it loses focus, for
+/// screenshots and inspection. Dismissed by Escape or by re-running the deep link.
 final class DropdownInspectorWindow: NSWindow {
     /// Fires just before close so the coordinator can drop its reference.
     var onClose: (() -> Void)?
@@ -48,8 +33,7 @@ final class DropdownInspectorWindow: NSWindow {
         close()
     }
 
-    // NOTE: no `resignKey` override. That omission IS the feature — losing focus
-    // leaves this window on screen.
+    // No `resignKey` override: losing focus must leave this window on screen.
 
     override func close() {
         let handler = onClose
@@ -58,12 +42,8 @@ final class DropdownInspectorWindow: NSWindow {
         super.close()
     }
 
-    /// Whether `url` is the inspector's deep link (`punctual://dropdown-debug`).
-    ///
-    /// Matched here rather than in `URLHandler` on purpose: routing through
-    /// `AppRoute` would put a DEBUG-only case in an enum the release build also
-    /// compiles, and thread a DEBUG-only closure through `AppEnvironment`. A
-    /// development hook should not leave a shape behind in shipping types.
+    /// Whether `url` is the inspector's deep link (`punctual://dropdown-debug`). Matched
+    /// outside `URLHandler` so no DEBUG-only case reaches `AppRoute`.
     static func matches(_ url: URL) -> Bool {
         url.scheme == "punctual" && url.host == "dropdown-debug"
     }
@@ -79,15 +59,11 @@ struct DropdownInspectorSnapshot {
 }
 
 enum DropdownInspectorPresentationPolicy {
-    /// Above ordinary windows so a screenshot cannot catch it behind something,
-    /// but below `.popUpMenu` — a real menu opened during inspection should still
-    /// win, the same way it would over the real panel.
+    /// Above ordinary windows, below a real `.popUpMenu`.
     static let level: NSWindow.Level = .floating
 
-    /// Where the inspector hangs when there is no status item to anchor to: the
-    /// top-right corner of the screen, which is where the status item would be.
-    /// Sized as a zero-width rect at the menu-bar line so the shared placement
-    /// math treats it exactly like a real status-item anchor.
+    /// Fallback anchor at the screen's top-right: a zero-size rect on the menu-bar line, so
+    /// the shared placement math treats it like a status-item anchor.
     static func syntheticAnchor(in screenFrame: NSRect) -> NSRect {
         NSRect(x: screenFrame.maxX - 80, y: screenFrame.maxY, width: 0, height: 0)
     }

@@ -1,18 +1,11 @@
 //
 //  PreviewFixtures.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Fixture data for the Preferences dropdown preview (Phase 3). Builds a
-//  `StatusBarMenuState` with deterministic sample events so the preview pane
-//  can mount the REAL `DropdownPanelView` instead of a hand-copied mock —
-//  eliminating the drift that the old `DisplayPreviewPane`'s duplicated
-//  composition math and row layouts caused.
+//  Deterministic sample data for the Dropdown pane's preview. App target only:
+//  `MBEvent` and `MBCalendar` (which holds an `NSColor`) are not in PunctualLogic.
 //
-//  Lives in the app target (not MeetingBarLogic) because `MBEvent` needs
-//  `MBCalendar` which holds an `NSColor`, and neither type is in the logic
-//  package's sources allowlist.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -21,15 +14,10 @@ import Foundation
 
 @MainActor
 enum PreviewFixtures {
-    /// The reference date the sample events are laid out around. Live by
-    /// default, so the Preferences preview's relative offsets ("25m from now")
-    /// stay meaningful whenever it is opened; the sample data itself is
-    /// deterministic, never the user's calendar.
+    /// The reference date the sample events are laid out around: `pinnedNow`, else the current time.
     static var now: Date { pinnedNow ?? Date() }
 
-    /// Pins `now` to a fixed instant, for renders that must not depend on the
-    /// wall clock (the website screenshots, MarketingScreenshotTests). Reset
-    /// to nil afterwards.
+    /// Fixed instant for clock-independent renders (`MarketingScreenshotTests`); reset to `nil` afterwards.
     static var pinnedNow: Date?
 
     // MARK: - Sample calendars
@@ -117,8 +105,7 @@ enum PreviewFixtures {
         return [next, later, evening]
     }
 
-    /// A meeting that already ended — shown dimmed when "Hide finished" is off,
-    /// removed when it's on, so toggling that setting visibly changes the preview.
+    /// A meeting that already ended, included only when "Hide finished" is off.
     static var finishedEvent: MBEvent {
         let calendar = Calendar.current
         let start = calendar.date(byAdding: .minute, value: -60, to: now) ?? now
@@ -176,9 +163,11 @@ enum PreviewFixtures {
 
     // MARK: - Fixture state
 
-    /// A `StatusBarMenuState` populated with sample events, bookmarks, and the
-    /// user's current settings — so the real `DropdownPanelView` renders against
-    /// meaningful data that re-renders when any preference changes.
+    /// A `StatusBarMenuState` built from sample events and bookmarks plus the user's current settings.
+    ///
+    /// - Parameters:
+    ///   - includeFinished: Whether to include `finishedEvent`.
+    ///   - includeReminders: Whether to include `sampleReminder`.
     static func makeState(includeFinished: Bool, includeReminders: Bool) -> StatusBarMenuState {
         let calendar = Calendar.current
         let events = includeFinished ? [finishedEvent] + sampleEvents : sampleEvents

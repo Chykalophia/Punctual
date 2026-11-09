@@ -1,43 +1,23 @@
 //
 //  MeetingProgressRenderer.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Draws menu-bar meeting progress. The WHAT (how full, what phase) is decided by
-//  the hostless `MeetingProgressPolicy`; this file only turns that into pixels.
+//  Draws menu-bar meeting progress resolved by `MeetingProgressPolicy`.
 //
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
 
 /// Colours and dimensions for the menu-bar indicator.
-///
-/// Phase colours follow the app's one shared vocabulary for urgency, so the
-/// menu bar and the dropdown's Join buttons can never disagree about whether a
-/// meeting is "close": secondary while it is merely approaching, the accent
-/// colour once it is inside the imminence threshold, red while it runs.
 enum MeetingProgressStyleMetrics {
-    /// The TRACK — the indicator's chrome. Always the label colour, so it sits
-    /// in the same visual family as the menu bar's own text on any wallpaper.
+    /// Colour of the unfilled track.
     static let trackColor: NSColor = .labelColor
 
-    /// The FILL — the indicator's state.
+    /// Fill colour for a phase.
     ///
-    /// Monochrome, matching the menu bar's own text, with red reserved for a
-    /// meeting that is actually running. Three attempts got here:
-    ///
-    /// `secondaryLabelColor` was a dim grey and vanished. The mockup's solid
-    /// `#fff` was visible but, filled across the INTERIOR, washed out the title.
-    /// A saturated accent fixed both — and then failed on a teal menu bar,
-    /// because blue on blue-green has almost no contrast. Hue is not the robust
-    /// axis: the wallpaper picks the bar's tint, and it can sit anywhere,
-    /// including right on top of the user's accent colour.
-    ///
-    /// `labelColor` is. macOS already guarantees the menu bar's text is legible
-    /// against whatever is behind it — it flips the text between light and dark
-    /// to make sure — so drawing in that same colour inherits the guarantee for
-    /// free. Phase reads as brightness rather than hue, which survives any
-    /// wallpaper, and red still marks "this is happening now".
+    /// `labelColor` (phase shown as brightness) rather than the accent colour: the
+    /// menu bar's tint follows the wallpaper and can match the accent. Red = running.
     static func fillColor(for phase: MeetingProgressPresentation.Phase) -> NSColor {
         switch phase {
         case .upcoming: NSColor.labelColor.withAlphaComponent(0.70)
@@ -46,44 +26,32 @@ enum MeetingProgressStyleMetrics {
         }
     }
 
-    /// The unfilled part of the track — `rgba(255,255,255,.28)` in the mockup.
+    /// Opacity of the unfilled track.
     static let trackAlpha: CGFloat = 0.28
 
     static let underlineHeight: CGFloat = 2
-    /// Lifts the underline off the very bottom of the item. Drawn flush it sits
-    /// on the menu bar's own edge and reads as clipped rather than as a rule.
+    /// Gap between the underline and the bottom of the item.
     static let underlineBottomInset: CGFloat = 2
     static let ringLineWidth: CGFloat = 1.75
     static let capsuleLineWidth: CGFloat = 1
-    /// The capsule's own background and border, from the mockup's `.cap`:
-    /// `background: rgba(255,255,255,.20)`, `border: …,.26`.
+    /// Opacities of the capsule's background and unfilled border.
     static let capsuleBackgroundAlpha: CGFloat = 0.14
     static let capsuleBorderAlpha: CGFloat = 0.26
-    /// The filled part of the capsule's border, drawn heavier than the track so
-    /// the boundary between done and remaining is unmistakable.
+    /// Line width of the filled part of the capsule's border.
     static let capsuleProgressLineWidth: CGFloat = 2.5
     /// Width of the standalone bar, in the status item's image slot.
     static let barSize = NSSize(width: 22, height: 5)
     /// Inset the ring keeps from the icon box so it never touches the glyph.
     static let ringPadding: CGFloat = 1.5
-    /// Diameter of the ring when it has to stand on its own (no icon to
-    /// encircle). Matches the menu bar's icon size so it reads as one.
+    /// Diameter of the standalone ring (no icon to encircle); matches the menu-bar icon size.
     static let standaloneRingSide: CGFloat = 14
 }
 
-/// A transparent overlay on the status-item button that draws the indicator on
-/// top of AppKit's own rendering.
+/// A transparent, click-through overlay on the status-item button that draws the
+/// indicator on top of AppKit's own rendering.
 ///
-/// An overlay rather than a redraw of the whole item ON PURPOSE. The status item
-/// renders its text as an `NSAttributedString`, and AppKit owns everything that
-/// makes that text look native — light/dark adaptation, the inversion while the
-/// menu is open, accessibility. Rendering the item ourselves to composite a
-/// progress bar underneath would mean reimplementing all of it. Drawing over the
-/// top costs nothing and cannot regress the classic path.
-///
-/// The consequence is that the styles which fill a REGION (underline, capsule)
-/// are drawn around the text rather than behind it, and are kept translucent so
-/// the text stays first.
+/// An overlay on purpose: redrawing the item would mean reimplementing AppKit's
+/// native title rendering (appearance adaptation, highlight inversion).
 final class MeetingProgressOverlayView: NSView {
     var style: MeetingProgressStyle = .none {
         didSet { if style != oldValue { needsDisplay = true } }
@@ -93,13 +61,11 @@ final class MeetingProgressOverlayView: NSView {
         didSet { if presentation != oldValue { needsDisplay = true } }
     }
 
-    /// Width of the leading icon, so the ring knows what to encircle. The status
-    /// item does not expose the icon's frame, so this is supplied by the caller
-    /// from the image it just set.
+    /// Width of the leading icon for the ring to encircle. Supplied by the caller,
+    /// since the status item does not expose the icon's frame.
     var iconWidth: CGFloat = 0
 
-    /// Clicks belong to the status item underneath — an overlay that swallowed
-    /// them would make the menu bar item stop opening the panel.
+    /// Passes all clicks through to the status item underneath.
     override func hitTest(_: NSPoint) -> NSView? { nil }
 
     override var isFlipped: Bool { false }
@@ -110,8 +76,7 @@ final class MeetingProgressOverlayView: NSView {
 
         switch style {
         case .none, .bar:
-            // `.bar` is drawn into the image slot, not here — see
-            // `MeetingProgressRenderer.barImage`.
+            // `.bar` is drawn into the image slot by `MeetingProgressRenderer.barImage`.
             break
         case .underline:
             drawUnderline(fraction: presentation.fraction, color: color)
@@ -153,8 +118,7 @@ final class MeetingProgressOverlayView: NSView {
         track.stroke()
 
         guard fraction > 0 else { return }
-        // AppKit angles run counter-clockwise from 3 o'clock; a countdown reads
-        // clockwise from 12, hence the negative sweep off a 90° start.
+        // AppKit angles run counter-clockwise from 3 o'clock; sweep clockwise from 12.
         let arc = NSBezierPath()
         arc.appendArc(
             withCenter: center,
@@ -169,19 +133,10 @@ final class MeetingProgressOverlayView: NSView {
         arc.stroke()
     }
 
-    /// A capsule whose BORDER fills left to right.
+    /// A capsule whose border fills left to right over a faint interior tint.
     ///
-    /// The mockup fills the capsule's INTERIOR, and that cannot be copied here.
-    /// This overlay draws on top of the title — AppKit owns that text and we
-    /// deliberately do not re-render it — so an interior fill strong enough to
-    /// see also covers the meeting name. Tried both ends and neither works:
-    /// translucent enough to read through is invisible, opaque enough to see
-    /// turns "CLARITY BREAK" into blue-on-blue.
-    ///
-    /// The border carries the progress instead. Nothing is drawn over the text,
-    /// so the fill can be full strength, and a capsule filling round its own edge
-    /// reads as progress at a glance. The interior keeps a faint track tint so
-    /// the pill still reads as a container.
+    /// The border, not the interior, carries progress: this overlay draws on top of
+    /// the title, so a visible interior fill would obscure it.
     private func drawCapsule(fraction: Double, color: NSColor) {
         let rect = bounds.insetBy(dx: 1, dy: 1)
         guard rect.width > 4, rect.height > 4 else { return }
@@ -201,9 +156,7 @@ final class MeetingProgressOverlayView: NSView {
         outline.stroke()
 
         guard fraction > 0 else { return }
-        // The same path at full strength, clipped to how far along we are. Top
-        // and bottom edges advance together, so it reads as one boundary sweeping
-        // right rather than two lines growing.
+        // Full-strength outline clipped to the progress fraction.
         NSGraphicsContext.saveGraphicsState()
         NSRect(
             x: bounds.minX,
@@ -220,14 +173,8 @@ final class MeetingProgressOverlayView: NSView {
 }
 
 enum MeetingProgressRenderer {
-    /// The ring drawn as a standalone image, for when the menu bar has no icon
-    /// for it to encircle.
-    ///
-    /// A ring needs something to sit around. With `eventTitleIconFormat` set to
-    /// none — or any composition without an `.icon` block — there is no image in
-    /// the status item, and an overlay ring lands on the first letter of the
-    /// title instead. Taking the image slot costs a little width, which is the
-    /// honest price of asking for a ring when nothing else is there to wear it.
+    /// The ring as a standalone image for the status item's image slot, used when
+    /// the item shows no icon (an overlay ring would land on the title text).
     @MainActor
     static func ringImage(for presentation: MeetingProgressPresentation) -> NSImage {
         let side = MeetingProgressStyleMetrics.standaloneRingSide
@@ -264,11 +211,9 @@ enum MeetingProgressRenderer {
         return image
     }
 
-    /// The standalone mini-bar, drawn as an image for the status item's image
-    /// slot. The one style that costs menu-bar width.
+    /// The standalone mini-bar as an image for the status item's image slot.
     ///
-    /// Not a template image: the whole point is the phase colour, and a template
-    /// image would be flattened to the menu bar's own tint.
+    /// Not a template image, so the phase colour is not flattened to the menu-bar tint.
     @MainActor
     static func barImage(for presentation: MeetingProgressPresentation) -> NSImage {
         let size = MeetingProgressStyleMetrics.barSize

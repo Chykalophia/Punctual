@@ -2,17 +2,9 @@
 //  SoftwareUpdater.swift
 //  Punctual
 //
-//  Sparkle-based "check for updates and install". The feed (SUFeedURL), the
-//  EdDSA public key (SUPublicEDKey), a signed feed (SURequireSignedFeed),
-//  verification before extraction, and the sandbox installer service are
-//  configured in Info.plist; this class owns the updater's lifetime and
+//  Sparkle-based update checking and installation. Feed, EdDSA key, signed-feed and
+//  installer settings live in Info.plist; this class owns the updater's lifetime and
 //  exposes what the UI needs.
-//
-//  What Sparkle accepts (read in its source, SUUpdateValidator.m): an update
-//  installs if its EdDSA signature verifies against the key built into this
-//  app, OR its Developer ID signature matches this app's team. The "or" is
-//  Sparkle's design, for key rotation. Every Punctual release is signed both
-//  ways, and the feed itself must carry a valid EdDSA signature.
 //
 //  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
@@ -23,13 +15,10 @@ import Defaults
 import Sparkle
 import UserNotifications
 
-/// Who shows a scheduled (not user-initiated) update. Pure, so it is tested.
+/// Decides who shows a scheduled update: Sparkle's window or a notification.
 enum UpdateReminderPolicy {
-    /// Sparkle shows its window when Punctual is already in focus. Otherwise a
-    /// notification says an update is available: never a window pulled in
-    /// front of a call. If notifications can't be shown, Sparkle shows its
-    /// window anyway (for a background app it opens without activating), so a
-    /// user who turned notifications off still learns about updates.
+    /// Sparkle shows its window when Punctual is already in focus, or when notifications
+    /// can't be shown; otherwise a notification announces the update.
     static func sparkleShowsScheduledUpdate(immediateFocus: Bool, notificationsAuthorized: Bool) -> Bool {
         immediateFocus || !notificationsAuthorized
     }
@@ -53,9 +42,8 @@ final class SoftwareUpdater: NSObject, ObservableObject {
     private var controller: SPUStandardUpdaterController?
     private var cancellables: Set<AnyCancellable> = []
 
-    /// Whether a banner/alert notification can be shown right now. Refreshed
-    /// at start and before every scheduled check; read synchronously by the
-    /// Sparkle delegate.
+    /// Whether alert notifications can be shown. Refreshed before each scheduled check
+    /// and read synchronously by the Sparkle delegate.
     private var notificationsAuthorized = false
 
     private func refreshNotificationAuthorization() {
@@ -64,9 +52,7 @@ final class SoftwareUpdater: NSObject, ObservableObject {
         }
     }
 
-    /// Reads the settings off the main actor and hands back only a Bool:
-    /// `UNNotificationSettings` isn't `Sendable` in every SDK this builds
-    /// with, so it must not cross into the main actor.
+    /// Returns only a Bool because `UNNotificationSettings` isn't `Sendable` in every SDK.
     nonisolated private static func notificationsCanAlert() async -> Bool {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         let allowed = settings.authorizationStatus == .authorized
@@ -74,9 +60,8 @@ final class SoftwareUpdater: NSObject, ObservableObject {
         return allowed && settings.alertStyle != .none
     }
 
-    /// Debug builds run from Xcode/DerivedData would otherwise check the
-    /// public feed and could replace a development build with the release.
-    /// They opt in explicitly with PUNCTUAL_ENABLE_UPDATER=1.
+    /// Debug builds check for updates only with `PUNCTUAL_ENABLE_UPDATER=1`, so a
+    /// development build is never replaced by the release.
     static var isEnabledInThisBuild: Bool {
         #if DEBUG
         return ProcessInfo.processInfo.environment["PUNCTUAL_ENABLE_UPDATER"] == "1"
@@ -85,8 +70,7 @@ final class SoftwareUpdater: NSObject, ObservableObject {
         #endif
     }
 
-    /// Starts the updater once per launch. Never in a test host: it must not
-    /// reach the network or show Sparkle's permission prompt.
+    /// Starts the updater once per launch; never in a test host.
     func start() {
         guard controller == nil,
               Self.isEnabledInThisBuild,
@@ -118,10 +102,8 @@ final class SoftwareUpdater: NSObject, ObservableObject {
             .store(in: &cancellables)
     }
 
-    /// User-initiated check (menu, Preferences, or tapping the "update
-    /// available" notification). Punctual is a menu-bar (accessory) app, so it
-    /// is activated first; otherwise Sparkle's window opens behind other apps.
-    /// Activation is only ever on a direct user action, never on a schedule.
+    /// User-initiated check. Activates the accessory app first so Sparkle's window does
+    /// not open behind other apps.
     func checkForUpdates() {
         guard let controller else { return }
         NSApp.activate(ignoringOtherApps: true)
@@ -171,11 +153,8 @@ final class SoftwareUpdater: NSObject, ObservableObject {
 }
 
 extension SoftwareUpdater: SPUUpdaterDelegate {
-    /// Implementing this replaces Sparkle's own "ask on the second launch"
-    /// rule: Punctual asks "Check for updates automatically?" on the first
-    /// launch after first-run setup is finished, never during setup. (For a new
-    /// install that is the second launch; for someone upgrading from 1.0.x, the
-    /// first launch of 1.1.0.) Sparkle only asks while the choice is unset.
+    /// Replaces Sparkle's second-launch rule: asks whether to check automatically only
+    /// once first-run setup is finished.
     nonisolated func updaterShouldPromptForPermissionToCheck(forUpdates _: SPUUpdater) -> Bool {
         MainActor.assumeIsolated { Defaults[.onboardingCompleted] }
     }
@@ -187,14 +166,10 @@ extension SoftwareUpdater: SPUUpdaterDelegate {
 }
 
 extension SoftwareUpdater: SPUStandardUserDriverDelegate {
-    /// Gentle reminders: a scheduled check never pulls Punctual in front of
-    /// what the user is doing, which for a meeting app may be a call or a
-    /// screen share.
+    /// A scheduled check never pulls Punctual in front of a call or screen share.
     nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
 
-    /// Let Sparkle show its window for a scheduled update only when that is
-    /// already in focus (just launched, or Punctual is active). Otherwise a
-    /// notification says an update is available, and tapping it opens it.
+    /// See `UpdateReminderPolicy`.
     nonisolated func standardUserDriverShouldHandleShowingScheduledUpdate(
         _: SUAppcastItem,
         andInImmediateFocus immediateFocus: Bool
@@ -219,8 +194,7 @@ extension SoftwareUpdater: SPUStandardUserDriverDelegate {
         }
     }
 
-    /// The user has seen the update (window shown or acted on): the reminder
-    /// notification is no longer needed.
+    /// The user has seen the update, so the reminder notification is removed.
     nonisolated func standardUserDriverDidReceiveUserAttention(forUpdate _: SUAppcastItem) {
         MainActor.assumeIsolated { clearUpdateAvailableNotification() }
     }

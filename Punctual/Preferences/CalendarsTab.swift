@@ -7,42 +7,11 @@
 //
 //  Licensed under the Apache License, Version 2.0.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  earlier passes tidied the provider status/metadata/actions, threaded the live
-//  EventKit authorization into the presentation, and added Grant Calendar Access,
-//  Force Sync and Re-authenticate Account… affordances. The Preferences UX
-//  overhaul (Phase 2) rebuilds the pane around one question — "where do my
-//  meetings come from, and is macOS actually syncing them?" — and deletes what
-//  could not answer it:
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
-//    • the calendar-SOURCE picker. `CalendarSourcePresentation.all` held exactly
-//      one entry, so the pane's most prominent control was a dropdown that could
-//      never change anything. It is now back as a TOGGLE PER SOURCE (multi-source,
-//      2026), rendered only when a second source is genuinely available.
-//    • the two static onboarding lines ("Uses the macOS Calendar app as the data
-//      source", "All configured accounts: …") — boilerplate styled to look like
-//      live status, directly under a line that WAS live status.
-//    • the duplicate sync caption. `preferences_status_sync_help` said what
-//      `preferences_calendar_macos_notice` said, ~60 lines apart in one section.
-//      One merged paragraph now lives inside the troubleshooting disclosure.
-//    • the Google `Reconnect` / `Change Google Account` actions, unreachable
-//      since the Google provider was removed (Onboarding still owns the
-//      reconnect path for installs carrying that provider forward).
-//    • `AccessDeniedBanner`, declared here and referenced nowhere — a third
-//      unused variant of messaging this file already had twice.
-//
-//  And fixes what stayed: "Refresh now" sends `.forceCalendarSync` (the action
-//  that actually nudges macOS) instead of a plain re-fetch; the "Calendars to
-//  show" header is always rendered rather than appearing only when the list is
-//  empty; the list is grouped by account with the account address under any
-//  duplicated name, searchable, with All/None and a live selected count; the
-//  empty state carries the action that resolves it; the recovery actions live in
-//  a disclosure that opens itself only when macOS reports an error; and the
-//  Reminders permission moved here, so every permission is in one place.
-//
-//  No "Reset this section" here: the pane stores no settings. What it holds is a
-//  permission macOS owns and your calendar SELECTION, which is data — and the
-//  reset dialog promises, correctly, that your calendars are untouched.
+//  Calendars pane: calendar sources, sync status, calendar selection, the
+//  Reminders permission and troubleshooting. Has no reset action: it stores
+//  no settings, only a macOS permission and the calendar selection.
 //
 
 import Defaults
@@ -52,9 +21,6 @@ struct CalendarsTab: View {
     @EnvironmentObject var appModel: AppModel
 
     var body: some View {
-        // Read the live EventKit authorization here (cheap, synchronous) and
-        // pass it into the pure presentation so the "Grant calendar access"
-        // affordance appears while access is still `.notDetermined`.
         let presentation = PreferencesCalendarPresentation.make(
             from: appModel.state,
             authorizationStatus: PermissionReporter.calendarAuthorizationStatus()
@@ -72,16 +38,9 @@ struct CalendarsTab: View {
 
 // MARK: - Calendar source
 
-/// Where meetings come from — now a set, not a choice.
+/// One toggle per calendar source; sources can be connected together.
 ///
-/// The Phase 2 overhaul deleted the picker because
-/// `CalendarSourcePresentation.all` held exactly one entry, making it a dropdown
-/// that could never change anything. It came back as a picker when the Google
-/// provider was restored, and is now a toggle per source: the two are not
-/// mutually exclusive, and forcing a choice between them meant anyone with both
-/// an Exchange calendar in Calendar.app and a Google work account could only
-/// ever see half their day. Renders only when a second source is genuinely
-/// available, so a build without Google credentials looks exactly as it did.
+/// Renders only when more than one source is available.
 private struct CalendarSourceSection: View {
     @EnvironmentObject var appModel: AppModel
     let presentation: PreferencesCalendarPresentation
@@ -90,10 +49,6 @@ private struct CalendarSourceSection: View {
         let sources = CalendarSourcePresentation.all
         if sources.count > 1 {
             Section {
-                // A toggle per source rather than a picker. Sources are no
-                // longer mutually exclusive: someone with an Exchange calendar
-                // in Calendar.app and a Google work account needs both, and the
-                // picker made that a choice between halves of their day.
                 ForEach(sources) { source in
                     CalendarSourceToggle(
                         source: source,
@@ -113,8 +68,7 @@ private struct CalendarSourceSection: View {
     }
 }
 
-/// One connected source: a toggle, its description, and — when it is failing
-/// while another source still works — the reason and a way to reconnect.
+/// One source: a toggle, its description, and, when it is failing, the reason and a reconnect action.
 private struct CalendarSourceToggle: View {
     @EnvironmentObject var appModel: AppModel
     let source: CalendarSourcePresentation
@@ -132,16 +86,11 @@ private struct CalendarSourceToggle: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Google needs an OAuth client before it can be switched on at all.
-            // The credentials editor lives on the row rather than behind the
-            // toggle, because when no client exists the toggle is exactly what
-            // cannot be used.
+            // Shown regardless of the toggle, which stays disabled until a client exists.
             if source.provider == .googleCalendar {
                 GoogleOAuthClientSection(hasClient: hasGoogleClient)
             }
 
-            // A source that failed while the other kept working would otherwise
-            // just show fewer meetings, with nothing on screen saying why.
             if let failure {
                 HStack(spacing: 6) {
                     Label(failure.errorDescription, systemImage: "exclamationmark.triangle.fill")
@@ -161,9 +110,7 @@ private struct CalendarSourceToggle: View {
         }
     }
 
-    /// The last connected source cannot be switched off — with none connected
-    /// the app fetches nothing and looks broken rather than configured. Google
-    /// additionally cannot be switched ON without a client to sign in with.
+    /// False for the last connected source, and for Google when no OAuth client is configured.
     private var canToggle: Bool {
         guard !isConnected else { return canDisconnect }
         return source.provider != .googleCalendar || hasGoogleClient
@@ -171,9 +118,7 @@ private struct CalendarSourceToggle: View {
 
     private var hasGoogleClient: Bool { GoogleOAuthConfig.effectiveClient != nil }
 
-    /// Connecting runs sign-in for that source and ADDS it. Disconnecting keeps
-    /// its credentials (`signOut: false`) so re-enabling is not a fresh OAuth
-    /// round trip; signing out stays a separate, deliberate action.
+    /// On: signs in and adds the source. Off: disconnects but keeps its credentials.
     private var connectionBinding: Binding<Bool> {
         Binding(
             get: { isConnected },
@@ -189,13 +134,9 @@ private struct CalendarSourceToggle: View {
     }
 }
 
-/// An account header that also names the SOURCE its calendars came from.
+/// An account header with a badge naming the source its calendars came from.
 ///
-/// The account name alone was ambiguous the moment both sources could be
-/// connected: macOS Calendar reports a Google account as a source literally
-/// named "Google", while the direct provider reports the same account by its
-/// address. Two groups, no way to tell which was which — or that they were the
-/// same calendars arriving twice.
+/// The same Google account can appear once via macOS Calendar and once via the direct provider.
 private struct CalendarAccountHeader: View {
     let group: CalendarAccountGroup
 
@@ -218,18 +159,10 @@ private struct CalendarAccountHeader: View {
     }
 }
 
-/// Bring-your-own Google OAuth client.
+/// Editor for a user-supplied Google OAuth client (id and secret).
 ///
-/// A shipped client id is extractable from any native binary — that is inherent
-/// to native OAuth, not a flaw in this app, and PKCE is why it is safe (see
-/// `GoogleOAuthClient`). What an extracted id actually costs is API quota and
-/// the ability to put this app's name on a consent screen. So the point of this
-/// section is not secrecy: it is that anyone who would rather run on THEIR
-/// project's quota, under THEIR consent screen — or whose employer requires it —
-/// can, without building from source.
-///
-/// It is also the only way to use Google at all in a build that ships no
-/// credentials, which is why it renders even when the toggle above is disabled.
+/// Lets users run on their own Google Cloud project's quota and consent screen,
+/// and is the only way to use Google in a build that ships no client.
 private struct GoogleOAuthClientSection: View {
     let hasClient: Bool
 
@@ -260,8 +193,6 @@ private struct GoogleOAuthClientSection: View {
                     GoogleUserOAuthClientStore.clientSecret = newValue
                 }
 
-                // Only the id can be judged locally. Whether the client actually
-                // works is Google's answer to give, at sign-in.
                 if !clientID.isEmpty, !GoogleOAuthClientResolver.isValidClientID(clientID) {
                     Label(
                         "preferences_calendars_google_client_id_invalid".loco(),
@@ -276,8 +207,6 @@ private struct GoogleOAuthClientSection: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if !hasClient {
-                // No shipped client and no supplied one: say so, rather than
-                // leaving a disabled toggle with no explanation.
                 Label(
                     "preferences_calendars_google_no_client".loco(),
                     systemImage: "exclamationmark.triangle.fill"
@@ -290,8 +219,7 @@ private struct GoogleOAuthClientSection: View {
         .padding(.leading, 20)
     }
 
-    /// Turning this OFF forgets the entered credentials rather than leaving a
-    /// secret sitting in the Keychain for a client no longer in use.
+    /// Turning this off also clears the stored client id and secret from the Keychain.
     private var ownClientBinding: Binding<Bool> {
         Binding(
             get: { useOwnClient },
@@ -309,9 +237,7 @@ private struct GoogleOAuthClientSection: View {
 
 // MARK: - Sync status
 
-/// One sentence and one timestamp: "Up to date · refreshed 2 minutes ago".
-/// The headline and the last-successful-refresh time used to be two rows saying
-/// one thing.
+/// Sync status line with the last successful refresh time and the refresh actions.
 private struct CalendarSyncStatusSection: View {
     @EnvironmentObject var appModel: AppModel
     let presentation: PreferencesCalendarPresentation
@@ -341,10 +267,7 @@ private struct CalendarSyncStatusSection: View {
                 Spacer()
 
                 if presentation.canRequestAccess {
-                    // EventKit access is undetermined: request it directly.
-                    // Reuse the provider-change path (switchProvider → signIn →
-                    // requestFullAccessToEvents) so macOS prompts and the app
-                    // registers with TCC.
+                    // Goes through `.changeProvider` so sign-in triggers the EventKit prompt and TCC registration.
                     Button("preferences_calendars_grant_access".loco()) {
                         appModel.send(.changeProvider(presentation.activeProvider, signOut: false))
                     }
@@ -352,11 +275,7 @@ private struct CalendarSyncStatusSection: View {
                     .disabled(appModel.state.providerChangeInProgress)
                 }
 
-                // Renamed from "Force Sync" AND rewired: this used to send
-                // `.refreshCalendars` (a plain re-fetch), while the action that
-                // actually asks macOS to sync — `.forceCalendarSync` — only ever
-                // fired automatically. The most-clicked recovery button now does
-                // what its name says.
+                // `.forceCalendarSync`, not `.refreshCalendars`: asks macOS to sync, not just re-fetch.
                 Button("preferences_calendars_refresh_now".loco()) {
                     appModel.send(.forceCalendarSync)
                 }
@@ -368,8 +287,7 @@ private struct CalendarSyncStatusSection: View {
 
 // MARK: - Calendar selection
 
-/// "Calendars to show": always-visible header, per-account groups, a search
-/// field, All/None, and the selected count that was computed but never shown.
+/// "Calendars to show": per-account groups with search, All/None and a selected count.
 private struct CalendarSelectionSection: View {
     @EnvironmentObject var appModel: AppModel
     let presentation: PreferencesCalendarPresentation
@@ -393,8 +311,6 @@ private struct CalendarSelectionSection: View {
     }
 
     var body: some View {
-        // The header renders unconditionally. It used to appear ONLY when the
-        // list was empty, i.e. it vanished the moment it became useful.
         Section(header: Text("preferences_calendars_list_title".loco())) {
             Text("preferences_calendars_list_help".loco())
                 .font(.caption)
@@ -449,8 +365,7 @@ private struct CalendarSelectionSection: View {
         appModel.state.calendars.first { $0.id == id }
     }
 
-    /// All / None act on what is currently on screen, so they stay predictable
-    /// while a search narrows the list.
+    /// Selects or deselects every calendar currently visible under the search filter.
     private func setSelection(_ selected: Bool) {
         for id in CalendarListPresentation.visibleIDs(in: groups) {
             appModel.toggleCalendarSelection(
@@ -459,8 +374,7 @@ private struct CalendarSelectionSection: View {
     }
 }
 
-/// The empty state now carries the action that resolves it, instead of naming a
-/// problem and leaving the user to find the fix.
+/// Empty-list message with the action that resolves it (grant access, open Privacy settings, or refresh).
 private struct CalendarSelectionEmptyState: View {
     @EnvironmentObject var appModel: AppModel
     let presentation: PreferencesCalendarPresentation
@@ -496,29 +410,14 @@ private struct CalendarSelectionEmptyState: View {
 
 // MARK: - Reminders permission
 
-/// Moved here from the Display tab so permissions are discoverable in one place.
-/// It is not the only route: enabling reminders in the Dropdown pane requests the
-/// same access as a side effect. This is the pane that asks for it *as* a
-/// permission.
+/// Reminders access: an Allow button while undetermined, then a status row or a link to System Settings.
 ///
-/// NOT A TOGGLE, deliberately. It was one, and it could not work: a macOS
-/// permission is request-once and revocable only in System Settings, so the
-/// switch was `.disabled` in both settled states — already granted, or denied
-/// and unaskable. A disabled switch on macOS is only slightly dimmed, so it
-/// read as an ordinary control that had stopped responding. Clicking it did
-/// nothing because `set` is never called on a disabled control; there was no
-/// bug to see and nothing to animate.
-///
-/// A switch also promised something false. It implies two states this app can
-/// move between, when the app can only ever ASK, once, and macOS owns the
-/// answer from then on. So: a button while asking is still possible, and a
-/// plain status row afterwards, with the route to the only place the answer can
-/// actually be changed.
+/// Deliberately not a toggle: macOS permissions are request-once and revocable only
+/// in System Settings, so a switch would be disabled in both settled states.
 private struct RemindersPermissionSection: View {
     @State private var isGranted = false
     @State private var isDenied = false
-    /// True from the click until macOS answers, which is the only moment this
-    /// section has a state of its own.
+    /// True from the click until macOS answers the access request.
     @State private var isRequesting = false
 
     var body: some View {
@@ -537,9 +436,7 @@ private struct RemindersPermissionSection: View {
         .animation(.default, value: isDenied)
         .animation(.default, value: isRequesting)
         .onAppear(perform: refresh)
-        // The answer lives in System Settings and can change while this pane is
-        // open — via the button below, or from anywhere else. Re-reading on
-        // activation keeps this from contradicting the system.
+        // Re-read on activation: the user may have changed it in System Settings.
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification
@@ -554,7 +451,6 @@ private struct RemindersPermissionSection: View {
         if isRequesting {
             ProgressView().controlSize(.small)
         } else if isGranted {
-            // A settled answer is a fact, not a control.
             Label(
                 "preferences_calendars_reminders_allowed".loco(),
                 systemImage: "checkmark.circle.fill"
@@ -562,13 +458,11 @@ private struct RemindersPermissionSection: View {
             .foregroundStyle(.green)
             .labelStyle(.titleAndIcon)
         } else if isDenied {
-            // macOS will not prompt twice, so asking again is impossible and
-            // System Settings is the only way back.
+            // macOS will not prompt again once denied.
             Button("preferences_calendars_reminders_open_settings".loco()) {
                 NSWorkspace.shared.open(Links.remindersPreferences)
             }
         } else {
-            // The one state where this app can actually do something.
             Button("preferences_calendars_reminders_allow".loco(), action: requestAccess)
         }
     }
@@ -582,11 +476,7 @@ private struct RemindersPermissionSection: View {
                 Text("preferences_calendars_reminders_granted".loco())
                     .fixedSize(horizontal: false, vertical: true)
 
-                // Permission and visibility are two different questions, and
-                // this pane only answers the first. Someone who wants reminders
-                // GONE looks here — this is the most prominent place naming
-                // them — and the answer is a toggle on another pane. Saying so
-                // and offering the trip beats leaving them to find it.
+                // Hiding reminders is a Dropdown pane setting, not a permission.
                 Button("preferences_calendars_reminders_where_to_hide".loco()) {
                     PreferencesNavigation.shared.go(to: .dropdown)
                 }
@@ -595,7 +485,6 @@ private struct RemindersPermissionSection: View {
         } else if isDenied {
             Text("preferences_calendars_reminders_denied".loco())
         } else {
-            // Stated BEFORE the request, rather than discovered by making it.
             Text("preferences_calendars_reminders_help".loco())
         }
     }
@@ -624,13 +513,10 @@ private struct RemindersPermissionSection: View {
 
 // MARK: - Troubleshooting
 
-/// "Calendar isn't updating?" — the one merged explanation, the staleness
-/// signal, the raw error, and the two recovery shortcuts.
+/// "Calendar isn't updating?" disclosure: explanation, last synced change, raw error and recovery shortcuts.
 ///
-/// `canReauthenticateAccount` is true for every EventKit install, so the old
-/// "Re-authenticate Account…" button sat on screen permanently, including while
-/// the status read "Up to date". The recovery actions are now shown only on an
-/// error state, and the disclosure opens itself exactly then.
+/// Recovery actions show, and the disclosure opens itself, only in an error state;
+/// `canReauthenticateAccount` alone is true for every EventKit install.
 private struct CalendarTroubleshootingSection: View {
     @EnvironmentObject var appModel: AppModel
     let presentation: PreferencesCalendarPresentation
@@ -655,9 +541,7 @@ private struct CalendarTroubleshootingSection: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    // The newest change the app can see. Surfaced, never
-                    // auto-judged: if it reads hours old, macOS has stopped
-                    // syncing. Hidden when no event carried a modification date.
+                    // Shown, not judged: an hours-old value means macOS stopped syncing.
                     if let lastSyncedChange = presentation.lastSyncedChange {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(
@@ -689,9 +573,7 @@ private struct CalendarTroubleshootingSection: View {
                             Button("preferences_calendars_open_privacy".loco()) {
                                 NSWorkspace.shared.open(Links.calendarPreferences)
                             }
-                            // Expired CalDAV/Google/Exchange credentials make
-                            // macOS Calendar serve stale data silently; signing
-                            // back in there is the real fix.
+                            // Expired account credentials make macOS Calendar serve stale data silently.
                             if presentation.canReauthenticateAccount {
                                 Button("preferences_calendars_open_internet_accounts".loco()) {
                                     if !NSWorkspace.shared.open(Links.internetAccountsPreferences) {
@@ -729,10 +611,7 @@ private func statusColor(_ tone: PreferencesStatusTone) -> Color {
     }
 }
 
-/// The plain account-grouped list used by the ONBOARDING calendar screen.
-/// Preferences uses `CalendarSelectionSection` above, which adds search,
-/// All/None, the selected count and duplicate-name disambiguation; first run
-/// deliberately stays a plain list.
+/// Plain source-grouped calendar list used by the onboarding calendar screen.
 struct CalendarSectionsView: View {
     let calendars: [MBCalendar]
 
@@ -757,9 +636,7 @@ struct CalendarSectionsView: View {
 
 struct CalendarRow: View {
     let calendar: MBCalendar
-    /// The account address, shown only when this calendar's name is shared with
-    /// another one in the list. The shipping pane listed "Family" twice with no
-    /// way to tell the two apart.
+    /// Account address shown under the title; `nil` unless another calendar shares this name.
     var subtitle: String?
     @EnvironmentObject var appModel: AppModel
 

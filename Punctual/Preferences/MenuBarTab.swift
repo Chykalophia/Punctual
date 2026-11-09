@@ -1,59 +1,15 @@
 //
 //  MenuBarTab.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The Menu Bar pane (Preferences UX overhaul, Phase 2): what you see in the
-//  macOS menu bar all day, and nothing else. No filters live here — which
-//  meetings exist is decided once, on Filters.
+//  The Menu Bar pane: preset cards, the block list with per-block options, the
+//  Join chip, quiet-until-close, meeting progress and the one/two-line layout.
 //
-//  What lives here, in order:
-//    1. Preset cards — Classic / Minimal / Agenda / Info / Custom. "Custom" is
-//       the label shown when no preset matches, never a mode you enter, so it
-//       cannot be lost when the window closes.
-//    2. The block list — Icon · Meeting title · Countdown · Clock · Date ·
-//       Progress bar · Week number · World clock. Every block the menu bar can
-//       hold is listed: showing ones in their left-to-right order with arrows,
-//       hidden ones dimmed below. The switch is the only on/off.
-//    3. Per-block gear popovers for the options each showing block has.
-//       They are plain rows inside the gear so nothing is ever unreachable.
-//    4. Keep the menu bar quiet until a meeting is close, with minute chips.
-//    5. One line / Two lines.
-//    6. Reset this section.
-//
-//  Two things are deliberately gone:
-//
-//  • "Customize menu bar layout". It was never a stored boolean: turning it off
-//    ran `menuBarTokens = []`, destroying the arrangement with no undo, and
-//    turning it back on reseeded from the legacy settings rather than from what
-//    the user had. The builder is always on; blocks carry their own on/off, and
-//    switching one off keeps it on screen, one click from returning.
-//  • "Time next to the title" (`eventTimeFormat`). It was read only by the
-//    classic status-bar path while sitting directly above a composer that
-//    ignored it. Showing the time is now the presence of the Countdown block,
-//    and show-under-title is the One line / Two lines control below.
-//    `MenuBarTimeFormatDefaultsMigration` (AppSettings.swift) carries both
-//    halves of anybody's stored answer across, once.
-//
-//  Drag-and-drop reordering is still Phase 5: this pane ships explicit arrows
-//  inside `PreferencesGroupedForm`, where `.onMove` is inert because the
-//  container is a `Form` and not a `List`. Per-block gear popovers are live.
-//
-//  Descends from `StatusBarSection` and `MenuBarComposerSection`
-//  (DisplayTab.swift, moved there from AppearanceTab.swift), originally:
+//  Derived from MeetingBar's status bar preferences, originally:
 //    Created by Andrii Leitsius on 13.01.2021.
 //    Copyright © 2021 Andrii Leitsius. All rights reserved.
-//  Licensed under the Apache License, Version 2.0. Modified for MeetingBarNG by
-//  Peter Krzyzek / Chykalophia, 2026: rebuilt as the Menu Bar pane — preset
-//  cards, one block list holding the complete inventory, the destructive
-//  composer toggle deleted, `eventTimeFormat` retired into the Countdown block
-//  plus One line / Two lines, and per-pane reset.
-//
-//  Stored key NAMES are unchanged by the re-home, so nobody's configuration
-//  resets: `menuBarTokens`, `eventTitleIconFormat`, `eventTitleFormat`,
-//  `statusbarEventTitleLength`, `menuBarCountdownStyle`, `menuBarDateStyle`,
-//  `menuBarProgressStyle`, `menuBarWorldClockTimeZone`,
-//  `menuBarWorldClockLabel`, `showEventMaxTimeUntilEventEnabled`,
-//  `showEventMaxTimeUntilEventThreshold`.
+//  Licensed under the Apache License, Version 2.0.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
@@ -63,7 +19,7 @@ struct MenuBarTab: View {
     @Default(.menuBarTokens) private var menuBarTokens
     @Default(.menuBarTwoLineLayout) private var menuBarTwoLineLayout
 
-    // Block options — now behind each block's gear popover.
+    // Block options, shown in each block's gear popover.
     @Default(.eventTitleIconFormat) private var eventTitleIconFormat
     @Default(.eventTitleFormat) private var eventTitleFormat
     @Default(.statusbarEventTitleLength) private var statusbarEventTitleLength
@@ -71,22 +27,20 @@ struct MenuBarTab: View {
     @Default(.menuBarCountdownLeadMinutes) private var menuBarCountdownLeadMinutes
     @Default(.menuBarDateStyle) private var menuBarDateStyle
     @Default(.menuBarProgressStyle) private var menuBarProgressStyle
-    /// The MEETING indicator, not the day/year block above it — see
-    /// `MeetingProgressStyle` for why the two stay separate.
+    /// The meeting progress indicator; distinct from the day/year `.progress` block.
     @Default(.meetingProgressStyle) private var meetingProgressStyle
     @Default(.menuBarWorldClockTimeZone) private var menuBarWorldClockTimeZone
     @Default(.menuBarWorldClockLabel) private var menuBarWorldClockLabel
 
-    // How quiet the strip stays until a meeting is close.
+    // Quiet-until-close and imminent highlight.
     @Default(.showEventMaxTimeUntilEventEnabled) private var showEventMaxTimeUntilEventEnabled
     @Default(.showEventMaxTimeUntilEventThreshold) private var showEventMaxTimeUntilEventThreshold
     @Default(.menuBarHighlightImminentEvent) private var menuBarHighlightImminentEvent
 
-    // The Join chip.
+    // Join chip.
     @Default(.menuBarShowJoinAction) private var menuBarShowJoinAction
     @Default(.menuBarJoinActionLeadMinutes) private var menuBarJoinActionLeadMinutes
 
-    // Which block's gear popover is open.
     @State private var gearOpenBlock: MenuBarTokenKind?
 
     /// Every block, showing ones first in their stored order.
@@ -108,20 +62,15 @@ struct MenuBarTab: View {
             linesSection
             PreferencesResetSection(tab: .menuBar)
         }
-        // Idempotent, and the same call the app makes at launch. It matters here
-        // because "Reset this section" clears the seeding flag with the blocks it
-        // seeded: re-seeding on sight is what stops a reset leaving an empty
-        // block list — and it keeps the pane and the menu bar telling the same
-        // story, since an unseeded install is still drawn by the classic path.
+        // Idempotent launch migration, re-run here because a section reset clears
+        // the seeding flag; without it the block list would come back empty.
         .onAppear(perform: MenuBarTimeFormatDefaultsMigration.migrateDefaultsIfNeeded)
     }
 
     // MARK: - Presets
 
-    /// One-click starting points. The selected card is DERIVED from the stored
-    /// blocks (`MenuBarPreset.detect`), so "Custom" is a label rather than a mode
-    /// you enter — the old `@State forceCustom` meant it was silently lost every
-    /// time the window closed.
+    /// Preset cards. The selected card is derived from the stored blocks via
+    /// `MenuBarPreset.detect`, so "Custom" means "matches no preset".
     private var presetSection: some View {
         Section(header: Text("preferences_menubar_preset_title".loco())) {
             HStack(alignment: .top, spacing: 10) {
@@ -144,9 +93,7 @@ struct MenuBarTab: View {
         let isSelected = selectedPreset == preset
 
         if preset == .custom {
-            // Not a button: there is nothing to apply. It lights up when the
-            // arrangement matches no named preset, which is the only honest
-            // meaning "custom" can have.
+            // Not a button: "Custom" has nothing to apply.
             presetCardBody(preset, isSelected: isSelected)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
         } else {
@@ -202,9 +149,7 @@ struct MenuBarTab: View {
 
     // MARK: - The blocks
 
-    /// The complete inventory, always. A block that is off stays listed and
-    /// dimmed, so "off" can never read as "gone" — and there is no "Add block"
-    /// menu to go looking for, because nothing was ever removed.
+    /// Every block, always listed; blocks that are off are dimmed below the showing ones.
     private var blocksSection: some View {
         Section(header: Text("preferences_menubar_blocks_title".loco())) {
             helpText("preferences_menubar_blocks_help")
@@ -264,8 +209,7 @@ struct MenuBarTab: View {
         }
     }
 
-    /// Blocks that have configurable options get a gear; others (clock, week
-    /// number) are just on/off and show no gear.
+    /// Whether the block has options, and so a gear popover.
     private func hasGear(_ kind: MenuBarTokenKind) -> Bool {
         switch kind {
         case .icon, .title, .countdown, .date, .progress, .worldClock:
@@ -282,8 +226,7 @@ struct MenuBarTab: View {
         )
     }
 
-    /// The popover content for a block's gear — only the options that belong
-    /// to that block, so the pane stays calm by default and deep on demand.
+    /// The options for one block, shown in its gear popover.
     @ViewBuilder
     private func blockGearContent(_ kind: MenuBarTokenKind) -> some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -339,9 +282,7 @@ struct MenuBarTab: View {
                     .font(.subheadline.weight(.medium))
                 PresetNumberPicker(
                     presets: [0, 15, 30, 60, 120],
-                    // 0 is not "0 minutes before", it is "no limit" — the block's
-                    // original behaviour, and the one preset that has to be
-                    // spelled out rather than shown as a number.
+                    // 0 means "no limit", so it is labelled rather than shown as a number.
                     presetLabel: { $0 == 0 ? "preferences_menubar_countdown_lead_always".loco() : "\($0)" },
                     customLabel: "preferences_preset_custom".loco(),
                     value: $menuBarCountdownLeadMinutes,
@@ -387,9 +328,7 @@ struct MenuBarTab: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Turning a block off removes it from the showing order and nothing else:
-    /// its options live in their own keys and survive untouched, which is what
-    /// makes the switch safe to flip.
+    /// Adds or removes the block from the showing order; its options are kept.
     private func blockSwitch(_ kind: MenuBarTokenKind) -> Binding<Bool> {
         Binding(
             get: { showingKinds.contains(kind) },
@@ -447,18 +386,10 @@ struct MenuBarTab: View {
 
     // MARK: - Join chip
 
-    /// The one thing in the menu bar you can press.
+    /// The menu bar Join chip and its lead time.
     ///
-    /// Not a block, and its own section rather than a row in the block list, for
-    /// a reason worth stating: every block is a piece of information you arrange,
-    /// and this is a control. It has no place in the order — a button goes at the
-    /// end — and it is the only part of the item where a click does something
-    /// other than open the dropdown, which is worth its own heading.
-    ///
-    /// The lead time is a key of its own rather than the shared
-    /// `eventActionHighlightMinutes`: that one decides how things LOOK once a
-    /// meeting is near, and folding the chip into it would mean you could not
-    /// keep the bolding without also taking the button.
+    /// Not a block: it is a control, always placed last. Its lead time is its own key,
+    /// independent of `eventActionHighlightMinutes`.
     private var joinActionSection: some View {
         Section(header: Text("preferences_menubar_join_action_title".loco())) {
             Toggle(
@@ -469,9 +400,7 @@ struct MenuBarTab: View {
 
             PresetNumberPicker(
                 presets: [0, 2, 5, 15],
-                // Same presets and same spelled-out zero as the dropdown's
-                // highlight lead time, which is the control this most resembles.
-                // 0 is not "no lead time" to a reader, it is "only once it runs".
+                // 0 means "only once it starts", so it is labelled rather than shown as a number.
                 presetLabel: { $0 == 0 ? "preferences_menubar_join_action_now".loco() : "\($0)" },
                 customLabel: "preferences_preset_custom".loco(),
                 value: $menuBarJoinActionLeadMinutes,
@@ -507,10 +436,7 @@ struct MenuBarTab: View {
 
             Divider()
 
-            // Deliberately no threshold control of its own: it shares
-            // `eventActionHighlightMinutes` with the dropdown's action buttons,
-            // set on the Dropdown page. Two knobs for one notion of "now-ish"
-            // would only let them disagree.
+            // No threshold here: shares `eventActionHighlightMinutes`, set on the Dropdown pane.
             Toggle(
                 "preferences_menubar_highlight_imminent_toggle".loco(),
                 isOn: $menuBarHighlightImminentEvent
@@ -521,12 +447,9 @@ struct MenuBarTab: View {
 
     // MARK: - Meeting progress
 
-    /// How the strip shows the next meeting approaching.
+    /// How the menu bar item shows meeting progress.
     ///
-    /// Its own section rather than an option on the `.progress` block: that block
-    /// draws a day/year bar and is event-independent, while this decorates the
-    /// whole item and only exists when there is a meeting. Putting them together
-    /// would suggest picking one excludes the other, which is false.
+    /// Separate from the `.progress` block, which draws an event-independent day/year bar.
     private var meetingProgressSection: some View {
         Section(header: Text("preferences_menubar_meeting_progress_title".loco())) {
             Picker(
@@ -548,9 +471,7 @@ struct MenuBarTab: View {
         }
     }
 
-    /// Bridges the raw-string Default to the hostless enum, like the dropdown's
-    /// density picker. An unrecognised stored value reads back as `.none` rather
-    /// than leaving the picker with no selection.
+    /// Bridges the raw-string Default to `MeetingProgressStyle`; unknown values read as `.none`.
     private var meetingProgressStyleBinding: Binding<MeetingProgressStyle> {
         Binding(
             get: { MeetingProgressStyle(rawValue: meetingProgressStyle) ?? .none },
@@ -567,10 +488,9 @@ struct MenuBarTab: View {
 
     // MARK: - One line / Two lines
 
-    /// The surviving half of the retired `eventTimeFormat` picker: on two lines
-    /// the meeting title is the headline and every other block sits under it.
-    /// Only meaningful once there is a title to stack under, so the row is
-    /// disabled while the Meeting title block is off.
+    /// One line, or two lines with the title above the other blocks.
+    ///
+    /// Disabled while the Meeting title block is off.
     private var linesSection: some View {
         Section {
             Picker("preferences_menubar_lines_title".loco(), selection: $menuBarTwoLineLayout) {

@@ -1,8 +1,8 @@
 //
 //  DropdownPanelPlacementTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the SwiftUI dropdown panel's placement math (MeetingBarNG).
+//  Tests for the dropdown panel's placement math.
 //
 
 import CoreGraphics
@@ -47,8 +47,7 @@ final class DropdownPanelPlacementTests: XCTestCase {
     }
 
     func testPanelClampsToTheRightScreenEdge() {
-        // Status item hard against the right edge (the usual case for a
-        // menu-bar app): centering would push the panel offscreen.
+        // Status item hard against the right edge: centering would push the panel offscreen.
         let frame = DropdownPanelPlacement.frame(
             for: statusItem(midX: 1430),
             panelSize: panelSize,

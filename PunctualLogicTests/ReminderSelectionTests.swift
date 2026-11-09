@@ -1,8 +1,8 @@
 //
 //  ReminderSelectionTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for reminder due-today selection + snooze (MeetingBarNG).
+//  Tests for due-today reminder selection and snooze.
 //
 
 import XCTest

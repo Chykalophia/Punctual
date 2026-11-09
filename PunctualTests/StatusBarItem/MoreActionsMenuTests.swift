@@ -1,22 +1,11 @@
 //
 //  MoreActionsMenuTests.swift
-//  MeetingBarNG
+//  PunctualTests
 //
-//  Characterization tests for the dropdown panel's "More actions" flyout.
+//  Pins the item sequence, separators included, of the dropdown's "More actions" flyout
+//  built by `DropdownPanelView.makeMoreActionsMenu()`.
 //
-//  The panel is a custom NSWindow rather than an NSMenu, so its More-actions row
-//  is a SwiftUI view and the flyout is assembled by hand in
-//  `DropdownPanelView.makeMoreActionsMenu()`. Which entries appear is decided by
-//  plain conditionals — next meeting present, dismissals present, menu bar
-//  currently showing a title — and nothing else in either suite touches this
-//  file. `MeetingBarLogicTests` cannot: it is a hostless SPM module with no view
-//  of the app target.
-//
-//  These pin the emitted item sequence, separators included, so a later edit to
-//  those conditionals cannot silently drop, duplicate or reorder an action, and
-//  cannot leave a stray separator behind when the group above it is empty.
-//
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -49,8 +38,7 @@ final class MoreActionsMenuTests: BaseTestCase {
         ).makeMoreActionsMenu()
     }
 
-    /// Separators are rendered as a literal so their PLACEMENT is pinned too — a
-    /// leading separator with nothing above it is the specific bug this catches.
+    /// Separators render as "---" so their placement is pinned too.
     private func titles(of menu: NSMenu) -> [String] {
         menu.items.map { $0.isSeparatorItem ? "---" : $0.title }
     }
@@ -69,10 +57,6 @@ final class MoreActionsMenuTests: BaseTestCase {
     }
 
     /// Everything that is always present, in order.
-    ///
-    /// `open_calendar` sits with camera check and world clock because all three
-    /// come from `MenuBuilder.buildQuickActionsMenu` — the panel's flyout mirrors
-    /// that set, so a reader comparing the two menus finds the same grouping.
     private var alwaysOn: [String] {
         [
             "status_bar_section_join_from_clipboard".loco(),
@@ -88,7 +72,6 @@ final class MoreActionsMenuTests: BaseTestCase {
     // MARK: - The four combinations of the leading, conditional group
 
     func testNoNextMeetingAndNoDismissalsOmitsTheLeadingGroupEntirely() {
-        // Nothing to dismiss and nothing dismissed: no items AND no separator.
         XCTAssertEqual(titles(of: makeMenu()), alwaysOn)
     }
 
@@ -170,8 +153,6 @@ final class MoreActionsMenuTests: BaseTestCase {
 
     // MARK: - Enablement
 
-    /// `autoenablesItems` is off, so anything that forgot to set `isEnabled`
-    /// would render permanently greyed out.
     func testEveryActionableItemIsEnabledAndCarriesAnAction() {
         let menu = makeMenu(
             nextEvent: futureEvent(),
@@ -186,8 +167,6 @@ final class MoreActionsMenuTests: BaseTestCase {
         }
     }
 
-    /// Every non-separator row must be a real, distinct action — a duplicated
-    /// title means a conditional emitted the same entry twice.
     func testNoDuplicateRows() {
         let titles = titles(of: makeMenu(
             nextEvent: futureEvent(),
@@ -203,7 +182,6 @@ final class MoreActionsMenuTests: BaseTestCase {
         var titleFormat: EventTitleFormat = .dot
     }
 
-    /// A separator must never lead, trail, or sit next to another one.
     func testSeparatorsNeverStrandThemselves() {
         let scenarios = [
             Scenario(),

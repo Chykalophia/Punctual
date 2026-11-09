@@ -18,8 +18,7 @@ enum StatusBarProviderStatus: Equatable {
 enum StatusBarEmptyStateReason: Equatable {
     case authRequired
     case permissionRequired
-    /// Provider is connected/authorized but exposes zero available calendars
-    /// (no calendar accounts / data source), so there is nothing to select.
+    /// The provider is connected but exposes no calendars to select.
     case noCalendarsAvailable
     case noCalendarsSelected
     case refreshFailed
@@ -33,11 +32,10 @@ enum StatusBarProviderWarning: Equatable {
     case refreshFailed
 }
 
-/// Value-typed snapshot of everything the status bar menu needs to render
-/// without reading `Defaults` or reaching through singletons.
+/// Value-typed snapshot of everything the status bar dropdown needs to render,
+/// so views never read `Defaults` or singletons directly.
 ///
-/// Built by `StatusBarMenuState.make(...)` and consumed by `MenuBuilder`.
-/// Must not import AppKit or UserNotifications.
+/// Built by `StatusBarMenuState.make(...)`. Must not import AppKit or UserNotifications.
 struct StatusBarMenuState: Equatable {
     // MARK: - Events (split by day)
 
@@ -45,11 +43,10 @@ struct StatusBarMenuState: Equatable {
     var tomorrowEvents: [MBEvent] = []
     var nextEvent: MBEvent?
 
-    // MARK: - Reminders (Dot parity)
+    // MARK: - Reminders
 
-    /// Incomplete Apple Reminders due today (and optionally overdue), already
-    /// filtered/sorted by the hostless `ReminderSelection` policy. Empty unless
-    /// the feature is enabled in settings.
+    /// Incomplete reminders due today (and optionally overdue), filtered and
+    /// sorted. Empty unless reminders are enabled in settings.
     var todayReminders: [MBReminder] = []
 
     // MARK: - Provider
@@ -61,29 +58,21 @@ struct StatusBarMenuState: Equatable {
     var emptyStateReason: StatusBarEmptyStateReason?
     var selectedCalendarIDs: [String] = []
 
-    /// Number of calendars the active provider currently exposes. Zero means
-    /// there are no calendar accounts / data sources to select from, which is
-    /// distinct from "calendars exist but none are selected".
+    /// Number of calendars the active provider currently exposes.
     var availableCalendarCount: Int = 0
 
     // MARK: - Settings snapshot
 
-    /// Full settings snapshot. `MenuBuilder` reads display/filter settings from
-    /// here instead of touching `Defaults` directly.
+    /// Full settings snapshot.
     var settings: AppSettings = .empty
 
     // MARK: - Pre-computed display flags
 
-    /// Whether at least one selected calendar ID resolves to a currently
-    /// available calendar (the intersection of the user's selection and the
-    /// provider's available calendars is non-empty). This is `false` when there
-    /// are zero available calendars, or when every selected ID is stale — which
-    /// drives the honest "no usable calendar" empty state instead of a bare
-    /// "no meetings today".
+    /// Whether at least one selected calendar ID matches a currently available
+    /// calendar. `false` when none are available or every selected ID is stale.
     var hasSelectedCalendars: Bool = false
 
-    /// Whether more than one calendar is selected (controls calendar-name display
-    /// in event details).
+    /// Whether more than one calendar is selected.
     var hasMultipleSelectedCalendars: Bool = false
 
     /// Whether the day-timeline bar should appear above the event list.
@@ -91,31 +80,28 @@ struct StatusBarMenuState: Equatable {
 
     // MARK: - Day-summary greeting header
 
-    /// Structured summary for the greeting header (time-of-day, meeting count,
-    /// free minutes). `nil` when no snapshot is available.
+    /// Summary for the greeting header; `nil` when unavailable.
     var daySummary: DaySummary?
 
     /// Resolved friendly first name for the greeting, or `nil` for a name-less one.
     var greetingName: String?
 
-    /// Whether the greeting header should render (user preference).
+    /// The user's "show greeting header" preference.
     var showGreetingHeader: Bool = false
 
-    /// The greeting header renders only when enabled, calendars are selected, and
-    /// a summary exists — so a disabled preference or empty state shows nothing.
+    /// Whether the greeting header renders: enabled, a usable calendar selected,
+    /// and a summary present.
     var shouldShowGreetingHeader: Bool {
         showGreetingHeader && hasSelectedCalendars && daySummary != nil
     }
 
-    /// The timeline represents the current day, so it is intentionally hidden
-    /// when there are no events today even if the preference is enabled.
+    /// Whether the timeline renders: enabled and at least one event today.
     var shouldShowTimeline: Bool {
         showTimeline && !todayEvents.isEmpty
     }
 
-    /// Time-format display (military vs am/pm) used when formatting event times.
-    /// Zero-state default only; production overwrites it from `Defaults[.timeFormat]`
-    /// (whose install default is now 12-hour).
+    /// Time format for event times. The default here is a placeholder; `make`
+    /// fills it from `Defaults[.timeFormat]`.
     var timeFormat: TimeFormat = .military
 
     // MARK: - Changelog / install state
@@ -123,14 +109,13 @@ struct StatusBarMenuState: Equatable {
     /// Major-version prefix of the running app (e.g. "5.0").
     var appMajorVersion: String = ""
 
-    /// Major-version prefix of the last release the user has acknowledged in
-    /// the changelog. When this differs from `appMajorVersion`, the menu shows
-    /// an unread-changelog hint.
+    /// Major-version prefix of the last release acknowledged in the changelog.
+    /// Differs from `appMajorVersion` when the changelog is unread.
     var lastRevisedMajorVersion: String = ""
 
     // MARK: - Convenience accessors
 
-    /// Settings groups exposed for shorter call sites in MenuBuilder.
+    /// Shorthand accessors for settings groups.
     var events: EventDisplaySettings { settings.events }
     var statusBar: StatusBarSettings { settings.statusBar }
     var menu: MenuSettings { settings.menu }
@@ -153,10 +138,7 @@ extension StatusBarMenuState {
         )
     }
 
-    /// Builds a `StatusBarMenuState` snapshot from the current event list
-    /// plus the current settings/Defaults boundary. The factory is the only
-    /// place inside `StatusBarMenuState` that reads `Defaults` — the value
-    /// type itself stays clean.
+    /// Builds a snapshot from `events` and the current settings. Reads `Defaults`.
     static func make(from events: [MBEvent]) -> StatusBarMenuState {
         let settings = AppSettings.current
         var appState = AppState()
@@ -190,9 +172,6 @@ extension StatusBarMenuState {
         }
 
         let selectedCount = selectedCalendarIDs.count
-        // A selection is only "usable" when it points at a calendar the provider
-        // currently exposes. Zero available calendars, or a selection made up
-        // entirely of stale IDs, both collapse to "no usable calendar".
         let availableCalendarIDs = appState.calendars.map(\.id)
         let availableCalendarCount = availableCalendarIDs.count
         let availableIDSet = Set(availableCalendarIDs)
@@ -203,8 +182,6 @@ extension StatusBarMenuState {
             health: providerHealth
         )
 
-        // Reminders are gated on the opt-in setting, then run through the same
-        // hostless due-today policy the pure logic + tests use.
         let todayReminders = settings.menu.showRemindersInMenu
             ? appState.reminders.dueToday(
                 now: now,
@@ -252,9 +229,8 @@ extension StatusBarMenuState {
         )
     }
 
-    /// The name for the greeting: the user's override, else the first component
-    /// of `NSFullUserName()`, else `nil` (renders a name-less greeting). Empty or
-    /// whitespace-only values collapse to `nil`.
+    /// The first word of the user's greeting-name override, else of
+    /// `NSFullUserName()`; `nil` when both are blank.
     private static func resolveGreetingName() -> String? {
         let override = Defaults[.greetingName].trimmingCharacters(in: .whitespacesAndNewlines)
         let source = override.isEmpty ? NSFullUserName() : override
@@ -262,8 +238,7 @@ extension StatusBarMenuState {
         return firstName.isEmpty ? nil : firstName
     }
 
-    /// Extracts the "major.minor" of a semantic version robustly (the old
-    /// `dropLast(2)` assumed a single-digit patch and broke on e.g. "0.1.10").
+    /// The "major.minor" prefix of a dotted version string.
     static func majorMinorVersion(_ version: String) -> String {
         version.split(separator: ".").prefix(2).joined(separator: ".")
     }
@@ -293,12 +268,8 @@ extension StatusBarMenuState {
         return .initializing
     }
 
-    /// Deterministic mapping from provider status + calendar availability to the
-    /// reason the meeting-control section is empty. Provider-level problems win
-    /// first; then, for an otherwise-healthy provider, zero available calendars
-    /// (`.noCalendarsAvailable`) is distinguished from a calendar list with no
-    /// usable selection (`.noCalendarsSelected`), and only a usable selection
-    /// with no next event yields `.noUpcomingMeetings`.
+    /// Why the meeting-control section is empty, or `nil` if it is not.
+    /// Provider problems take precedence over calendar availability and selection.
     private static func emptyStateReason(
         providerStatus: StatusBarProviderStatus,
         availableCalendarCount: Int,

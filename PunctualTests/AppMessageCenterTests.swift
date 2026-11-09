@@ -1,6 +1,6 @@
 //
 //  AppMessageCenterTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import XCTest
@@ -28,8 +28,7 @@ final class AppMessageMappingTests: XCTestCase {
 
     func testGoogleConnectedIsSilentDuringSetupButShownAfter() {
         let connected = AppMessage.googleAccountConnected(email: "a@example.com")
-        // During first-run setup the browser page and the setup flow already
-        // confirm it; on a fresh install it would interrupt as a modal dialog.
+        // During first-run setup the browser page and setup flow already confirm it.
         XCTAssertFalse(connected.shouldPresent(onboardingCompleted: false))
         // Connecting later from Preferences: this is the only confirmation.
         XCTAssertTrue(connected.shouldPresent(onboardingCompleted: true))

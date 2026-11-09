@@ -1,12 +1,9 @@
 //
 //  DaySummaryGreeting.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless policy for the dropdown's day-summary greeting header (Dot parity).
-//  Pure value types + math only — no AppKit/Defaults/EventKit. The host layer
-//  (StatusBarMenuState) resolves the user's name and DropdownPanelView does the
-//  localized string interpolation, mirroring how StatusBarTitlePolicy keeps
-//  `.loco()` out of the logic module.
+//  Hostless policy for the dropdown's day-summary greeting header: time-of-day
+//  bucket, timed-event count, and free minutes left today. No localization here.
 //
 
 import Foundation
@@ -18,24 +15,21 @@ enum GreetingTimeOfDay: Equatable {
     case evening
 }
 
-/// A single event projected to just what the day summary needs. `MBEvent` is
-/// host-layer, so the pure policy takes this flat shadow (same convention as
-/// EventSelectionEvent / StatusBarEventPresentationInput).
+/// An event reduced to the fields the day summary needs.
 struct DaySummaryInterval: Equatable {
     let start: Date
     let end: Date
     let isAllDay: Bool
 }
 
-/// Input to `DaySummaryPolicy.summary`. `events` are the day's events (the
-/// caller supplies today's list); all-day entries are ignored by the policy.
+/// Input to `DaySummaryPolicy.summary`. `events` is today's list; all-day
+/// entries are ignored.
 struct DaySummaryInput: Equatable {
     let now: Date
     let events: [DaySummaryInterval]
 }
 
-/// Structured result the header renders. Kept free of any formatted/localized
-/// strings so it stays deterministic and unit-testable.
+/// Unformatted result rendered by the day-summary header.
 struct DaySummary: Equatable {
     let timeOfDay: GreetingTimeOfDay
     /// Count of the day's timed (non-all-day) events.
@@ -63,10 +57,8 @@ enum DaySummaryPolicy {
 
     /// Free (unbooked) minutes between `now` and the end of the calendar day.
     ///
-    /// All-day events are excluded (they'd swallow the whole window); each timed
-    /// event is clamped to `[now, endOfDay]` so meetings that started earlier or
-    /// run past midnight are counted correctly; overlapping/adjacent meetings are
-    /// merged so shared minutes aren't double-counted.
+    /// All-day events are excluded; timed events are clamped to `[now, endOfDay]`
+    /// and overlaps merged, so shared minutes are not double-counted.
     static func freeMinutes(now: Date, events: [DaySummaryInterval], calendar: Calendar) -> Int {
         let startOfDay = calendar.startOfDay(for: now)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay), now < endOfDay else {
@@ -83,8 +75,7 @@ enum DaySummaryPolicy {
     }
 
     /// Total seconds inside `[windowStart, windowEnd]` covered by the given timed
-    /// events, with overlaps merged. The reusable primitive: total meeting time
-    /// is `mergedCoveredSeconds`, free time is `window - mergedCoveredSeconds`.
+    /// events, with overlaps merged.
     private static func mergedCoveredSeconds(
         events: [DaySummaryInterval],
         windowStart: Date,

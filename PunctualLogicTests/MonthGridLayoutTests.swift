@@ -1,10 +1,8 @@
 //
 //  MonthGridLayoutTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Grid math for the month calendar window: whole weeks respecting
-//  firstWeekday, leading/trailing padding from adjacent months, isToday flags,
-//  and 5-vs-6 week counts across ordinary, leap, and short months.
+//  Tests for the month calendar grid math.
 //
 
 import XCTest
@@ -63,7 +61,6 @@ final class MonthGridLayoutTests: XCTestCase {
         XCTAssertEqual(last.date, date(2026, 8, 1, calendar: calendar))
         XCTAssertFalse(last.isInMonth)
 
-        // Exactly 31 in-month days.
         XCTAssertEqual(weeks.flatMap { $0 }.filter { $0.isInMonth }.count, 31)
     }
 
@@ -106,7 +103,6 @@ final class MonthGridLayoutTests: XCTestCase {
         let weeks = MonthGridLayout.weeks(forMonthContaining: february, calendar: calendar, now: february)
 
         XCTAssertEqual(weeks.flatMap { $0 }.filter { $0.isInMonth }.count, 29)
-        // Feb 29, 2024 must be present and in-month.
         let leapDay = weeks.flatMap { $0 }.first { $0.date == date(2024, 2, 29, calendar: calendar) }
         XCTAssertNotNil(leapDay)
         XCTAssertEqual(leapDay?.isInMonth, true)
@@ -121,7 +117,7 @@ final class MonthGridLayoutTests: XCTestCase {
 
         XCTAssertEqual(weeks.flatMap { $0 }.filter { $0.isInMonth }.count, 28)
         // No in-month day should carry a day-of-month of 29 in a non-leap Feb.
-        // (A March-1 cell may still appear as trailing padding — that is correct.)
+        // A March 1 cell may still appear as trailing padding; that is correct.
         XCTAssertFalse(
             weeks.flatMap { $0 }.contains {
                 $0.isInMonth && calendar.component(.day, from: $0.date) == 29
@@ -146,7 +142,7 @@ final class MonthGridLayoutTests: XCTestCase {
 
     func testIsTodayFlagIsSetOnMatchingDayOnly() {
         let calendar = makeCalendar(firstWeekday: 1)
-        // now is mid-afternoon on July 17 — isToday must match the whole day.
+        // now is mid-afternoon on July 17; isToday must match the whole day.
         let now = calendar.date(from: DateComponents(
             year: 2026, month: 7, day: 17, hour: 15, minute: 30
         ))!
@@ -162,7 +158,7 @@ final class MonthGridLayoutTests: XCTestCase {
 
     func testNoTodayFlagWhenNowIsOutsideVisibleRange() {
         let calendar = makeCalendar(firstWeekday: 1)
-        // Viewing July 2026 but "now" is in December — no cell should be today.
+        // Viewing July 2026 while "now" is in December.
         let now = date(2026, 12, 25, calendar: calendar)
         let weeks = MonthGridLayout.weeks(
             forMonthContaining: date(2026, 7, 1, calendar: calendar),

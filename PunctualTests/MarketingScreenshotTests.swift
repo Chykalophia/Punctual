@@ -2,11 +2,8 @@
 //  MarketingScreenshotTests.swift
 //  Punctual
 //
-//  Renders the REAL DropdownPanelView against PreviewFixtures (sample meetings,
-//  never the user's calendar) to PNG for the website. Skipped unless
-//  PUNCTUAL_SCREENSHOT_DIR is set, so it never runs in the normal suite.
-//
-//  Run with `make screenshots` (writes docs/screenshots/dropdown-{light,dark}.png).
+//  Renders DropdownPanelView against PreviewFixtures to PNG for the website. Skipped unless
+//  PUNCTUAL_SCREENSHOT_DIR is set; run with `make screenshots`.
 //
 
 import AppKit
@@ -20,8 +17,7 @@ final class MarketingScreenshotTests: BaseTestCase {
         guard let dir = ProcessInfo.processInfo.environment["PUNCTUAL_SCREENSHOT_DIR"] else {
             throw XCTSkip("PUNCTUAL_SCREENSHOT_DIR not set")
         }
-        // Pin the clock so the sample meetings land on round times (next one at
-        // 10:00) and the greeting says "Good morning", whenever this is run.
+        // Pinned clock so the sample meetings land on round times.
         PreviewFixtures.pinnedNow = Calendar.current.date(
             bySettingHour: 9, minute: 35, second: 0, of: Date()
         )

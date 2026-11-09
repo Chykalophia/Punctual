@@ -1,6 +1,6 @@
 //
 //  ChangelogTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 //  The typed release-notes model and the sub-1.0 version-reset migration.
 //
@@ -29,8 +29,6 @@ final class ChangelogTests: XCTestCase {
     }
 
     func testTheNewestReleaseNoteMatchesTheShippingVersion() {
-        // A release without its own What's New entry would show users the
-        // previous version's notes as if they were new.
         let shipping = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         XCTAssertEqual(ReleaseNotes.all.first?.version, shipping)
     }

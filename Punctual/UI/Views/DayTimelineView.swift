@@ -46,11 +46,8 @@ enum DayTimelineLayout {
 
     static var rowHeight: CGFloat { segmentHeight + rowSpacing }
 
-    /// Half the width of the widest hour label at `.caption2`, by format.
-    ///
-    /// An estimate on purpose: measuring the rendered string would need a layout
-    /// pass per tick to decide which labels survive. Over-estimating is the safe
-    /// direction — it thins one label too many rather than letting two collide.
+    /// Estimated half width of the widest hour label at `.caption2`, by format.
+    /// Deliberately over-estimates so labels thin out rather than collide.
     static func hourLabelHalfWidth(for format: TimeFormat) -> CGFloat {
         switch format {
         case .am_pm: 17    // "12 PM"
@@ -58,8 +55,7 @@ enum DayTimelineLayout {
         }
     }
 
-    /// Minimum clear distance between two label CENTRES before both are drawn.
-    /// Two half-widths would leave them exactly touching, so add a readable gap.
+    /// Minimum distance between two label centres before both are drawn: two half widths plus a gap.
     static func minimumLabelSpacing(for format: TimeFormat) -> CGFloat {
         hourLabelHalfWidth(for: format) * 2 + 6
     }
@@ -71,9 +67,7 @@ struct DayTimelineLayoutCalculator {
     let visibleRange: ClosedRange<Date>
     private let totalSeconds: TimeInterval
 
-    /// The range comes from `DayTimelineRange` so the two styles — and the
-    /// left-fill behaviour of `.relative` — are decided by tested arithmetic
-    /// rather than by this view.
+    /// Creates a calculator for a range produced by `DayTimelineRange`.
     init(now: Date = Date(), range: ClosedRange<Date>) {
         self.now = now
         self.visibleRange = range
@@ -112,27 +106,14 @@ struct DayTimelineLayoutCalculator {
 
     // MARK: Hour labels
 
-    /// Keeps an hour label inside the view, leaving interior labels untouched.
-    ///
-    /// `.position` CENTRES on x, so a tick at either edge put half its label
-    /// outside the view. At the panel's old full width nothing clipped it, so it
-    /// went unnoticed; inside a card the overflow is visibly cut ("4 P").
+    /// Clamps an hour label's centre x so the label stays inside the view.
     func clampedLabelX(_ x: CGFloat, width: CGFloat, halfWidth: CGFloat) -> CGFloat {
         guard width > halfWidth * 2 else { return width / 2 }
         return min(max(x, halfWidth), width - halfWidth)
     }
 
-    /// The hour ticks that still get a LABEL at this width — every tick keeps its
-    /// grid line, but a label is dropped when it would overlap the last one kept.
-    ///
-    /// Needed because clamping alone only stopped labels escaping the view; it
-    /// left them free to collide with each other. At a 360pt panel in 12-hour
-    /// format the nine visible hours sit ~37pt apart while "12 PM" is ~34pt wide,
-    /// so the edge labels overlapped their neighbours ("4 PM5 PM").
-    ///
-    /// Greedy from the left, which means a colliding LAST label is the one
-    /// dropped. That is the right end to lose: the earlier label is already
-    /// placed, and dropping an interior one would leave a visible hole.
+    /// Hour ticks that get a label at this width. Every tick keeps its grid line, but a
+    /// label is dropped when it would overlap the last one kept, scanning from the left.
     func labelledTicks(width: CGFloat, timeFormat: TimeFormat) -> [Date] {
         let halfWidth = DayTimelineLayout.hourLabelHalfWidth(for: timeFormat)
         let minimumSpacing = DayTimelineLayout.minimumLabelSpacing(for: timeFormat)
@@ -179,11 +160,7 @@ struct DayRelativeTimelineView: View {
     private let eventRows: [[DaySegment]]
     private let contentHeight: CGFloat
 
-    /// Height the parent can rely on for sizing.
-    ///
-    /// Each appearance pays only for what it draws: `track` for its label row and
-    /// stacked segments, `bar` for one rail plus labels beneath it, `minimal` for
-    /// the rail alone.
+    /// Height the parent can rely on for sizing; depends on the appearance.
     var preferredHeight: CGFloat {
         switch appearance {
         case .track: contentHeight + 26
@@ -200,8 +177,6 @@ struct DayRelativeTimelineView: View {
         style: TimelineSpan = .relative,
         appearance: TimelineAppearance = .track
     ) {
-        // The bar is framed around the events it is actually drawing, so the
-        // relative style opens on content instead of on empty past.
         let bounds = segments.isEmpty
             ? nil
             : (
@@ -217,9 +192,7 @@ struct DayRelativeTimelineView: View {
         self.timeFormat   = timeFormat
         self.appearance   = appearance
         self.layout       = layout
-        // Only `track` packs overlapping meetings into extra rows; the flatter
-        // appearances put everything on one line by definition, so asking for
-        // rows would just make them taller for no visible reason.
+        // Only `track` stacks overlapping meetings into extra rows.
         let rows = appearance.stacksOverlaps
             ? layout.rows(for: segments)
             : (segments.isEmpty ? [] : [segments])
@@ -245,10 +218,7 @@ struct DayRelativeTimelineView: View {
                 railBody(width: width)
             }
         }
-        // OUTSIDE the GeometryReader on purpose. Inset within it, the proxy still
-        // measured the FULL width while the content drew into a box 24pt
-        // narrower, so every x position was computed against the wrong width and
-        // the right-hand labels ran past the card's edge ("10 PM" clipped).
+        // Padding stays outside the GeometryReader so the proxy measures the width the content draws into.
         .padding(.top, appearance == .track ? 10 : 0)
         .padding(.vertical, appearance == .track ? 8 : 2)
         .padding(.horizontal, 12)
@@ -256,11 +226,7 @@ struct DayRelativeTimelineView: View {
         .accessibilityLabel("timeline_accessibility_label".loco(segments.count))
     }
 
-    /// One rail with the meetings inline — the `bar` and `minimal` appearances.
-    ///
-    /// Everything sits on a single line, so a clash reads as one longer block
-    /// rather than as two. That is the trade these appearances make for height,
-    /// and it is why `track` still exists.
+    /// One rail with the meetings inline, used by the `bar` and `minimal` appearances.
     @ViewBuilder
     private func railBody(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -287,8 +253,6 @@ struct DayRelativeTimelineView: View {
                 }
 
                 if layout.visibleRange.contains(currentDate) {
-                    // Taller than the rail and light, so it reads as a playhead
-                    // ON the bar rather than as another meeting.
                     Capsule()
                         .fill(Color.primary)
                         .frame(width: 2, height: DayTimelineLayout.railHeight + 6)
@@ -322,7 +286,7 @@ struct DayRelativeTimelineView: View {
     private func trackBody(width: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
 
-                // Hour grid — every tick draws its line at the TRUE position.
+                // Hour grid
                 ForEach(layout.hourTicks(), id: \.self) { tick in
                     let x = layout.xPosition(of: tick, width: width)
                     Path { path in
@@ -332,8 +296,7 @@ struct DayRelativeTimelineView: View {
                     .stroke(Color.primary.opacity(0.25), lineWidth: 1)
                 }
 
-                // Hour labels — only the ticks that can be labelled without
-                // colliding, each clamped to stay inside the view.
+                // Hour labels: only non-colliding ticks, each clamped inside the view.
                 ForEach(labelledTicks(width: width), id: \.self) { tick in
                     Text(hourFormatter.string(from: tick))
                         .font(.caption2)
@@ -356,9 +319,7 @@ struct DayRelativeTimelineView: View {
                         let endX    = layout.xPosition(of: min(seg.end, layout.visibleRange.upperBound), width: width)
                         let widthPx = max(endX - startX, DayTimelineLayout.segmentHeight / 2)
 
-                        // Raised from 0.55/0.25. Behind-window vibrancy lightens
-                        // with the DESKTOP, so over a pale wallpaper a quarter-
-                        // opacity capsule all but vanished against the surface.
+                        // Fill opacity is high enough to stay visible over behind-window vibrancy on pale wallpapers.
                         Capsule()
                             .fill(seg.color.opacity(seg.isHighlighted ? 0.70 : 0.42))
                             .overlay(
@@ -404,7 +365,7 @@ struct DayRelativeTimelineView: View {
     }
 }
 
-// MARK: — Preview
+// MARK: - Preview
 
 #Preview {
     let cal = Calendar.current

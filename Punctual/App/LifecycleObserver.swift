@@ -8,9 +8,6 @@ import Foundation
 
 /// Registers for macOS system notifications (screen lock/unlock, wake,
 /// clock/timezone change, calendar day change) and forwards them as callbacks.
-///
-/// Owned by `AppDelegate`; keeps `AppDelegate` thin by concentrating all
-/// `DistributedNotificationCenter` / `NSWorkspace` wiring here.
 @MainActor
 final class LifecycleObserver {
     var onScreenLocked: () -> Void = {}

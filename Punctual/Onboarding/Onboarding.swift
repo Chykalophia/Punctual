@@ -1,12 +1,11 @@
 //
-//  OnboardingView.swift
+//  Onboarding.swift
 //  MeetingBar
 //
 //  Created by Andrii Leitsius on 24.08.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Modified for Punctual (formerly MeetingBarNG) by Peter Krzyzek / Chykalophia,
-//  2026-10-01: log every setup step transition, to trace setups that jump back.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 import Combine
 import Defaults
@@ -14,9 +13,7 @@ import KeyboardShortcuts
 import LaunchAtLogin
 import SwiftUI
 
-/// Setup steps the onboarding flow walks through. Future steps (post-setup
-/// recap, etc.) can be inserted without changing how individual screens drive
-/// the transition.
+/// Setup steps the onboarding flow walks through.
 enum OnboardingStep: Hashable {
     case welcome
     case authorization
@@ -55,9 +52,7 @@ enum OnboardingFlowPolicy {
 
 @MainActor
 final class OnboardingRouter: ObservableObject {
-    /// Every transition is logged so a setup that "jumps back" can be traced
-    /// after the fact (`log show --info --predicate 'subsystem ==
-    /// "com.chykalophia.Punctual" AND category == "onboarding"'`).
+    /// Logs every transition (subsystem `com.chykalophia.Punctual`, category `onboarding`).
     @Published var currentStep: OnboardingStep = .welcome {
         didSet {
             guard currentStep != oldValue else { return }
@@ -135,9 +130,8 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(20)
         }
-        // The window itself is clear (WindowStylePolicy); the content paints an
-        // opaque rounded background and a hairline border so the borderless
-        // window reads as a distinct surface and AppKit can derive its shadow.
+        // The window is clear; this opaque rounded background and border give AppKit a shape
+        // for the shadow.
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
@@ -147,9 +141,7 @@ struct OnboardingView: View {
     }
 }
 
-/// Slim segmented progress shown in the window header. Filled segments mark
-/// completed and current stages; the textual "Step X of Y" is preserved as the
-/// accessibility label.
+/// Segmented progress bar for the window header; "Step X of Y" is its accessibility label.
 private struct OnboardingProgress: View {
     let step: OnboardingStep
 
@@ -169,10 +161,8 @@ private struct OnboardingProgress: View {
     }
 }
 
-/// Shared footer for onboarding screens: an optional Back button on the
-/// leading edge and an optional primary action on the trailing edge, with an
-/// optional inline hint and busy spinner. Keeps navigation consistent across
-/// every step instead of each screen hand-rolling its own button row.
+/// Shared footer for onboarding screens: optional Back button, primary action,
+/// inline hint and busy spinner.
 struct OnboardingFooter: View {
     var onBack: (() -> Void)?
     var hint: String?
@@ -204,9 +194,8 @@ struct OnboardingFooter: View {
     }
 }
 
-/// Final setup step: a short first-run pass over the choices that affect daily
-/// use immediately. The rest of the product-level configuration stays in
-/// Preferences, where users have more context.
+/// Final setup step: first-run choices that affect daily use. Everything else stays
+/// in Preferences.
 private struct EssentialsScreen: View {
     @ObservedObject var router: OnboardingRouter
     @EnvironmentObject var onboardingHandler: OnboardingHandler

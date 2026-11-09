@@ -1,26 +1,9 @@
 //
 //  OAuthCompletionPage.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The page the browser lands on after Google hands back the authorization
-//  code.
-//
-//  AppAuth answers the redirect with a hardcoded
-//  `<html><body>Authorization complete.<br> Return to the app.</body></html>` —
-//  unstyled, unbranded, and silent about what to do next. It cannot be replaced:
-//  the string is a compile-time constant and `OIDLoopbackHTTPServer` is not in
-//  AppAuth's umbrella header, so the only lever is `successURL`, which makes it
-//  302 somewhere of our choosing.
-//
-//  So this serves that somewhere, from a second loopback listener of our own.
-//  The split matters: AppAuth keeps the ENTIRE OAuth-critical path — receiving
-//  the code, checking `state`, the PKCE exchange. This listener is a static file
-//  server for exactly one page. It never sees the authorization code, parses
-//  nothing out of the request, and cannot affect whether sign-in succeeds.
-//
-//  Local rather than a hosted URL so the page works offline, needs no
-//  infrastructure, and does not tell a web server every time someone connects
-//  their calendar.
+//  The local page AppAuth redirects the browser to (via `successURL`) after Google sign-in.
+//  It never sees the authorization code; AppAuth owns the whole OAuth exchange.
 //
 
 import Foundation
@@ -28,39 +11,26 @@ import Network
 
 /// Serves the single "you're connected" page on 127.0.0.1.
 ///
-/// Deliberately not a general HTTP server: every request on the socket gets the
-/// same response regardless of method or path, because the only client is a
-/// browser this app just redirected here.
+/// Every request gets the same response regardless of method or path; it is not a general HTTP server.
 @MainActor
 final class OAuthCompletionPageServer {
     private var listener: NWListener?
     private var connections: [NWConnection] = []
 
-    /// The account to name on the page. Set before the redirect arrives.
+    /// The account to name on the page.
     private var accountEmail: String?
 
     /// Starts listening and returns the URL to redirect the browser to, or `nil`
-    /// when the listener cannot bind.
+    /// when the listener cannot bind. A `nil` result must not fail sign-in.
     ///
-    /// AWAITS `.ready` before reading the port. `NWListener.port` is not
-    /// assigned at `start()` — it reads 0 until the kernel has bound the socket,
-    /// which produced a `successURL` of `http://127.0.0.1:0/connected` that no
-    /// browser can reach. Nothing would have reported it either: the redirect
-    /// happens after the code is exchanged, so sign-in still succeeds and only
-    /// the final page breaks.
-    ///
-    /// A failure here is not fatal and must not be treated as one: without a
-    /// `successURL` AppAuth simply serves its own plain page, so sign-in still
-    /// completes. Losing the branding is a far better outcome than failing the
-    /// connection over it.
+    /// Awaits `.ready` before reading the port: `NWListener.port` reads 0 until the socket is bound.
     func start() async -> URL? {
         stop()
 
         let listener: NWListener
         do {
-            // Port 0 asks the kernel for any free port. `requiredInterfaceType`
-            // alone does not keep this off the network, so the URL below names
-            // the loopback address explicitly.
+            // `requiredInterfaceType` alone does not keep this off the network,
+            // so the URL below names the loopback address explicitly.
             let parameters = NWParameters.tcp
             parameters.requiredInterfaceType = .loopback
             parameters.allowLocalEndpointReuse = true
@@ -77,10 +47,7 @@ final class OAuthCompletionPageServer {
         }
         self.listener = listener
 
-        // `stateUpdateHandler` can fire more than once (a `.failed` after a
-        // `.ready`, or a `.cancelled` on teardown) and the continuation may be
-        // resumed exactly once. A plain captured `var` cannot express that under
-        // strict concurrency, so the one-shot claim is its own type.
+        // `stateUpdateHandler` can fire more than once; the continuation must resume exactly once.
         let resumeOnce = OneShotGuard()
         let port: UInt16? = await withCheckedContinuation { continuation in
             listener.stateUpdateHandler = { state in
@@ -105,8 +72,7 @@ final class OAuthCompletionPageServer {
         return URL(string: "http://127.0.0.1:\(port)/connected")
     }
 
-    /// Names the connected account on the page. Called once the token response
-    /// has been parsed, which happens before the browser is redirected here.
+    /// Sets the account named on the page; call before the browser is redirected.
     func setAccountEmail(_ email: String?) {
         accountEmail = email
     }
@@ -121,8 +87,7 @@ final class OAuthCompletionPageServer {
     private func accept(_ connection: NWConnection) {
         connections.append(connection)
         connection.start(queue: .main)
-        // The request is read and discarded: nothing in it changes the response,
-        // and reading it lets the browser finish sending before we reply.
+        // Read and discard the request so the browser finishes sending before the reply.
         connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] _, _, _, _ in
             Task { @MainActor in self?.respond(on: connection) }
         }
@@ -165,16 +130,11 @@ private final class OneShotGuard: @unchecked Sendable {
     }
 }
 
-/// The page itself, as a pure function so its content is testable without
-/// binding a socket.
+/// Builds the completion page HTML.
 enum OAuthCompletionPage {
-    /// Inline everything: the browser is talking to a socket that is about to
-    /// close, so there is no second request for a stylesheet or an image, and
-    /// the page has to render correctly on the first and only response.
+    /// Returns the self-contained page, following the system light or dark appearance.
     ///
-    /// Colours follow the system light/dark preference rather than picking one,
-    /// since this opens in whatever browser the user has and should not flash
-    /// white at someone working in the dark.
+    /// All styles and images are inline: the server closes after one response.
     static func html(accountEmail: String?) -> String {
         let account = accountEmail.flatMap { $0.isEmpty ? nil : $0 }
         let accountLine = account.map {
@@ -268,8 +228,7 @@ enum OAuthCompletionPage {
         """
     }
 
-    /// The account address comes from Google's ID token, so it is not ours to
-    /// trust unescaped in markup.
+    /// HTML-escapes untrusted text, such as the account address from Google's ID token.
     static func escape(_ value: String) -> String {
         value
             .replacingOccurrences(of: "&", with: "&amp;")

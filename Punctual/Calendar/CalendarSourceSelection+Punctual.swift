@@ -1,11 +1,9 @@
 //
-//  CalendarSourceSelection+MeetingBar.swift
-//  MeetingBarNG
+//  CalendarSourceSelection+Punctual.swift
+//  Punctual
 //
-//  Bridges the hostless `CalendarSourceKind` to the app layer's
-//  `EventStoreProvider`, the same way `DiagnosticsReport+MeetingBar` bridges
-//  `DiagnosticsProvider`. The rules live in the hostless type; this file only
-//  translates, and answers "can this build actually use that source".
+//  Bridges `CalendarSourceKind` to the app layer's `EventStoreProvider` and
+//  reports which sources this build can use.
 //
 
 import AppKit
@@ -27,11 +25,7 @@ extension CalendarSourceKind {
         }
     }
 
-    /// Whether the source can actually be signed into right now. macOS Calendar
-    /// always can; Google needs an OAuth client, from either the build
-    /// (`XCConfig/GoogleSecrets.xcconfig`) or the user's own entered in
-    /// Preferences. Keeping a source CONNECTED that cannot possibly sign in is
-    /// worse than dropping it, which is what `availableOnly` uses this for.
+    /// Whether the source can be signed into now. Google needs a shipped or user-supplied OAuth client.
     @MainActor
     var isAvailableInThisBuild: Bool {
         switch self {

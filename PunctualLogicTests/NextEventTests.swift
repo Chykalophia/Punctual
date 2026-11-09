@@ -1,6 +1,6 @@
 //
 //  NextEventTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest

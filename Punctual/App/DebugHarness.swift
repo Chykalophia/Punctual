@@ -1,57 +1,25 @@
 //
 //  DebugHarness.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  DEBUG-only development aid: a control panel that feeds the running app
-//  synthetic meetings, so any state the menu bar and dropdown can be in is one
-//  click away instead of something you wait for a real calendar to produce.
+//  DEBUG-only control panel that feeds the running app synthetic meetings, so every
+//  menu bar and dropdown state is one click away. Opened by `punctual://debug-harness`
+//  (matched ahead of the router) or the status item's right-click menu.
 //
-//  Why this exists. Most of what this app draws is a function of the next
-//  meeting and the current time — the Join chip appears two minutes before a
-//  start, the title boldens when a meeting is imminent, the progress indicator
-//  fills while one runs. Exercising any of that for real means owning a calendar
-//  event that starts in ninety seconds, which is a slow and destructive way to
-//  test (it writes to the developer's actual calendar). Every one of those states
-//  is a scenario here.
-//
-//  Why it cannot ship. The whole file is inside `#if DEBUG`, and DEBUG is defined
-//  by `SWIFT_ACTIVE_COMPILATION_CONDITIONS` in the Debug configuration ONLY — the
-//  Release configuration does not define it, so none of this reaches a build a
-//  user runs. The same reasoning as `DropdownInspectorWindow`, and the same three
-//  rules it follows:
-//
-//    • the whole file is guarded, not just its body — no half-compiled types;
-//    • it is reached by a deep link matched AHEAD of the router, so no DEBUG-only
-//      case is added to `AppRoute` and no DEBUG-only closure to `AppEnvironment`;
-//    • it holds no state the app reads back. The override lives on the status bar
-//      controller behind a DEBUG-only method, and clearing it restores the real
-//      calendar. A development hook should leave no shape behind in shipping
-//      types.
-//
-//  Reached by `open "punctual://debug-harness"`, or from the status item's
-//  right-click menu, whose last item exists only in this configuration.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 #if DEBUG
 import AppKit
 
-/// One canned situation to put the app in.
-///
-/// `build` takes the moment the scenario is applied rather than capturing one, so
-/// re-applying a scenario re-bases it on now. That matters because scenarios AGE:
-/// pick "starts in 90 seconds", leave it, and ninety seconds later the app is
-/// genuinely in the "meeting starting now" state — which is exactly the
-/// transition worth watching, and the reason nothing here freezes the clock.
+/// One canned situation to put the app in. `build` receives the time it is applied,
+/// so a scenario ages in real time rather than freezing the clock.
 struct DebugScenario: Identifiable, Sendable {
     let id: String
     let name: String
     /// One line on what this is for — shown under the button.
     let detail: String
-    /// `nil` means "stop overriding and go back to the real calendar".
-    /// `@Sendable` so the catalogue can be a `static let` under the module's
-    /// complete-concurrency checking; every builder is pure, so it costs nothing.
+    /// `nil` means stop overriding and use the real calendar.
     let build: (@Sendable (Date) -> [MBEvent])?
 
     static let all: [DebugScenario] = [
@@ -170,10 +138,7 @@ struct DebugScenario: Identifiable, Sendable {
 
     // MARK: - Builders
 
-    /// A meeting link that is real enough for `MeetingLinkDetector` to classify
-    /// (so the app takes the Google Meet path) and fake enough to be harmless:
-    /// joining opens a browser on an invalid meeting code, which is all the
-    /// confirmation a click test needs.
+    /// A Google Meet URL the detector classifies, but which joins nothing real.
     static let meetingURL = URL(string: "https://meet.google.com/dbg-test-000")!
 
     private static let calendar = MBCalendar(
@@ -208,9 +173,7 @@ struct DebugScenario: Identifiable, Sendable {
             recurrent: false,
             calendar: calendar
         )
-        // Set after init: `MBEvent` derives participation from the attendee list,
-        // and a harness that had to synthesise a plausible attendee just to say
-        // "declined" would be testing the attendee parser, not the appearance.
+        // Set after init so the harness need not synthesize attendees.
         event.participationStatus = participation
         return event
     }
@@ -235,8 +198,7 @@ struct DebugScenario: Identifiable, Sendable {
     }
 
     static func busyDay(now: Date) -> [MBEvent] {
-        // One imminent (so the chip is up while the agenda is long) and seven
-        // spread through the rest of the day.
+        // One imminent meeting, so the chip is up, plus seven later today.
         let offsets: [TimeInterval] = [90, 40 * 60, 75 * 60, 110 * 60, 150 * 60, 200 * 60, 260 * 60, 320 * 60]
         return offsets.enumerated().map { index, offset in
             meeting(
@@ -250,11 +212,7 @@ struct DebugScenario: Identifiable, Sendable {
     }
 }
 
-/// What the menu bar is drawing right now, for the harness's readout.
-///
-/// A readout rather than "look at your menu bar" because the two things this
-/// feature can get wrong are invisible at a glance: whether the click target
-/// exists at all, and whether it agrees with the capsule that was drawn.
+/// What the menu bar is drawing right now, for the harness readout.
 struct DebugRenderSummary {
     var firstLine: String
     var secondLine: String
@@ -263,18 +221,12 @@ struct DebugRenderSummary {
     var buttonWidth: CGFloat
     var eventCount: Int
     var isOverridden: Bool
-    /// Whether any calendar is selected.
-    ///
-    /// Surfaced because it is the one way injected events can look broken through
-    /// no fault of the injection: `StatusBarPresentationPolicy.mode` returns
-    /// `.idle` when no calendar is chosen, so the item draws the app icon and
-    /// nothing else no matter what the event list holds. Worth saying out loud
-    /// rather than leaving someone to conclude the harness does not work.
+    /// Whether any calendar is selected. With none, the status item stays idle
+    /// whatever events are injected.
     var hasSelectedCalendars: Bool
 }
 
-/// Closures the harness drives the app through. Passed in, like every other
-/// window's dependencies, so the view holds no reference to the controller.
+/// Closures the harness drives the app through.
 struct DebugHarnessHandlers {
     var apply: (DebugScenario) -> Void = { _ in }
     var summary: () -> DebugRenderSummary = {
@@ -286,11 +238,7 @@ struct DebugHarnessHandlers {
     }
 }
 
-/// The harness's window.
-///
-/// Titled, unlike `DropdownInspectorWindow` — that one is deliberately chromeless
-/// because the thing being judged IS the panel's own surface. This is a control
-/// panel, so it wants a titlebar and a close button like any other utility window.
+/// The harness window: titled, unlike the chromeless `DropdownInspectorWindow`.
 final class DebugHarnessWindow: NSWindow {
     var onClose: (() -> Void)?
 
@@ -303,8 +251,7 @@ final class DebugHarnessWindow: NSWindow {
         super.close()
     }
 
-    /// Whether `url` is the harness's deep link (`punctual://debug-harness`).
-    /// Matched outside `URLHandler` for the reason given in the file header.
+    /// Whether `url` is the harness deep link (`punctual://debug-harness`).
     static func matches(_ url: URL) -> Bool {
         url.scheme == "punctual" && url.host == "debug-harness"
     }

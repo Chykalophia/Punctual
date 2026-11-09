@@ -8,9 +8,7 @@ import Foundation
 
 /// Evaluates and fires in-app notification actions (fullscreen, auto-join, script on start)
 /// for events that are due at the current moment.
-///
-/// The runner uses `NotificationRecordStore` to avoid double-firing and
-/// `NotificationActionSink` to perform the actual side effect.
+/// Uses `NotificationRecordStore` to avoid double-firing and `NotificationActionSink` for side effects.
 @MainActor
 final class NotificationActionRunner {
     private let recordStore: NotificationRecordStore
@@ -182,12 +180,7 @@ extension NotificationKind {
 
 // MARK: - Processed-event record persistence
 
-/// Owns read/write access to the persisted processed-event records that track
-/// which in-app notification actions have already fired.
-///
-/// Centralising these Defaults reads and writes makes the runner testable
-/// without touching `UserDefaults` and isolates the persistence format from
-/// the action-firing logic.
+/// Reads and writes the persisted records of which in-app notification actions have fired.
 @MainActor
 final class NotificationRecordStore {
     // MARK: - Cleanup

@@ -1,10 +1,8 @@
 //
 //  EventListWindowTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  The menu's day list starts at "now": a meeting that ended more than the
-//  grace period ago drops off, the in-progress meeting and everything upcoming
-//  stay.
+//  Tests for the menu's day list window: ended meetings drop off after a grace period.
 //
 
 import XCTest

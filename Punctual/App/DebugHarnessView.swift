@@ -1,16 +1,11 @@
 //
 //  DebugHarnessView.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  DEBUG-only: the harness window's contents. See `DebugHarness.swift` for what
-//  this is and why it cannot ship.
+//  DEBUG-only harness window contents; see `DebugHarness.swift`. Strings are
+//  deliberately not localized: developer-only labels would add dead keys to `en.lproj`.
 //
-//  Deliberately NOT localized. Every string here is a developer-facing label in a
-//  window no user can open, and running them through `.loco()` would add dead
-//  keys to `en.lproj` that `validate_localizations.sh` then has to carry — and
-//  that a translator would eventually be asked to translate.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 #if DEBUG
@@ -30,9 +25,7 @@ struct DebugHarnessView: View {
     @State private var appliedScenarioID: String?
     @State private var summary = DebugHarnessHandlers().summary()
 
-    /// The readout has to poll: the menu bar redraws on its own clock (a meeting
-    /// starting, a minute turning over) and nothing notifies this window when it
-    /// does. One second is well inside the fastest transition worth seeing.
+    /// Polls because the menu bar redraws on its own clock without notifying this window.
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -123,8 +116,7 @@ struct DebugHarnessView: View {
                 }
                 Spacer(minLength: 0)
                 if isApplied {
-                    // Re-applying rebases the scenario on now, which is how you
-                    // replay a transition without hunting for the row again.
+                    // Re-applying rebases the scenario on now, replaying its transition.
                     Text("replay").font(.caption2).foregroundStyle(.tertiary)
                 }
             }
@@ -136,9 +128,7 @@ struct DebugHarnessView: View {
 
     // MARK: - Toggles
 
-    /// The handful of settings you flip WHILE watching the menu bar. Everything
-    /// else stays in Preferences — this is not a second settings window, it is
-    /// the two or three knobs that pair with the fake data above.
+    /// Settings worth flipping while watching the menu bar.
     private var togglesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Menu bar settings")
@@ -183,9 +173,7 @@ struct DebugHarnessView: View {
 
     // MARK: - Readout
 
-    /// What the menu bar actually drew. The two failures this feature can have
-    /// are both invisible from across the room: a click target that does not
-    /// exist, and one that does not line up with the capsule.
+    /// What the menu bar actually drew.
     private var readoutSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Rendered right now")

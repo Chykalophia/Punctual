@@ -1,32 +1,22 @@
 //
 //  RemindersStore.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  EventKit service for Apple Reminders shown in the menu (Dot parity). Owns its
-//  OWN `EKEventStore`, separate from the calendar store (`EKEventStore.shared`),
-//  so the reminders permission is requested and held independently and only when
-//  the user opts in. Mirrors `EventKitEventStore`'s access-request shape
-//  (`requestFullAccessToReminders` on macOS 14+, `requestAccess(to:.reminder)`
-//  fallback) and the off-main fetch pattern.
+//  EventKit service for Apple Reminders shown in the menu: access, fetch, complete
+//  and reschedule. Uses its own `EKEventStore` so reminders permission is requested
+//  separately from calendars, and only on opt-in.
 //
-//  This is the app's first EventKit WRITE surface: `complete(id:)` and
-//  `reschedule(id:to:)` re-fetch the `EKReminder` by identifier, mutate it, and
-//  `save(commit:)`.
-//
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
 import EventKit
 import Foundation
 
-/// Thread-safe (`Sendable`) wrapper around a private `EKEventStore` scoped to
-/// reminders. Async methods are non-isolated, so fetch/save run off the main
-/// actor on the global executor.
+/// `Sendable` wrapper around a private reminders `EKEventStore`.
+/// Async methods are non-isolated and run off the main actor.
 final class RemindersStore: Sendable {
-    /// Shared instance so the preferences toggle (permission prompt), the sync,
-    /// and the write paths all target the same `EKEventStore`. Mirrors
-    /// `EKEventStore.shared` for the calendar side.
+    /// The shared instance; all reminders access must go through one `EKEventStore`.
     static let shared = RemindersStore()
 
     private let store = EKEventStore()
@@ -48,15 +38,13 @@ final class RemindersStore: Sendable {
         }
     }
 
-    /// macOS has already been asked and said no, so requesting again will not
-    /// prompt. The Calendars pane states that instead of leaving a switch to
-    /// spring silently back (Preferences UX overhaul, Phase 2).
+    /// Whether access was denied or restricted, so requesting again will not prompt.
     static func isDenied(_ status: EKAuthorizationStatus) -> Bool {
         status == .denied || status == .restricted
     }
 
-    /// Requests reminders access. This is the ONLY entry point that triggers the
-    /// system permission prompt — wired to the "Show reminders in menu" toggle.
+    /// Requests reminders access; the only entry point that shows the system permission prompt.
+    /// - Returns: Whether access was granted.
     @discardableResult
     func requestAccess() async -> Bool {
         await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
@@ -77,8 +65,7 @@ final class RemindersStore: Sendable {
         }
     }
 
-    /// Incomplete reminders due today or earlier. Returns `[]` (and logs nothing)
-    /// when access has not been granted, so callers never need to pre-check.
+    /// Incomplete reminders due today or earlier, or `[]` without access.
     func fetchDueToday() async -> [MBReminder] {
         guard isAccessGranted else { return [] }
 
@@ -87,17 +74,13 @@ final class RemindersStore: Sendable {
         let startOfDay = calendar.startOfDay(for: now)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
 
-        // predicateForIncompleteReminders is inherently incomplete-only, so the
-        // hostless ReminderSelection filter only has to apply the overdue policy.
         let predicate = store.predicateForIncompleteReminders(
             withDueDateStarting: nil,
             ending: endOfDay,
             calendars: nil
         )
 
-        // fetchReminders(matching:) is completion-based; bridge to async. Map to
-        // the Sendable MBReminder inside the completion so no EKReminder crosses
-        // the continuation boundary.
+        // Map inside the completion so no non-Sendable EKReminder crosses the continuation.
         return await withCheckedContinuation { (continuation: CheckedContinuation<[MBReminder], Never>) in
             _ = store.fetchReminders(matching: predicate) { reminders in
                 let mapped = (reminders ?? []).map { makeReminder(from: $0, now: now, calendar: calendar) }
@@ -106,8 +89,7 @@ final class RemindersStore: Sendable {
         }
     }
 
-    /// Marks the reminder complete and commits. Re-fetches by identifier because
-    /// the value type handed to the UI does not retain the `EKReminder`.
+    /// Marks the reminder with this identifier complete and commits.
     func complete(id: String) async {
         guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else {
             PunctualLogger.calendar.error(
@@ -119,8 +101,7 @@ final class RemindersStore: Sendable {
         save(reminder, action: "complete", id: id)
     }
 
-    /// Reschedules the reminder's due date (Dot-style snooze — reflected back
-    /// into Apple Reminders) and adds an alarm so it re-notifies at the new time.
+    /// Moves the reminder's due date to `date` and adds an alarm at that time, then commits.
     func reschedule(id: String, to date: Date) async {
         guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else {
             PunctualLogger.calendar.error(
@@ -148,9 +129,7 @@ final class RemindersStore: Sendable {
     }
 }
 
-/// Maps an `EKReminder` to the flat, Sendable `MBReminder` value type. Free
-/// function so it can run inside the (non-Sendable) fetch completion closure
-/// without capturing the store.
+/// Maps an `EKReminder` to the Sendable `MBReminder` value type.
 private func makeReminder(from reminder: EKReminder, now: Date, calendar: Calendar) -> MBReminder {
     let components = reminder.dueDateComponents
     let dueDate = components.flatMap { calendar.date(from: $0) }

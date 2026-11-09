@@ -1,14 +1,10 @@
 //
 //  MenuBarTimeFormatMigrationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the one-time migration that retires the "Time next to the
-//  title" control (`eventTimeFormat`) without dropping anybody's setting:
+//  Tests for the one-time migration off the retired `eventTimeFormat` setting.
 //
-//    • `.show` / `.hide` become the presence or absence of a Countdown block.
-//    • `.show_under_title` becomes "Two lines" on the Menu Bar pane.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import XCTest
@@ -38,8 +34,7 @@ final class MenuBarTimeFormatMigrationTests: XCTestCase {
     }
 
     func testHiddenTimeSeedsNoCountdownBlock() {
-        // `.hide` derives a legacy list without a countdown; the migration must
-        // not add one back, or the menu bar gains a countdown nobody asked for.
+        // `.hide` derives a legacy list without a countdown, so none is added back.
         let plan = MenuBarTimeFormatMigration.plan(
             storedTokens: [],
             legacyTokens: ["icon", "title"],

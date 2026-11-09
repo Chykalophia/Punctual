@@ -1,32 +1,20 @@
 //
 //  MeetingSummaryPresenter.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Turns an event into the copy the meeting card shows — section title, title,
+//  Turns an event into the copy the meeting card shows: section title, title,
 //  metadata line, countdown.
 //
-//  Extracted from `MenuBuilder` so the SwiftUI panel stops reaching into an
-//  NSMenu builder for it. The panel used to construct a whole `MenuBuilder`
-//  (passing `NSNull()` as the target, since it has no @objc actions) purely to
-//  call this one method, which is what kept a 1,800-line menu renderer alive
-//  after the menu itself became a fallback.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
-/// What the meeting card is allowed to show.
-///
-/// Individual switches rather than named presets. The useful combinations are
-/// not the ones a preset list would guess — "everything except the times" and
-/// "just the title and the bar" are both reasonable, and so is anything between.
-///
-/// The title is not a member: a card with no title is not a card.
+/// Which optional fields the meeting card shows. The title is always shown.
 struct MeetingCardFields: Equatable, Sendable {
     /// The "Next meeting • in 2h" line above the title.
     var showsSectionLine = true
-    /// The start–end range in the metadata line.
+    /// The start/end range in the metadata line.
     var showsTimes = true
     /// The meeting service ("Google Meet", "Zoom").
     var showsProvider = true
@@ -39,10 +27,7 @@ struct MeetingCardFields: Equatable, Sendable {
 enum MeetingSummaryPresenter {
     /// The meeting card's copy for `event`.
     ///
-    /// Takes the three things it actually needs rather than a whole
-    /// `StatusBarMenuState`: the event, how to format a time, and what "now" is.
-    /// `now` is injected so the countdown is testable and so the panel can pass
-    /// its own ticking clock instead of `Date()`.
+    /// - Parameter now: The panel's clock, used for current/next and the countdown.
     static func presentation(
         for event: MBEvent,
         timeFormat: TimeFormat,
@@ -79,9 +64,7 @@ enum MeetingSummaryPresenter {
         }
 
         return MeetingSummaryPresentation(
-            // Empty rather than optional: the view already drops an empty
-            // section line, and an extra optional would mean two ways to say
-            // "nothing here".
+            // Empty string means "no section line"; the view omits it.
             sectionTitle: fields.showsSectionLine
                 ? (isCurrent
                     ? "status_bar_control_current_meeting".loco()
@@ -99,9 +82,8 @@ enum MeetingSummaryPresenter {
         )
     }
 
-    /// Start and end as the user's chosen format writes them. An all-day event
-    /// has no clock time, so it says so and leaves the end blank rather than
-    /// printing a meaningless midnight-to-midnight range.
+    /// Start and end in the user's time format. For an all-day event, start is
+    /// the localized "All day" label and end is empty.
     static func timeStrings(
         for event: MBEvent,
         timeFormat: TimeFormat
@@ -122,18 +104,14 @@ enum MeetingSummaryPresenter {
         )
     }
 
-    /// The first value that is actually something, after trimming.
+    /// The first non-empty value after trimming whitespace.
     static func firstMeaningfulValue(_ values: [String?]) -> String? {
         values.lazy
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
     }
 
-    /// Non-empty values in order, without repeats.
-    ///
-    /// Compared case- and diacritic-insensitively, because the same account
-    /// reaches this list from several sources with different capitalisation and
-    /// the metadata line should not say it twice.
+    /// Non-empty trimmed values in order, without case- or diacritic-insensitive repeats.
     static func uniqueValues(_ values: [String?]) -> [String] {
         var seen = Set<String>()
         return values.compactMap { value in

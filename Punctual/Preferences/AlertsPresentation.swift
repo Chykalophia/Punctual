@@ -1,23 +1,12 @@
 //
 //  AlertsPresentation.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless permission-state mapping for the Alerts pane (Preferences UX
-//  overhaul, Phase 2).
+//  Hostless mapping from notification permission state to what the Alerts pane
+//  shows. The app maps `UNAuthorizationStatus` / `UNAlertStyle` onto these cases
+//  in `UI/Views/Shared.swift`.
 //
-//  The pane's job is to say what macOS *actually* does with MeetingBarNG's
-//  notifications — and to say nothing at all when the answer is "they arrive
-//  and they stay". The old tab shipped two advisory captions that were computed
-//  in the view, phrased as instructions ("switch to Alerts in your macOS
-//  notification settings"), and led nowhere. Here the state is one value, and
-//  every state that is not calm carries a real button.
-//
-//  Deliberately hostless: no UserNotifications, no SwiftUI, no Defaults. The
-//  app maps `UNAuthorizationStatus` / `UNAlertStyle` onto these cases at the
-//  edge (`UI/Views/Shared.swift`), so the decision itself is unit-tested
-//  without a host app (`MeetingBarLogicTests/AlertsPresentationTests.swift`).
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
@@ -32,7 +21,7 @@ enum NotificationAuthorization: String, CaseIterable, Sendable {
     case allowed
 }
 
-/// What actually reaches the user — which is what the pane must state.
+/// How notifications actually reach the user.
 enum NotificationDelivery: String, CaseIterable, Sendable {
     /// Nothing arrives.
     case blocked
@@ -41,10 +30,7 @@ enum NotificationDelivery: String, CaseIterable, Sendable {
     /// Alerts: they stay onscreen until dismissed.
     case persistent
 
-    /// Localization key of the advisory line, or `nil` when there is nothing to
-    /// say. The silence is deliberate: the deleted Advanced tab proved that a
-    /// warning stamped across a screen regardless of state becomes wallpaper
-    /// and stops meaning anything.
+    /// Localization key of the advisory line, or `nil` when delivery needs no comment.
     var messageKey: String? {
         switch self {
         case .blocked: "preferences_alerts_disabled_tip"
@@ -53,30 +39,29 @@ enum NotificationDelivery: String, CaseIterable, Sendable {
         }
     }
 
-    /// Whether this reads as a failure (nothing gets through) rather than as
-    /// advice (they get through, they just do not linger).
+    /// Whether this is a failure (nothing arrives) rather than advice.
     var isProblem: Bool { self == .blocked }
 
-    /// Whether the pane shows the "Open notification settings" button. Anything
-    /// worth telling the user about is worth giving them a way to fix.
+    /// Whether to show the "Open notification settings" button; true whenever there is a message.
     var offersSettingsButton: Bool { messageKey != nil }
 
-    /// The button that replaces "go and find it in System Settings yourself".
+    /// Localization key of the "Open notification settings" button.
     static let settingsButtonKey = "preferences_alerts_open_notification_settings"
 }
 
 enum NotificationDeliveryPolicy {
+    /// Resolves what the user actually receives.
+    ///
     /// - Parameters:
-    ///   - authorization: what macOS has been asked and answered.
-    ///   - staysOnscreen: the Alerts style, rather than Banners.
+    ///   - authorization: The notification authorization state.
+    ///   - staysOnscreen: Whether the style is Alerts rather than Banners.
+    /// - Returns: `.blocked` unless authorized; otherwise `.persistent` or `.disappearing`.
     static func resolve(
         authorization: NotificationAuthorization,
         staysOnscreen: Bool
     ) -> NotificationDelivery {
         switch authorization {
-        // Not-yet-asked is grouped with denied on purpose: in both states the
-        // toggles below deliver nothing, and claiming otherwise is the lie the
-        // old captions told.
+        // Not determined counts as blocked: nothing is delivered until the user is asked.
         case .notDetermined, .denied:
             .blocked
         case .allowed:

@@ -1,9 +1,8 @@
 //
 //  CalendarGridNavigationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for arrow-key travel in the calendar window (MeetingBarNG):
-//  where the selection lands, and when the grid has to page to follow it.
+//  Tests for arrow-key travel in the calendar grid and when the grid pages.
 //
 
 import XCTest
@@ -57,7 +56,6 @@ final class CalendarGridNavigationTests: XCTestCase {
     }
 
     func testUpAndDownMoveOneWeek() {
-        // A grid row IS a week, so Up must land in the cell directly above.
         XCTAssertEqual(
             move(date(2026, 8, 15), CalendarGridNavigation.nextWeek).selectedDay,
             calendar().startOfDay(for: date(2026, 8, 22))
@@ -96,9 +94,7 @@ final class CalendarGridNavigationTests: XCTestCase {
     }
 
     func testPaddingDaysFromAdjacentMonthsDoNotPage() {
-        // 1 Sep is drawn as a padding cell in the August grid. Selecting a cell
-        // that is visibly on screen must not scroll the grid out from under the
-        // user.
+        // 1 Sep is a padding cell in the August grid, so it is already visible.
         let result = move(date(2026, 8, 31), CalendarGridNavigation.nextDay)
         XCTAssertFalse(result.requiresPaging)
     }

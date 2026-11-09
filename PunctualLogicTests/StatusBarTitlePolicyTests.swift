@@ -1,6 +1,6 @@
 //
 //  StatusBarTitlePolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest

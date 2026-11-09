@@ -1,8 +1,8 @@
 //
 //  WorldClockPanelTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the multi-zone world-clock panel policy (MeetingBarNG).
+//  Tests for the multi-zone world-clock panel policy.
 //
 
 import XCTest

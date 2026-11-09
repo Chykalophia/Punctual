@@ -1,6 +1,6 @@
 //
 //  DiagnosticsReportTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest

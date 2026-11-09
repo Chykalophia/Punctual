@@ -5,17 +5,7 @@
 //  Created by Andrii Leitsius on 12.05.2025.
 //  Copyright © 2025 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  add a debounced aggressive force-sync (`forceSyncIfDebounceElapsed`) that
-//  proactively nudges macOS to sync (EventKit `refreshSourcesIfNecessary()`,
-//  which also makes macOS surface its own stalled-sync error sooner) on
-//  status-menu open / system wake / unlock, at most once per ~30s; and compute
-//  `newestEventChange` (the newest event `lastModifiedDate`) each refresh and
-//  thread it onto `ProviderHealth.lastSyncedChange` for the Calendars-tab
-//  staleness signal. Also collapse cross-calendar duplicate events (same event
-//  arriving on two selected calendars/accounts) via `EventDeduplication`,
-//  gated on `Defaults[.deduplicateEvents]`; Preferences UX overhaul Phase 0 adds
-//  that key to the Defaults refresh trigger so the toggle takes effect at once.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 import Cocoa
 import Combine
@@ -54,9 +44,7 @@ public class CalendarSync: ObservableObject {
     var repository: CalendarRepository
     private let refreshInterval: TimeInterval
     private var cancellables = Set<AnyCancellable>()
-    /// Held separately from `cancellables` so we can cancel the previous
-    /// repository-store subscription when switching providers, instead of
-    /// stacking up additional sinks on every switch.
+    /// The repository store-change subscription, replaced (not stacked) on each provider change.
     private var storeChangeCancellable: AnyCancellable?
     private var storeChangeRefreshTask: Task<Void, Never>?
     private var refreshCycleTask: Task<Void, Never>?
@@ -74,13 +62,9 @@ public class CalendarSync: ObservableObject {
         refreshSubject.send() // initial load
     }
 
-    /// Connects a source, ADDING it to the connected set. Re-connecting one
-    /// that is already there is how re-authorization works, so the existing
-    /// "grant access" and "reconnect" buttons keep working unchanged.
+    /// Connects a source, adding it to the connected set.
     ///
-    /// The name and signature are unchanged from the single-provider era
-    /// because every call site still means the same thing by them; only the
-    /// "and disconnect whatever was there before" half is gone.
+    /// Connecting an already-connected source re-authorizes it.
     public func changeEventStoreProvider(
         _ newProvider: EventStoreProvider,
         withSignOut: Bool = false
@@ -112,9 +96,8 @@ public class CalendarSync: ObservableObject {
         }
     }
 
-    /// Disconnects a source without touching the others. Refused when it is the
-    /// last one connected. Credentials are kept unless `withSignOut` is set, so
-    /// reconnecting is not a fresh OAuth round trip.
+    /// Disconnects a source without touching the others; a no-op for the last connected source.
+    /// Credentials are kept unless `withSignOut` is set.
     public func disconnectEventStoreProvider(
         _ provider: EventStoreProvider,
         withSignOut: Bool = false
@@ -125,9 +108,6 @@ public class CalendarSync: ObservableObject {
         refreshCycleTask = nil
         AppSettings.setEnabledCalendarSources(repository.selection)
         providerGeneration += 1
-        // Drop this source's rows immediately rather than waiting for the next
-        // refresh: a disconnected source's meetings lingering in the dropdown
-        // reads as the toggle having failed.
         calendars = calendars.filter { $0.provider != provider }
         events = events.filter { $0.calendar.provider != provider }
         providerHealth = ProviderHealth()
@@ -159,9 +139,6 @@ public class CalendarSync: ObservableObject {
     }
 
     private func subscribeToRepositoryStoreChanges() {
-        // Cancel any previous subscription before re-attaching to the (new)
-        // repository. Without this, switching providers would stack sinks
-        // and trigger N refreshes per store change.
         storeChangeCancellable?.cancel()
         storeChangeCancellable = repository.storeChanged
             .sink { [weak self] in
@@ -200,21 +177,17 @@ public class CalendarSync: ObservableObject {
 
     // MARK: - Aggressive force-sync
 
-    /// Minimum spacing between forced syncs. Menu-open / wake / unlock can each
-    /// fire in quick succession; without this guard, opening the menu repeatedly
-    /// would hammer EventKit's `refreshSourcesIfNecessary()`.
+    /// Minimum seconds between forced syncs, so repeated menu-open, wake and unlock
+    /// events do not hammer EventKit's `refreshSourcesIfNecessary()`.
     private static let forcedSyncDebounceInterval: TimeInterval = 30
-    /// Timestamp of the last forced sync we actually dispatched.
+    /// When the last forced sync was dispatched.
     private var lastForcedSyncAt: Date?
     private var forcedSyncTask: Task<Void, Never>?
 
-    /// Aggressively nudge the underlying provider to sync now — for EventKit this
-    /// reaches `EKEventStore.refreshSourcesIfNecessary()`, which both pulls fresh
-    /// data and makes macOS surface its own stalled-sync error sooner — then
-    /// re-fetch via `refreshSources()`. Debounced to at most one dispatch per
-    /// `forcedSyncDebounceInterval` so status-menu-open spam and back-to-back
-    /// wake/unlock notifications don't overload EventKit. The periodic 180s timer
-    /// and the manual Refresh path are unaffected.
+    /// Asks the provider to sync its sources now, then re-fetches via `refreshSources()`.
+    ///
+    /// Debounced to one dispatch per `forcedSyncDebounceInterval`; the periodic timer
+    /// and manual refresh are not debounced.
     public func forceSyncIfDebounceElapsed(now: Date = Date()) {
         if let lastForcedSyncAt,
            now.timeIntervalSince(lastForcedSyncAt) < Self.forcedSyncDebounceInterval {
@@ -236,16 +209,12 @@ public class CalendarSync: ObservableObject {
         }
     }
 
-    /// Newest `lastModifiedDate` across the given events, or `nil` when none of
-    /// them carry a modification date (or there are no events). Pure so it can be
-    /// unit-tested and threaded onto `ProviderHealth.lastSyncedChange`.
+    /// Newest `lastModifiedDate` across the given events, or `nil` when none carry one.
     static func newestEventChange(in events: [MBEvent]) -> Date? {
         events.compactMap(\.lastModifiedDate).max()
     }
 
-    /// One entry per failing source across both the calendar-list and event
-    /// fetches. A source whose calendar listing failed also fails its event
-    /// fetch, so without this the same outage would be reported twice.
+    /// Merges calendar-list and event-fetch failures, keeping one entry per provider.
     static func mergeFailures(
         _ first: [CalendarSourceFailure],
         _ second: [CalendarSourceFailure]
@@ -254,9 +223,8 @@ public class CalendarSync: ObservableObject {
         return (first + second).filter { seen.insert($0.provider).inserted }
     }
 
-    /// Fetches events for the selected calendars within the specified date
-    /// range, across every connected source. Returns the merged events together
-    /// with any source that failed while another succeeded.
+    /// Fetches, deduplicates, filters and sorts events for the current period across every connected source.
+    /// - Returns: The events plus any source that failed while another succeeded.
     private func fetchEvents(
         fromCalendars: [MBCalendar]
     ) async throws -> (events: [MBEvent], failures: [CalendarSourceFailure]) {
@@ -268,21 +236,12 @@ public class CalendarSync: ObservableObject {
         }
         let rawEvents = outcome.elements
 
-        // First collapse exact per-occurrence duplicates (same internal id).
         let deduplicatedEvents = Array(Dictionary(
             rawEvents.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         ).values)
 
-        // Then collapse cross-calendar duplicates: the same underlying event
-        // arriving on two selected calendars/accounts survives the id-keyed pass
-        // (each copy has its own per-occurrence id) but shares an external
-        // identifier, so the pure deduplicator catches it. Opt-out preserved.
-        //
-        // With BOTH sources connected the same invite also arrives once from
-        // each. `sourcePriority` decides which copy survives — Google's, because
-        // it carries real attendee response status and Google's own conferencing
-        // data where EventKit's mirror routinely has neither. With one source
-        // connected every priority is equal and this is first-wins, as before.
+        // Cross-calendar and cross-source copies have distinct ids; collapse them by external
+        // identifier. `sourcePriority` keeps the Google copy, which carries attendee status and conferencing.
         let events: [MBEvent]
         if Defaults[.deduplicateEvents] {
             let candidates = deduplicatedEvents.enumerated().map { index, event in
@@ -304,8 +263,6 @@ public class CalendarSync: ObservableObject {
         if !AppSettings.current.events.dismissedEvents.isEmpty {
             AppSettings.refreshDismissedEvents(using: events)
         }
-        // Same cadence as the dismissal housekeeping above rather than a timer of
-        // its own: both exist only to stop a per-event list growing forever.
         EventReminderOverrideStore.pruneExpired()
         return (events.filtered().sorted { $0.startDate < $1.startDate }, outcome.failures)
     }
@@ -314,10 +271,7 @@ public class CalendarSync: ObservableObject {
         // A) Defaults changes as an “empty” trigger
         let defaultsPub = Defaults.publisher(keys:
             .selectedCalendarIDs,
-            // The per-source selection is the one that actually drives fetching
-            // now. `selectedCalendarIDs` mirrors only the primary source, so
-            // without this key ticking a calendar on the OTHER source changed
-            // nothing until the next scheduled refresh — it read as broken.
+            // Drives fetching for every source; `selectedCalendarIDs` mirrors only the primary one.
             .selectedCalendarIDsByProvider,
             .enabledCalendarSources,
             .showEventsForPeriod,
@@ -326,9 +280,7 @@ public class CalendarSync: ObservableObject {
             .showPendingEvents,
             .showTentativeEvents,
             .allDayEvents,
-            // Deduplication happens inside this fetch (`processEvents`), so
-            // without this key flipping the setting changed nothing until the
-            // next scheduled refresh — it read as broken.
+            // Deduplication runs inside the fetch, so the toggle must trigger one.
             .deduplicateEvents,
             .nonAllDayEvents, options: []).map { _ in () }.eraseToAnyPublisher()
 
@@ -347,18 +299,12 @@ public class CalendarSync: ObservableObject {
         // C) Manual trigger
         let manualPub = refreshSubject.eraseToAnyPublisher()
 
-        // D) Merge all triggers; throttle drops bursts.
-        // Throttle (not debounce) so the first trigger in a window passes through
-        // immediately — manual refresh feels instant — while subsequent rapid
-        // triggers (e.g. several Defaults changes in one preferences update) are
-        // collapsed into a single fetch. debounce would also delay a fast periodic
-        // timer indefinitely if its interval is shorter than the debounce window.
+        // D) Merge all triggers. Throttle, not debounce: the first trigger fires
+        // immediately and bursts collapse, where debounce would delay every refresh.
         let trigger = Publishers.Merge3(defaultsPub, timerPub, manualPub)
             .throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: false)
 
-        // E) When any fires, fetch calendars & events.
-        // flatMap(maxPublishers: .max(1)) serializes fetches so at most one runs
-        // at a time; if another trigger arrives during a fetch, it queues exactly once.
+        // E) Fetch calendars and events. `maxPublishers: .max(1)` runs one fetch at a time.
         trigger
             .flatMap(maxPublishers: .max(1)) { [weak self] _ -> AnyPublisher<RefreshResult, Never> in
                 guard let self = self else {
@@ -371,8 +317,7 @@ public class CalendarSync: ObservableObject {
                         )
                     ).eraseToAnyPublisher()
                 }
-                // Capture current state on the main thread before entering the async Task.
-                // On failure we republish these so the UI keeps showing last known data.
+                // Republished on failure so the UI keeps the last known data.
                 let preservedCalendars = self.calendars
                 let preservedEvents = self.events
                 let previousHealth = self.providerHealth
@@ -388,10 +333,7 @@ public class CalendarSync: ObservableObject {
                                 let (evts, eventFailures) = try await self.fetchEvents(
                                     fromCalendars: calendarOutcome.elements
                                 )
-                                // A source that failed while another succeeded is
-                                // reported alongside the refresh, not instead of
-                                // it: Google's token expiring must not blank out
-                                // the macOS Calendar events that fetched fine.
+                                // Partial failures degrade health without discarding the sources that succeeded.
                                 let health = ProviderHealth.success(
                                     attempted: attempted,
                                     lastSyncedChange: Self.newestEventChange(in: evts),
@@ -467,12 +409,7 @@ public class CalendarSync: ObservableObject {
                     refreshInterval: TimeInterval = 0) {
             self.refreshInterval = refreshInterval
             self.repository = repository
-            // Keep the persisted connected-set in step with the injected
-            // repository; anything reading `enabledCalendarSources` (notably
-            // the selected-calendar publisher) would otherwise see an empty set.
-            // Records only that key — re-deriving the primary provider and the
-            // legacy selection mirror here would clobber selections the test
-            // just set up.
+            // Records only the connected set, so selections the test set up are not re-derived.
             AppSettings.recordEnabledCalendarSources(repository.selection)
             subscribeToRepositoryStoreChanges()
             setupPublishers()

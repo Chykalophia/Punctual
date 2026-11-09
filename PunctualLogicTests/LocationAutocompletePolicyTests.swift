@@ -1,10 +1,8 @@
 //
 //  LocationAutocompletePolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the location-autocomplete gate (MeetingBarNG). The point
-//  of these is the privacy property: nothing is sent unless the user turned the
-//  feature on.
+//  Tests for the location-autocomplete gate: nothing is sent unless it is enabled.
 //
 
 import XCTest
@@ -15,8 +13,7 @@ final class LocationAutocompletePolicyTests: XCTestCase {
     // MARK: - The feature is off
 
     func testNothingIsSentWhenDisabled() {
-        // The property that matters. Length, content and whitespace are all
-        // irrelevant while the feature is off.
+        // Length, content and whitespace are irrelevant while the feature is off.
         for text in ["", "a", "abc", "Chicago", "   spaced out   ", String(repeating: "x", count: 500)] {
             XCTAssertFalse(
                 LocationAutocompletePolicy.shouldQuery(text, isEnabled: false),
@@ -50,8 +47,7 @@ final class LocationAutocompletePolicyTests: XCTestCase {
     }
 
     func testWhitespaceDoesNotCountTowardTheThreshold() {
-        // "  a  " is one real character; sending it would be a request that
-        // matches half the world.
+        // "  a  " is one real character once trimmed.
         XCTAssertFalse(LocationAutocompletePolicy.shouldQuery("  a  ", isEnabled: true))
         XCTAssertTrue(LocationAutocompletePolicy.shouldQuery("  abc  ", isEnabled: true))
     }
@@ -77,8 +73,6 @@ final class LocationAutocompletePolicyTests: XCTestCase {
     }
 
     func testDeletingBackBelowTheThresholdHidesStaleResults() {
-        // Otherwise the previous suggestions sit there looking like live results
-        // for a query that was never sent.
         XCTAssertFalse(
             LocationAutocompletePolicy.shouldPresentResults(
                 for: "ab", isEnabled: true, resultCount: 5

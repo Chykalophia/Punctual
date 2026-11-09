@@ -1,18 +1,9 @@
 //
 //  EndToEndFlowTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  End-to-end tests for the full data flow behind the status bar UI:
-//  FakeEventStore → CalendarSync → AppModel → StatusBarMenuState →
-//  MenuBuilder/NSMenu, StatusBarPresenter → attributed title, and
-//  NotificationScheduler → pending notification requests.
-//
-//  The NSStatusItem itself is intentionally out of scope: the menu is built
-//  through the production `StatusBarItemController.updateMenu()` path and
-//  inspected as an `NSMenu`, menu actions are dispatched through the real
-//  target/action wiring, and the title is asserted on the
-//  `StatusBarPresentation` / `StatusBarTitleRenderer` output that the
-//  status bar button would render.
+//  End-to-end tests from FakeEventStore through CalendarSync, AppModel, the dropdown state,
+//  the status bar title and notification scheduling. The NSStatusItem itself is out of scope.
 //
 
 import AppKit
@@ -26,12 +17,8 @@ import XCTest
 
 // MARK: - Harness
 
-/// Wires a real `CalendarSync` + `AppModel` + `NotificationScheduler` +
-/// `StatusBarItemController` chain on top of `FakeEventStore`, mirroring
-/// `AppEnvironment.live` for calendar and notification flows while recording
-/// outward side effects (opening meetings, snoozes, window routing) instead
-/// of executing them. Provider changes run through the real `CalendarSync`
-/// switch and are recorded as well.
+/// Real `CalendarSync`, `AppModel`, `NotificationScheduler` and `StatusBarItemController`
+/// over `FakeEventStore`, recording outward side effects instead of executing them.
 @MainActor
 private final class EndToEndHarness {
     let store: FakeEventStore
@@ -48,8 +35,7 @@ private final class EndToEndHarness {
     private(set) var openChangelogCallCount = 0
     private(set) var openDropdownCallCount = 0
 
-    /// Strong reference to the installed in-app action sink. The scheduler's
-    /// runner keeps only a weak reference, so the harness owns it for the test.
+    /// Held strongly because the scheduler's runner keeps only a weak reference.
     private var actionSink: NotificationActionSink?
 
     convenience init(store: FakeEventStore) {
@@ -142,10 +128,7 @@ private final class EndToEndHarness {
         ))
     }
 
-    /// Installs the real in-app action sink (`NotificationActionHandler`) wired
-    /// to this harness's model, holding it strongly (the runner keeps only a
-    /// weak reference). Used to exercise the fullscreen / auto-join / script
-    /// action path and its screen-lock gating end to end.
+    /// Installs the real `NotificationActionHandler` sink, wired to this harness's model.
     func installActionSink(
         showFullscreen: @escaping (MBEvent) -> Void = { _ in },
         runEventStartScript: @escaping (MBEvent) -> Void = { _ in }
@@ -202,9 +185,8 @@ class EndToEndFlowTestCase: BaseTestCase {
         return EndToEndHarness(store: store)
     }
 
-    /// Seconds from `now` until the start of tomorrow. Tests that need an
-    /// event to land TODAY cap their offsets with this, so a run late in the
-    /// evening (CI runs on UTC) doesn't push a "today" event past midnight.
+    /// Seconds from `now` until the start of tomorrow; caps offsets so a "today" event
+    /// stays today when the suite runs late in the evening (CI runs on UTC).
     fileprivate func secondsUntilTomorrow(from now: Date) -> TimeInterval {
         let calendar = Calendar.current
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
@@ -279,14 +261,7 @@ class EndToEndFlowTestCase: BaseTestCase {
         return StatusBarMenuState.make(from: appState)
     }
 
-    /// Titles of the events the dropdown would actually DRAW, after the
-    /// hide/show settings are applied.
-    ///
-    /// Replaces the old `menuTitles`, which rebuilt an NSMenu and read its item
-    /// titles. These tests were never really about NSMenuItems — they ask "given
-    /// these settings, does the dropdown show this meeting?" — so they now ask the
-    /// visibility rule directly, through the same `DropdownEventVisibility` the
-    /// panel uses.
+    /// Titles of the events the dropdown would draw after the hide/show settings apply.
     fileprivate func dropdownEventTitles(_ harness: EndToEndHarness) -> [String] {
         let state = dropdownState(harness)
         let now = Date()
@@ -300,8 +275,6 @@ class EndToEndFlowTestCase: BaseTestCase {
             isDeclined: isDeclined,
             now: now
         )
-        // Tomorrow goes through the look-ahead mode, so "today + tomorrow next"
-        // and summary mode render what the panel really renders.
         let tomorrow = DropdownEventVisibility.tomorrowRendered(
             state.tomorrowEvents,
             menu: state.menu,
@@ -312,8 +285,7 @@ class EndToEndFlowTestCase: BaseTestCase {
         return (today + tomorrow).map(\.title)
     }
 
-    /// The one-line summary the agenda draws in `.today_n_tomorrow_summary`,
-    /// straight from the production helper.
+    /// The one-line summary the agenda draws in `.today_n_tomorrow_summary`.
     fileprivate func tomorrowSummary(_ harness: EndToEndHarness) -> String {
         let state = dropdownState(harness)
         return DropdownEventVisibility.tomorrowSummaryText(
@@ -327,30 +299,21 @@ class EndToEndFlowTestCase: BaseTestCase {
         )
     }
 
-    /// Sorted, de-duplicated event IDs currently backing pending notification
-    /// requests — lets a test assert *which* events have notifications, not
-    /// just how many.
+    /// Sorted, de-duplicated event IDs backing pending notification requests.
     fileprivate func scheduledEventIDs(_ harness: EndToEndHarness) -> [String] {
         Set(harness.notificationSink.currentPendingRequests()
             .compactMap { $0.content.userInfo["eventID"] as? String })
             .sorted()
     }
 
-    /// Renders the status bar title through the production
-    /// `StatusBarItemController.updateTitle()` path and returns the button it
-    /// drew into — the real end of the title pipeline, minus the NSStatusItem
-    /// presentation which is out of scope. Assert on `attributedTitle.string`
-    /// and `image?.name()`.
+    /// Renders the title through `StatusBarItemController.updateTitle()` and returns the button.
     fileprivate func renderTitle(_ harness: EndToEndHarness) throws -> NSStatusBarButton {
         harness.controller.updateTitle()
         return try XCTUnwrap(harness.controller.statusItem.button)
     }
 
-    /// Waits until CalendarSync's 200ms trigger-throttle window has cleared —
-    /// no fetch has started for >250ms — so the next trigger opens a fresh
-    /// window instead of being coalesced into the previous load. Keyed on the
-    /// fake store's observable fetch counter rather than a blind fixed sleep,
-    /// so it tolerates a slow CI agent where the initial fetch runs long.
+    /// Waits until no fetch has started for 250ms, so the next trigger escapes
+    /// CalendarSync's 200ms throttle window instead of being coalesced.
     fileprivate func settleRefreshWindow(_ harness: EndToEndHarness) async throws {
         var last = harness.store.fetchCallCount
         var quietSince = Date()
@@ -391,10 +354,8 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
 
         XCTAssertTrue(titles.contains { $0.contains("Event E1") })
         XCTAssertTrue(titles.contains { $0.contains("Event E2") })
-        // Both events are today's, which is what the Today section renders from.
         XCTAssertEqual(state.todayEvents.count, 2)
 
-        // The meeting card shows the next event.
         XCTAssertEqual(state.nextEvent?.id, "E1")
     }
 
@@ -412,8 +373,6 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
 
         let button = try renderTitle(harness)
 
-        // nextEvent mode with "No icon": the title carries the event name plus
-        // a time suffix, no icon, and the tooltip is the full title.
         XCTAssertNil(button.image)
         XCTAssertTrue(button.attributedTitle.string.hasPrefix("Event E1"))
         XCTAssertGreaterThan(button.attributedTitle.string.count, "Event E1".count)
@@ -431,8 +390,6 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
             $0.events.count == 1
         }
 
-        // The meeting card joins whatever event it is showing, which is the one
-        // the state names as next.
         let nextID = try XCTUnwrap(dropdownState(harness).nextEvent?.id)
         harness.model.send(.joinMeeting(eventID: nextID))
 
@@ -453,8 +410,6 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
         }
         XCTAssertTrue(try renderTitle(harness).attributedTitle.string.hasPrefix("Event E1"))
 
-        // The same handler the dropdown's dismiss row and the right-click menu
-        // both target.
         harness.controller.dismissNextMeetingAction()
 
         XCTAssertEqual(Defaults[.dismissedEvents].map(\.id), ["E1"])
@@ -519,7 +474,6 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
             $0.providerHealth.authRequired
         }
 
-        // The dropdown's meeting module renders a repair row from this warning.
         XCTAssertNotNil(dropdownState(harness).providerWarning)
 
         harness.controller.reconnectProviderAction()
@@ -543,13 +497,10 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
             !$0.calendars.isEmpty
         }
 
-        // The dropdown's pinned footer always offers Preferences, whatever else
-        // is (or is not) on screen.
         harness.controller.openPreferencesAction()
         XCTAssertEqual(harness.openPreferencesCallCount, 1)
         XCTAssertFalse(dropdownState(harness).hasSelectedCalendars)
 
-        // Idle mode (no calendars): empty title, app-icon glyph.
         let button = try renderTitle(harness)
         XCTAssertEqual(button.attributedTitle.string, "")
         XCTAssertEqual(
@@ -572,7 +523,6 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
             $0.events.count == 2
         }
 
-        // Right-clicking the status item routes to `joinNextMeeting()`.
         harness.controller.joinNextMeeting()
 
         XCTAssertEqual(harness.openedMeetingIDs, ["E1"])
@@ -591,8 +541,6 @@ final class StatusBarEndToEndFlowTests: EndToEndFlowTestCase {
             $0.events.count == 1
         }
 
-        // A running major version ahead of the acknowledged one is what puts
-        // "What's new?" in the pinned footer.
         let state = dropdownState(harness)
         XCTAssertTrue(compareVersions(state.appMajorVersion, state.lastRevisedMajorVersion))
 
@@ -654,9 +602,7 @@ final class NotificationEndToEndFlowTests: EndToEndFlowTestCase {
         XCTAssertTrue(requests.allSatisfy {
             ($0.content.userInfo["eventID"] as? String) == "E1"
         })
-        // Start and end are distinguished by category (which drives the action
-        // buttons the user sees), not by the internal identifier encoding: the
-        // start notification carries the event category, the end carries none.
+        // Start and end are told apart by category: the start carries the event category, the end none.
         XCTAssertEqual(
             Set(requests.map(\.content.categoryIdentifier)),
             [EventNotificationIdentifiers.eventCategory, ""]
@@ -681,7 +627,6 @@ final class NotificationEndToEndFlowTests: EndToEndFlowTestCase {
             self.scheduledEventIDs(harness) == ["E1", "E2"]
         }
 
-        // Dismisses the next meeting (E1); E2's notifications must survive.
         harness.controller.dismissNextMeetingAction()
 
         try await waitUntil("only the dismissed event's notifications are removed") {
@@ -702,8 +647,7 @@ final class NotificationEndToEndFlowTests: EndToEndFlowTestCase {
             $0.events.count == 1
         }
 
-        // Wire the real action sink only now: the initial reconcile ran with no
-        // sink, so the auto-join cannot have fired before we start watching.
+        // Wire the sink only now so the initial reconcile (no sink) cannot auto-join first.
         harness.installActionSink()
         harness.model.reconcileNotifications()
 
@@ -744,8 +688,6 @@ final class NotificationEndToEndFlowTests: EndToEndFlowTestCase {
 
         harness.model.handleScreenLock()
         harness.model.reconcileNotifications()
-        // Negative check: let the reconcile Task run, then confirm the locked
-        // screen suppressed the auto-join side effect.
         try await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertTrue(harness.openedMeetingIDs.isEmpty)
 
@@ -769,10 +711,7 @@ final class NotificationEndToEndFlowTests: EndToEndFlowTestCase {
             !harness.notificationSink.currentPendingIdentifiers().isEmpty
         }
 
-        // Take the notification the scheduler actually produced and parse it
-        // exactly like `NotificationCenterDelegate.didReceive` does — the
-        // `UNNotificationResponse` wrapper itself cannot be constructed in
-        // tests.
+        // Parse like `NotificationCenterDelegate.didReceive`; `UNNotificationResponse` cannot be built in tests.
         let content = try XCTUnwrap(
             harness.notificationSink.currentPendingRequests().first
         ).content
@@ -845,32 +784,25 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         }
         XCTAssertTrue(dropdownEventTitles(harness).contains { $0.contains("Event EK") })
 
-        // Escape the trigger-throttle window before the connect-driven refresh.
         try await settleRefreshWindow(harness)
         harness.model.send(.changeProvider(.googleCalendar, signOut: false))
 
-        // BOTH sources' meetings now appear. Under the old either/or provider
-        // this same action replaced the EventKit events with Google's.
         await waitForState(of: harness, description: "both sources reach AppModel") {
             $0.events.map(\.id).sorted() == ["EK", "G"]
         }
         XCTAssertEqual(
             harness.model.state.connectedProviders, [.macOSEventKit, .googleCalendar])
-        // EventKit stays the write-capable source; connecting Google does not
-        // hand that role over.
         XCTAssertEqual(harness.model.state.activeProvider, .macOSEventKit)
 
         let titles = dropdownEventTitles(harness)
         XCTAssertTrue(titles.contains { $0.contains("Event EK") })
         XCTAssertTrue(titles.contains { $0.contains("Event G") })
-        // Each source keeps its own calendar selection, and both are live.
         XCTAssertEqual(
             Set(harness.model.state.selectedCalendarIDs),
             [eventKitCalendar.id, googleCalendar.id]
         )
         XCTAssertEqual(harness.providerChanges.map(\.provider), [.googleCalendar])
 
-        // Disconnecting drops that source's meetings and keeps the other's.
         try await settleRefreshWindow(harness)
         harness.model.send(.disconnectProvider(.googleCalendar))
 
@@ -878,7 +810,6 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
             $0.events.map(\.id) == ["EK"]
         }
         XCTAssertEqual(harness.model.state.connectedProviders, [.macOSEventKit])
-        // The Google selection is kept, not erased, so reconnecting restores it.
         XCTAssertEqual(
             AppSettings.selectedCalendarIDs(for: .googleCalendar),
             [googleCalendar.id]
@@ -914,14 +845,11 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         let bothDays = dropdownEventTitles(harness)
         XCTAssertTrue(bothDays.contains { $0.contains("Event TODAY") })
         XCTAssertTrue(bothDays.contains { $0.contains("Event TMRW") })
-        // The tomorrow section is drawn whenever the period includes tomorrow.
         XCTAssertTrue(dropdownState(harness).events.showEventsForPeriod.includesTomorrow)
     }
 
-    /// Two tomorrow events so "only the first" is distinguishable from "all".
-    /// One event later today and two tomorrow morning, whatever the time of
-    /// day: "now + 1 day + 1 hour" lands on the day AFTER tomorrow when the
-    /// suite runs in the last hour before midnight.
+    /// One event later today and two tomorrow morning, computed from midnight so a run
+    /// in the last hour of the day does not land on the day after tomorrow.
     private func makeTwoDayHarness(now: Date) -> EndToEndHarness {
         let untilTomorrow = secondsUntilTomorrow(from: now)
         return makeHarness(events: [
@@ -971,8 +899,7 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
             "summary mode renders no tomorrow event rows at all"
         )
 
-        // The literal text is derived from the format string rather than typed
-        // out, so rewording the resource does not silently break this.
+        // Derived from the format string so rewording the resource does not break this.
         let summary = tomorrowSummary(harness)
         XCTAssertTrue(
             summary.contains(Self.summaryLiteral(count: 2)),
@@ -980,8 +907,6 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         )
     }
 
-    /// A single meeting must not read "1 meetings tomorrow" — the summary picks
-    /// between `_one` and `_other` the way the day-summary count does.
     func testTomorrowSummaryUsesTheSingularFormForOneMeeting() async {
         configureDisplayDefaults()
         Defaults[.showEventsForPeriod] = .today_n_tomorrow_summary
@@ -1010,7 +935,7 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         )
     }
 
-    /// The static half of the summary format, so assertions survive a reword.
+    /// The static text of the summary format for `count`.
     private static func summaryLiteral(count: Int) -> String {
         let key = count == 1
             ? "status_bar_tomorrow_summary_one"
@@ -1031,8 +956,6 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         ])
         defer { harness.stop() }
 
-        // The declined event is filtered inside CalendarSync before
-        // publication, so it must never reach AppModel, menu, or title.
         await waitForState(of: harness, description: "filtered events reach AppModel") {
             $0.events.map(\.id) == ["KEPT"]
         }
@@ -1069,7 +992,6 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         configureDisplayDefaults()
         Defaults[.personalEventsAppereance] = .show_inactive
         let now = Date()
-        // No attendees → a "personal" event.
         let harness = makeHarness(events: [
             makeEvent(id: "PERSONAL", startingIn: 300, now: now)
         ])
@@ -1079,12 +1001,8 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
             $0.events.count == 1
         }
 
-        // The event is listed as a normal day row…
         XCTAssertTrue(dropdownEventTitles(harness).contains { $0.contains("Event PERSONAL") })
-        // …but is not promoted to the "next meeting" summary card…
         XCTAssertNil(dropdownState(harness).nextEvent)
-        // …and the status bar shows the "done for today" state, not the event:
-        // empty title with the calendar-checkmark glyph.
         let button = try renderTitle(harness)
         XCTAssertEqual(button.attributedTitle.string, "")
         XCTAssertEqual(
@@ -1113,7 +1031,6 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         }
         XCTAssertEqual(harness.model.state.events.map(\.id), ["E1"])
 
-        // Cached events keep showing, with the staleness surfaced alongside them.
         let state = dropdownState(harness)
         XCTAssertNotNil(state.providerWarning)
         XCTAssertTrue(dropdownEventTitles(harness).contains { $0.contains("Event E1") })
@@ -1147,7 +1064,6 @@ final class CalendarSettingsEndToEndFlowTests: EndToEndFlowTestCase {
         }
         XCTAssertFalse(dropdownEventTitles(harness).contains { $0.contains("Event B") })
 
-        // Escape the trigger-throttle window before the selection-driven refresh.
         try await settleRefreshWindow(harness)
         harness.model.toggleCalendarSelection(id: calendarB.id, selected: true)
 

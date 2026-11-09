@@ -1,13 +1,10 @@
 //
-//  ReminderSelection+MeetingBar.swift
-//  MeetingBarNG
+//  ReminderSelection+Punctual.swift
+//  Punctual
 //
-//  App-target adapter bridging the host `MBReminder` value type to the hostless
-//  `ReminderSelectionItem` / `ReminderSelection` logic (Calendar/ReminderSelection.swift).
-//  Mirrors `EventSelection+MeetingBar.swift`: the pure module stays free of
-//  AppKit/EventKit while the app maps its richer value type onto it.
+//  Maps `MBReminder` onto the pure `ReminderSelection` logic.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
@@ -26,9 +23,7 @@ extension ReminderSelectionItem {
 }
 
 extension Array where Element == MBReminder {
-    /// Incomplete reminders due today (optionally including overdue), sorted by
-    /// the hostless `ReminderSelection.dueToday` policy. Maps each selected item
-    /// back to its original `MBReminder` via `sourceIndex`.
+    /// Incomplete reminders due today, optionally with overdue ones, sorted by `ReminderSelection.dueToday`.
     func dueToday(
         now: Date = Date(),
         includeOverdue: Bool,

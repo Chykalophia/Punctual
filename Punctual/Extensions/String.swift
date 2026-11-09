@@ -9,7 +9,7 @@
 import Foundation
 
 extension String {
-    /// Returns a version of the first occurence of `target` is replaced by `replacement`.
+    /// Returns the string with the first occurrence of `target` replaced by `replacement`.
     /// - Parameters:
     ///   - target: The string to search for.
     ///   - replacement: The replacement string.
@@ -27,8 +27,7 @@ extension String {
         return htmlRange != nil
     }
 
-    /// Returns a version of the string with all HTML tags removed, if any.
-    /// - Returns: The string without HTML tags.
+    /// Returns the string with all HTML tags removed.
     func htmlTagsStripped() -> String {
         if !containsHTML {
             return self

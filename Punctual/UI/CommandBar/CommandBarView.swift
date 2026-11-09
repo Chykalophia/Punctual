@@ -1,11 +1,9 @@
 //
 //  CommandBarView.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Spotlight-style Command Bar surface. Presentation-only: a focused search
-//  field plus a keyboard-navigable results list bound to CommandBarViewModel.
-//  Keyboard handling uses macOS 12-safe modifiers (.onMoveCommand / .onExitCommand
-//  / .onSubmit) — NOT .onKeyPress (macOS 14+).
+//  Command Bar surface: a search field and a keyboard-navigable results list bound to
+//  CommandBarViewModel.
 //
 
 import SwiftUI

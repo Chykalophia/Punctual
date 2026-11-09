@@ -5,12 +5,7 @@
 //  Created by Andrii Leitsius on 12.05.2025.
 //  Copyright © 2025 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026: hold a SET of
-//  connected sources rather than one active provider. macOS Calendar and the
-//  direct Google provider can now be connected at the same time; calendars and
-//  events are fetched from every connected source and merged. A source that
-//  fails no longer blanks out the ones that worked — see `fetchOutcome`.
-//  Punctual, 2026-11-05: require Sendable results in `gather` (Xcode 16 SDK).
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 import Combine
 import Defaults
@@ -35,9 +30,7 @@ func calendarDateRange(for period: ShowEventsForPeriod) -> (from: Date, to: Date
 
 enum CalendarRepositoryError: LocalizedError {
     case noCalendars(EventStoreProvider)
-    /// Every connected source failed. Carries the first underlying error so the
-    /// existing auth-required and error-description handling still sees a real
-    /// provider error rather than a wrapper.
+    /// Every connected source failed; carries the first underlying error.
     case allSourcesFailed(Error)
 
     var errorDescription: String? {
@@ -59,10 +52,7 @@ public struct CalendarFetchOutcome<Element> {
     public var failures: [CalendarSourceFailure]
 }
 
-/// Owns the connected calendar providers and exposes calendar/event fetching.
-///
-/// `CalendarSync` delegates to `CalendarRepository` for all provider-specific
-/// work so that source management is in one place.
+/// Owns the connected calendar providers and exposes calendar and event fetching.
 @MainActor
 public final class CalendarRepository {
     // MARK: - Connected sources
@@ -70,10 +60,8 @@ public final class CalendarRepository {
     /// Which sources are connected. Never empty.
     public private(set) var selection: CalendarSourceSelection
 
-    /// The provider that handles WRITES and stands in wherever a single
-    /// provider identity is still required (per-provider calendar selection,
-    /// the diagnostics report, EventKit-only affordances). EventKit whenever it
-    /// is connected, because it is the only writable source.
+    /// The provider that handles writes and stands in wherever a single provider is required.
+    /// EventKit whenever it is connected, as the only writable source.
     public var activeProviderName: EventStoreProvider {
         selection.writeSource?.provider ?? selection.providers.first ?? .macOSEventKit
     }
@@ -81,9 +69,8 @@ public final class CalendarRepository {
     /// The store behind `activeProviderName`.
     public var activeProvider: EventStore { store(for: activeProviderName) }
 
-    /// Live stores, one per provider, created on demand and then reused. Held
-    /// even for sources that are currently disconnected so that reconnecting
-    /// does not discard an in-memory auth state.
+    /// Live stores, one per provider, created on demand.
+    /// Kept after disconnect so reconnecting reuses the in-memory auth state.
     private var stores: [EventStoreProvider: EventStore] = [:]
     private let storeFactory: (EventStoreProvider) -> EventStore
     private let observesSystemStoreChanges: Bool
@@ -108,13 +95,11 @@ public final class CalendarRepository {
 
     // MARK: - Source management
 
-    /// Connects `providerName`, ADDING it to the connected set rather than
-    /// replacing what is already there. Signing in and listing calendars happen
-    /// before the set changes, so a failed connection leaves the previous state
-    /// untouched.
+    /// Connects `providerName`, adding it to the connected set.
     ///
-    /// Re-connecting an already-connected source is how re-authorization works:
-    /// pass `signOut: true` to force a fresh sign-in.
+    /// The set changes only after sign-in and calendar listing succeed.
+    /// - Parameter signOut: Forces a fresh sign-in, for re-authorizing a connected source.
+    /// - Returns: Calendars from every connected source.
     @discardableResult
     public func connect(
         _ providerName: EventStoreProvider,
@@ -139,12 +124,8 @@ public final class CalendarRepository {
         return try await fetchAllCalendars().elements
     }
 
-    /// Disconnects a source. Refused when it is the last one connected — see
-    /// `CalendarSourceSelection` on why zero sources is not a modelled state.
-    ///
-    /// `signOut` discards the provider's stored credentials. Defaulting it to
-    /// false means disconnecting and reconnecting is not a fresh OAuth round
-    /// trip; signing out is a separate, deliberate action.
+    /// Disconnects a source; a no-op for the last connected source.
+    /// - Parameter signOut: Also discards the provider's stored credentials.
     public func disconnect(_ providerName: EventStoreProvider, signOut: Bool = false) async {
         guard selection.canDisable(providerName.sourceKind) else { return }
         selection = selection.disabling(providerName.sourceKind)
@@ -158,8 +139,7 @@ public final class CalendarRepository {
         observeStoreChanges()
     }
 
-    /// Replaces the connected set wholesale, connecting and disconnecting as
-    /// needed to reach `target`. Used by the source toggles.
+    /// Connects and disconnects sources as needed to reach `target`.
     public func applySelection(_ target: CalendarSourceSelection) async throws {
         for provider in selection.providers where !target.isEnabled(provider) {
             await disconnect(provider)
@@ -194,24 +174,16 @@ public final class CalendarRepository {
         from dateFrom: Date,
         to dateTo: Date
     ) async throws -> CalendarFetchOutcome<MBEvent> {
-        // Each store is handed only the calendars it owns. A source with none
-        // selected is still called, exactly as the single-provider code called
-        // the active provider with an empty list: both stores return no events
-        // for an empty selection, and short-circuiting here instead would make
-        // "no calendars ticked" a different code path than "none matched".
+        // Each store gets only its own calendars, and is called even with none.
         try await gather { store, provider in
             let owned = calendars.filter { $0.provider == provider }
             return try await store.fetchEventsForDateRange(for: owned, from: dateFrom, to: dateTo)
         }
     }
 
-    /// The user's selected calendars out of `allCalendars`, across every
-    /// connected source.
+    /// The user's selected calendars out of `allCalendars`, across every connected source.
     ///
-    /// Calendar selection is stored PER PROVIDER, so each source's calendars are
-    /// matched against that source's own selected IDs. Filtering the merged list
-    /// against a single provider's ID list — which is what the single-provider
-    /// code did — silently drops every calendar belonging to the other source.
+    /// Each calendar is matched against its own provider's selected IDs.
     public func selectedCalendars(from allCalendars: [MBCalendar]) -> [MBCalendar] {
         let selectedByProvider = Dictionary(
             uniqueKeysWithValues: selection.providers.map {
@@ -244,16 +216,11 @@ public final class CalendarRepository {
 
     /// Runs `work` against every connected source and merges the results.
     ///
-    /// A source that throws is recorded as a partial failure rather than
-    /// aborting the whole fetch: with two sources connected, an expired Google
-    /// token must not blank out the macOS Calendar events that fetched fine.
-    /// Only when EVERY source fails does this throw, so a genuinely broken
-    /// single-source install still surfaces its error exactly as before.
+    /// A source that throws is recorded in `failures` instead of aborting the fetch.
+    /// - Throws: The provider's own error when the only source fails, otherwise
+    ///   `CalendarRepositoryError.allSourcesFailed` when every source fails.
     ///
-    /// Sources are walked in display order and awaited one at a time. That is
-    /// deliberate: fetches are network- or XPC-bound and each provider already
-    /// parallelizes internally, while a task group here would make the merged
-    /// order non-deterministic and cost more than it saves for two sources.
+    /// Sources are awaited sequentially on purpose, to keep the merged order deterministic.
     private func gather<Element: Sendable>(
         _ work: (EventStore, EventStoreProvider) async throws -> [Element]
     ) async throws -> CalendarFetchOutcome<Element> {
@@ -320,8 +287,7 @@ public final class CalendarRepository {
             )
         }
 
-        /// Test-only: start with SEVERAL sources already connected, without
-        /// driving each one through `connect`.
+        /// Test-only: start with several sources already connected, without calling `connect`.
         public init(
             selection: CalendarSourceSelection,
             storeFactory: @escaping (EventStoreProvider) -> EventStore
@@ -329,9 +295,7 @@ public final class CalendarRepository {
             self.selection = selection
             self.storeFactory = storeFactory
             self.observesSystemStoreChanges = false
-            // Realize the initially connected stores up front. Lazy creation
-            // would leave `stores` empty until the first fetch, so `stop()`
-            // before any fetch would cancel nothing.
+            // Created eagerly so `stop()` before the first fetch still cancels them.
             for provider in selection.providers {
                 _ = store(for: provider)
             }
@@ -363,9 +327,8 @@ public final class CalendarRepository {
         }
     }
 
-    /// Watches EventKit for external changes whenever macOS Calendar is one of
-    /// the connected sources. Google has no equivalent push signal; it relies on
-    /// the periodic refresh.
+    /// Watches EventKit for external changes while macOS Calendar is connected.
+    /// Google has no push signal and relies on the periodic refresh.
     private func observeStoreChanges() {
         storeChangeCancellable?.cancel()
         storeChangeCancellable = nil

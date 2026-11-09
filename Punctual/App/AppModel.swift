@@ -13,11 +13,7 @@ import Foundation
 
 // MARK: - Clock
 
-/// One place for workflow code to ask "what time is it?"
-///
-/// The app still formats dates directly in views where that is presentation
-/// work. AppModel decisions use this clock so tests can make time-sensitive
-/// behavior deterministic.
+/// Injectable time source, so time-sensitive model decisions are testable.
 struct AppClock {
     var now: @Sendable () -> Date
 
@@ -30,28 +26,22 @@ struct AppClock {
 
 // MARK: - State
 
-/// Complete observable state of the application at a point in time.
-///
-/// `AppState` is value-typed and derived from lower-level sources of truth
-/// (`CalendarSync`, `AppSettings`, system state). Renderers (status bar,
-/// menus, notifications) read from `AppState` rather than reaching through
-/// managers directly.
+/// Observable application state, derived from `CalendarSync`, `AppSettings` and
+/// system state. Renderers read it rather than reaching into managers.
 struct AppState: Equatable {
     // MARK: Calendar
 
     var calendars: [MBCalendar] = []
     var events: [MBEvent] = []
     var selectedCalendarIDs: [String] = []
-    /// The source that handles writes and stands in wherever one provider
-    /// identity is still needed. See `connectedProviders` for what is actually
-    /// being fetched.
+    /// The write-capable source. `connectedProviders` lists every source being fetched.
     var activeProvider: EventStoreProvider = .macOSEventKit
     /// Every source connected right now, in display order.
     var connectedProviders: [EventStoreProvider] = [.macOSEventKit]
     var providerChangeInProgress = false
     var providerHealth = ProviderHealth()
 
-    // MARK: Reminders (Dot parity)
+    // MARK: Reminders
 
     /// Latest incomplete Apple Reminders published by `RemindersSync`. Empty
     /// unless the feature is enabled and access has been granted.
@@ -74,18 +64,14 @@ struct AppState: Equatable {
     }
 }
 
-/// Calendars plus the source context they were fetched under.
-///
-/// Replaces the `([MBCalendar], EventStoreProvider)` tuple that carried this
-/// before multi-source. With two sources connected the calendar list is a merge
-/// of both, so "which provider are these from" stopped having a single answer:
-/// `primary` is the write-capable source and `connected` is the real set.
+/// Calendars plus the source context they were fetched under: `primary` is the
+/// write-capable source and `connected` is every connected source.
 struct CalendarSnapshot: Equatable {
     var calendars: [MBCalendar]
     var primary: EventStoreProvider
     var connected: [EventStoreProvider]
 
-    /// `connected` defaults to just `primary` — the single-source shape.
+    /// `connected` defaults to `[primary]`.
     init(
         calendars: [MBCalendar],
         primary: EventStoreProvider,
@@ -101,9 +87,7 @@ struct CalendarSnapshot: Equatable {
 
 enum AppRoute: Equatable {
     case preferences
-    /// Opens the dropdown panel. Deep link so the panel can be opened
-    /// without clicking the status item — used by automation and by
-    /// anything that wants to surface today's agenda directly.
+    /// Opens the dropdown panel without a status-item click.
     case dropdown
     case oauthCallback(URL)
     case unknown(URL)
@@ -111,11 +95,8 @@ enum AppRoute: Equatable {
 
 // MARK: - Action
 
-/// All events that change application state.
-///
-/// Dispatched to `AppModel.send(_:)`; never carries
-/// AppKit/UserNotifications/EventKit types so the model stays testable
-/// without a running host app.
+/// All events that change application state, dispatched to `AppModel.send(_:)`.
+/// Never carries AppKit, UserNotifications or EventKit types.
 enum AppAction {
     // Lifecycle
     case launched
@@ -132,10 +113,8 @@ enum AppAction {
     // Calendar
     case calendarStoreChanged
     case refreshCalendars
-    /// Aggressively nudge macOS to sync (EventKit `refreshSourcesIfNecessary()`)
-    /// then re-fetch. Debounced inside `CalendarSync`. Raised on status-menu
-    /// open / wake / unlock so stalled macOS syncs surface (and self-correct)
-    /// sooner than the periodic 180s timer would allow.
+    /// Asks the provider to sync now (EventKit `refreshSourcesIfNecessary()`), then
+    /// re-fetches. Debounced in `CalendarSync`.
     case forceCalendarSync
     case calendarsLoaded(CalendarSnapshot)
     case eventsLoaded([MBEvent])
@@ -143,13 +122,11 @@ enum AppAction {
     case providerHealthChanged(ProviderHealth)
     case calendarRefreshFailed(Error)
     case providerChanged(EventStoreProvider)
-    /// `provider` names the SOURCE the calendar belongs to. With more than
-    /// one source connected, the calendar's own provider decides which
-    /// per-source selection list the tick is written to; defaulting it to the
-    /// primary provider keeps every single-source call site unchanged.
+    /// `provider` is the source the calendar belongs to and picks the per-source
+    /// selection list; `nil` means the primary provider.
     case selectCalendar(id: String, selected: Bool, provider: EventStoreProvider?)
 
-    // Reminders (Dot parity)
+    // Reminders
     case remindersLoaded([MBReminder])
     case completeReminder(id: String)
     case snoozeReminder(id: String, option: ReminderSnoozeOption)
@@ -186,11 +163,8 @@ enum AppAction {
 
 // MARK: - Environment
 
-/// Injectable side-effect wiring used by `AppModel`.
-///
-/// Production code injects the real app components; tests inject fakes.
-/// `AppEnvironment` must not import AppKit, EventKit, UserNotifications, or
-/// AppAuth so that `AppModel` remains hostless-testable.
+/// Injectable side effects for `AppModel`. Must not import AppKit, EventKit,
+/// UserNotifications or AppAuth, so the model stays testable without a host.
 struct AppEnvironment {
     /// Live stream of the current event list from the active provider.
     var eventsPublisher: AnyPublisher<[MBEvent], Never>
@@ -208,10 +182,8 @@ struct AppEnvironment {
     /// Results flow back through `eventsPublisher` / `calendarsPublisher`.
     var triggerRefresh: @MainActor () -> Void
 
-    /// Aggressively nudge the active provider to sync now (EventKit:
-    /// `refreshSourcesIfNecessary()`) then re-fetch. Debounced inside
-    /// `CalendarSync`. Defaulted to a no-op so existing test call sites that
-    /// build `AppEnvironment` via the memberwise initializer keep compiling.
+    /// Asks the active provider to sync now, then re-fetches. Debounced in
+    /// `CalendarSync`. Defaults to a no-op.
     var forceSync: @MainActor () -> Void = {}
 
     /// Reconcile system notification requests with the current event plan.
@@ -219,22 +191,18 @@ struct AppEnvironment {
 
     /// Switch the active calendar provider. `signOut = true` drops the current session first.
     var changeProvider: @MainActor (EventStoreProvider, Bool) async -> ProviderSelectionResult
-    /// Disconnect a source, leaving the others connected. Defaulted to a
-    /// no-op so existing test call sites using the memberwise initializer keep
-    /// compiling.
+    /// Disconnects a source, leaving the others connected. Defaults to a no-op.
     var disconnectProvider: @MainActor (EventStoreProvider) async -> Void = { _ in }
 
-    /// Synchronous snapshot after provider changes. CalendarSync updates its
-    /// calendars before returning success, while its publisher is delivered to
-    /// AppModel on the next main-queue cycle.
+    /// Synchronous calendar snapshot for use right after a provider change, before
+    /// the publisher delivers on the next main-queue cycle.
     var currentCalendarSnapshot: @MainActor () -> CalendarSnapshot
 
     /// Add or remove a calendar from the user's selection. CalendarSync
     /// observes the underlying setting and re-fetches automatically.
     var toggleCalendarSelection: @MainActor (String, Bool, EventStoreProvider?) -> Void
 
-    /// Open the meeting for an event. Later PRs move every entry point onto
-    /// this route; for now it lets AppModel own the action vocabulary.
+    /// Opens the meeting for an event.
     var openMeeting: @MainActor (MBEvent) -> Void
 
     /// Dismiss an event from next-meeting workflows.
@@ -266,10 +234,8 @@ struct AppEnvironment {
     /// Current wall-clock time for workflow decisions.
     var clock: AppClock
 
-    // MARK: Reminders (Dot parity)
-    //
-    // Defaulted so existing (test) call sites that build `AppEnvironment` via the
-    // memberwise initializer keep compiling without the reminders wiring.
+    // MARK: Reminders
+    // Defaulted so test call sites can omit the reminders wiring.
 
     /// Live stream of the current reminders list from `RemindersSync`.
     var remindersPublisher: AnyPublisher<[MBReminder], Never> =
@@ -395,10 +361,8 @@ struct AppEnvironment {
 
 // MARK: - Model
 
-/// Central application model.
-///
-/// `AppModel` must not import AppKit, EventKit, UserNotifications, or AppAuth.
-/// All side effects are performed through `AppEnvironment`.
+/// Central application model. Performs all side effects through `AppEnvironment`
+/// and must not import AppKit, EventKit, UserNotifications or AppAuth.
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var state: AppState = AppState()
@@ -416,8 +380,6 @@ final class AppModel: ObservableObject {
     init(environment: AppEnvironment) {
         self.environment = environment
 
-        // `@Published` delivers the current value immediately on subscription,
-        // so AppModel is up-to-date even if CalendarSync already fetched.
         environment.eventsPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in
@@ -482,9 +444,7 @@ final class AppModel: ObservableObject {
 
     // MARK: Convenience methods for system triggers
 
-    /// Self-documenting wrappers around `send(_:)` for the most common
-    /// system-event paths. Callers don't need to import `AppAction` to
-    /// route a wake/lock/timezone change through the model.
+    /// Convenience wrappers around `send(_:)` for system triggers.
     func handleLaunch() { send(.launched) }
     func handleWillTerminate() { send(.willTerminate) }
     func handleScreenLock() { send(.screenLocked) }
@@ -497,8 +457,7 @@ final class AppModel: ObservableObject {
     func requestRefresh() { send(.refreshCalendars) }
     func reconcileNotifications() { send(.reconcileNotifications) }
 
-    /// Add or remove a calendar from the user's selection. Routes through
-    /// `AppEnvironment` so the model stays free of `Defaults` writes.
+    /// Adds or removes a calendar from the user's selection.
     func toggleCalendarSelection(
         id: String,
         selected: Bool,
@@ -511,13 +470,11 @@ final class AppModel: ObservableObject {
         state.nextEvent(now: environment.clock.now(), linkRequired: linkRequired)
     }
 
-    /// Onboarding is an async workflow because provider authorization can
-    /// prompt the user. Provider setup happens before this method; completion
-    /// only succeeds for the active provider with at least one selected calendar.
+    /// Completes onboarding. Succeeds only for a connected provider with at least one
+    /// selected calendar.
     func completeOnboarding(with provider: EventStoreProvider) async -> ProviderSelectionResult {
-        // Connected, not "the active one": `activeProvider` names the
-        // write-capable source, which is not necessarily the source onboarding
-        // just set up.
+        // Connected rather than active: `activeProvider` is the write-capable source,
+        // which may not be the one onboarding set up.
         guard state.connectedProviders.contains(provider) else {
             return .failed("The selected calendar provider is not active")
         }
@@ -527,8 +484,7 @@ final class AppModel: ObservableObject {
         return await environment.completeOnboarding(provider)
     }
 
-    /// Performs the transactional provider flow and returns its explicit result
-    /// so onboarding can decide whether it is safe to advance.
+    /// Runs a provider change and returns its result.
     func changeProvider(
         to provider: EventStoreProvider,
         signOut: Bool = false
@@ -541,20 +497,13 @@ final class AppModel: ObservableObject {
         )
     }
 
-    /// Connects `provider` and disconnects every other source, making it the
-    /// only one.
-    ///
-    /// Onboarding's source choice means "this is where my meetings come from",
-    /// not "add this to what is already on". Because a fresh install starts with
-    /// macOS Calendar connected, the plain additive `changeProvider` would leave
-    /// someone who deliberately picked Google seeing their Mac's calendars too.
-    /// Preferences ▸ Calendars is where a second source gets added later.
+    /// Connects `provider` and disconnects every other source. Used by onboarding,
+    /// because a fresh install starts with macOS Calendar already connected.
     func selectSoleProvider(_ provider: EventStoreProvider) async -> ProviderSelectionResult {
         let result = await changeProvider(to: provider)
         guard result == .success else { return result }
 
-        // Safe to walk: `provider` was just connected, so disconnecting the
-        // others can never empty the set.
+        // `provider` is connected, so disconnecting the others never empties the set.
         for other in state.connectedProviders where other != provider {
             await environment.disconnectProvider(other)
         }
@@ -582,8 +531,6 @@ final class AppModel: ObservableObject {
         case .screenUnlocked:
             state.screenIsLocked = false
             scheduleRefresh()
-            // Credentials/sync may have lapsed while locked: nudge macOS to
-            // sync (debounced) so stalled data surfaces and self-corrects.
             environment.forceSync()
         case .systemClockChanged, .timezoneChanged:
             state.timeContextRevision += 1
@@ -591,7 +538,6 @@ final class AppModel: ObservableObject {
             scheduleRefresh()
         case .didWake, .dayChanged:
             scheduleRefresh()
-            // After sleep the account may be behind: force an aggressive sync.
             if case .didWake = action {
                 environment.forceSync()
             }
@@ -692,8 +638,6 @@ final class AppModel: ObservableObject {
                 await environment.completeReminder(id)
             }
         case .snoozeReminder(let id, let option):
-            // The new due date is pure math (ReminderSnoozePolicy); the host only
-            // performs the resulting reschedule.
             let newDueDate = ReminderSnoozePolicy.newDueDate(
                 from: environment.clock.now(),
                 option: option,
@@ -766,9 +710,8 @@ final class AppModel: ObservableObject {
         state.events = []
     }
 
-    /// Disconnects a source and adopts the resulting snapshot. Shares the
-    /// generation counter with `performProviderChange` so a disconnect and a
-    /// connect racing each other cannot both write state.
+    /// Disconnects a source and adopts the resulting snapshot. Shares the generation
+    /// counter with `performProviderChange` so racing changes cannot both write state.
     private func startProviderDisconnect(_ provider: EventStoreProvider) {
         providerChangeTask?.cancel()
         let generation = beginProviderChange()
@@ -801,11 +744,7 @@ final class AppModel: ObservableObject {
         guard generation == providerChangeGeneration else { return .cancelled }
 
         if result == .success {
-            // The merged list already contains every connected source, so it is
-            // adopted wholesale. The single-provider code discarded it whenever
-            // the snapshot's provider differed from the one just connected —
-            // which is now the normal case, since connecting Google leaves
-            // EventKit as the primary.
+            // Adopt the merged snapshot wholesale; its primary may differ from `provider`.
             let snapshot = environment.currentCalendarSnapshot()
             state.activeProvider = snapshot.primary
             state.connectedProviders = snapshot.connected

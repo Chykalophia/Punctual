@@ -1,11 +1,8 @@
 //
 //  OngoingEventVisibilityTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Regression coverage for "Hide the current meeting from the menu bar".
-//  Reported live: with the setting on "10 minutes after it starts", a meeting
-//  that had *just* started was already gone, so there was no way to join the
-//  meeting the user was supposed to be in.
+//  Tests for "Hide the current meeting from the menu bar" and next-event selection.
 //
 
 import XCTest
@@ -75,7 +72,6 @@ final class OngoingEventVisibilityTests: XCTestCase {
 
     // MARK: - "10 minutes after it starts"
 
-    /// The reported failure: a meeting ~2 minutes in must still be selected.
     func testMeetingThatJustStartedIsStillSelected() {
         let running = event(id: "running", startsIn: -120)
         XCTAssertEqual(selected([running], .showTenMinAfter), "running")
@@ -91,8 +87,6 @@ final class OngoingEventVisibilityTests: XCTestCase {
         XCTAssertNil(selected([running], .showTenMinAfter))
     }
 
-    /// With a later meeting queued, the running one still wins for the first
-    /// ten minutes — otherwise "Join" points at the wrong meeting.
     func testRunningMeetingBeatsALaterOneWithinTenMinutes() {
         let events = [event(id: "running", startsIn: -120), event(id: "later", startsIn: 3600)]
         XCTAssertEqual(selected(events, .showTenMinAfter), "running")
@@ -103,11 +97,10 @@ final class OngoingEventVisibilityTests: XCTestCase {
         XCTAssertEqual(selected(events, .showTenMinAfter), "later")
     }
 
-    // MARK: - The reported day, reproduced exactly
+    // MARK: - Full-day sequence
 
-    /// The real schedule at the moment of the report: a 15-minute stand-up that
-    /// began 114 seconds earlier, the huddle that ended as it began, and the
-    /// next meeting an hour out. The stand-up must be selected.
+    /// Fixture: a 15-minute stand-up 114s in, a huddle that ended as it began, and
+    /// the next meeting an hour out.
     func testReportedSchedulePicksTheStandUpThatJustStarted() {
         let events = [
             event(id: "clarity-break", startsIn: -1914, duration: 900, hasMeetingLink: false, hasAttendees: false),
@@ -118,9 +111,7 @@ final class OngoingEventVisibilityTests: XCTestCase {
         XCTAssertEqual(selected(events, .showTenMinAfter), "standup")
     }
 
-    /// A 15-minute meeting is shorter than the 10-minute grace period, so the
-    /// window in which it can be selected is real but narrow. It must survive
-    /// right up to the moment the grace period expires.
+    /// Started 599s ago: one second before the ten-minute grace period expires.
     func testShortMeetingSurvivesUntilTheGracePeriodExpires() {
         let standup = event(id: "standup", startsIn: -599, duration: 900)
         XCTAssertEqual(selected([standup], .showTenMinAfter), "standup")
@@ -128,10 +119,7 @@ final class OngoingEventVisibilityTests: XCTestCase {
 
     // MARK: - The hidden coupling: "show as inactive" also de-selects
 
-    /// Documents today's behaviour rather than endorsing it: choosing
-    /// "show as inactive" for tentative invites ALSO removes them from
-    /// next-event selection, so an in-progress tentative meeting cannot be
-    /// joined from the menu bar. The label only ever described styling.
+    /// Pins current behaviour rather than endorsing it.
     func testInactiveTentativeIsAlsoRemovedFromSelection() {
         let running = event(id: "running", startsIn: -120, participationStatus: .tentative)
         XCTAssertNil(selected([running], settings(.showTenMinAfter, hidesTentativeEvents: true)))
@@ -153,8 +141,6 @@ final class OngoingEventVisibilityTests: XCTestCase {
         XCTAssertEqual(selected([soon], .hideImmediateAfter), "soon")
     }
 
-    /// `.showTenMinBeforeNext` keeps the running meeting until the next one is
-    /// within ten minutes, at which point the next one takes over.
     func testShowUntilNextIsCloseKeepsTheRunningMeeting() {
         let events = [
             event(id: "running", startsIn: -1800, duration: 3600),

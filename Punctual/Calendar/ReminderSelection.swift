@@ -1,17 +1,13 @@
 //
 //  ReminderSelection.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless selection + snooze logic for Apple Reminders in the menu (Dot
-//  parity). Pure value types + math only — no AppKit/EventKit — so it compiles
-//  into the MeetingBarLogic module and is unit-tested without a host. Mirrors
-//  the EventSelection value-type + pure-function pattern.
+//  Pure selection, sorting and snooze logic for Apple Reminders in the menu.
 //
 
 import Foundation
 
-/// Flat mirror of a reminder for hostless filtering/sorting. `sourceIndex` maps
-/// a result back to the caller's `[MBReminder]`.
+/// Projection of a reminder for filtering and sorting. `sourceIndex` maps back to the caller's array.
 struct ReminderSelectionItem: Equatable {
     let sourceIndex: Int
     let id: String
@@ -23,11 +19,9 @@ struct ReminderSelectionItem: Equatable {
 }
 
 enum ReminderSelection {
-    /// Incomplete reminders due today (optionally including overdue), sorted
-    /// overdue-first, then by due date ascending, then priority (high first),
-    /// then `sourceIndex` for stability.
+    /// Incomplete reminders due today, optionally with overdue ones; reminders without a due date are excluded.
     ///
-    /// Reminders with no due date are excluded — "due today" requires a due date.
+    /// Sorted overdue first, then by due date, then priority (high first), then `sourceIndex`.
     static func dueToday(
         from reminders: [ReminderSelectionItem],
         now: Date,
@@ -65,8 +59,7 @@ enum ReminderSelection {
     }
 }
 
-/// Snooze targets offered on a reminder (reschedules its own due date, Dot-style
-/// — reflected back into Apple Reminders, distinct from notification snoozing).
+/// Snooze targets for a reminder; snoozing moves the reminder's due date in Apple Reminders.
 enum ReminderSnoozeOption: String, CaseIterable, Equatable {
     case laterToday
     case thisEvening

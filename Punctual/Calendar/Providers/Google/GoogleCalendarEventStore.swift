@@ -1,13 +1,11 @@
 //
-//  GCEventStore.swift
+//  GoogleCalendarEventStore.swift
 //  MeetingBar
 //
 //  Created by Andrii Leitsius on 21.11.2021.
 //  Copyright © 2021 Andrii Leitsius. All rights reserved.
 //
-//  Modified for Punctual (formerly MeetingBarNG) by Peter Krzyzek / Chykalophia,
-//  2026-10-01: the "Google account connected" message is skipped during
-//  first-run setup (see AppMessage.shouldPresent).
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppAuth
@@ -16,16 +14,12 @@ import AppKit
 import Defaults
 import Foundation
 
-/// Google OAuth configuration, read from the app's Info.plist (populated at
-/// build time from `XCConfig/GoogleSecrets.xcconfig` — see README). Reads are
-/// non-crashing: a missing or still-placeholder value simply leaves
-/// `isConfigured == false`, and `GCEventStore.signIn` throws
-/// `AuthError.notConfigured` instead of trapping on a force-unwrap.
+/// Google OAuth configuration read from the app's Info.plist, populated at
+/// build time from `XCConfig/GoogleSecrets.xcconfig`. A missing or placeholder
+/// value leaves `isConfigured == false` rather than trapping.
 enum GoogleOAuthConfig {
-    /// The build's client id. `GOOGLE_CLIENT_ID` is the current name and takes
-    /// either the full id or just the number; `GOOGLE_CLIENT_NUMBER` is the
-    /// former name, still read so an existing `GoogleSecrets.xcconfig` keeps
-    /// working. `GoogleOAuthClientResolver` normalizes whichever form arrives.
+    /// The build's client id, as a full id or just the number.
+    /// Falls back to the legacy `GOOGLE_CLIENT_NUMBER` key so existing xcconfigs keep working.
     static let clientNumber: String = {
         let current = infoString("GOOGLE_CLIENT_ID")
         guard GoogleOAuthClientResolver.isValidClientID(current) else {
@@ -38,37 +32,27 @@ enum GoogleOAuthConfig {
 
     /// The client secret as AppAuth must receive it: `nil` when there isn't one.
     ///
-    /// This is NOT cosmetic. AppAuth branches on `if (_clientSecret)` in
-    /// Objective-C, where an empty `NSString` is a non-nil object and therefore
-    /// TRUE. Handing it `""` makes it authenticate the token request with
-    /// `Authorization: Basic base64("<id>:")` instead of putting `client_id` in
-    /// the body — and Google rejects that with `invalid_client` for an
-    /// "iOS"-type client, which is the type this app's reversed-domain redirect
-    /// wants and the one the setup docs recommend. So the recommended,
-    /// no-secret configuration was the one that could not sign in.
+    /// Must be nil, not `""`: AppAuth treats an empty NSString as present and switches to
+    /// HTTP Basic client auth, which Google rejects with `invalid_client` for secretless clients.
     static var oauthClientSecret: String? { normalizedSecret(clientSecret) }
 
-    /// Pure so the empty-vs-nil distinction above is testable without the
-    /// ambient build's Info.plist.
+    /// Maps an empty secret to `nil`.
     static func normalizedSecret(_ secret: String) -> String? {
         secret.isEmpty ? nil : secret
     }
 
     /// True when the current build carries real OAuth credentials.
     ///
-    /// This is about the BUILD only. Whether Google can actually be used is
-    /// `effectiveClient != nil`, which is also satisfied by a user-supplied
-    /// client — a build shipping no credentials is still fully usable by
-    /// bringing your own.
+    /// Describes the build only; Google is usable whenever `effectiveClient != nil`,
+    /// which a user-supplied client also satisfies.
     static var isConfigured: Bool {
         isConfigured(clientNumber: clientNumber, clientSecret: clientSecret, keychainName: keychainName)
     }
 
-    /// Pure validation, split out so it's unit-testable without depending on the
-    /// ambient build's Info.plist. The client number and keychain name must be
-    /// real (non-empty, not the build placeholder); the client secret may be
-    /// empty — "iOS"-type OAuth clients (whose reversed-domain redirect scheme
-    /// this app uses) have none — but must not be left as the placeholder.
+    /// Validates raw configuration values.
+    ///
+    /// The client number and keychain name must be non-empty and not the build placeholder.
+    /// The client secret may be empty (secretless clients) but must not be the placeholder.
     static func isConfigured(clientNumber: String, clientSecret: String, keychainName: String) -> Bool {
         !clientNumber.isEmpty && !clientNumber.hasPrefix("REPLACE_BY_YOUR")
             && !keychainName.isEmpty && !keychainName.hasPrefix("REPLACE_BY_YOUR")
@@ -82,10 +66,8 @@ enum GoogleOAuthConfig {
 
 let googleClientNumber = GoogleOAuthConfig.clientNumber
 let googleAuthKeychainName = GoogleOAuthConfig.keychainName
-// No `googleClientSecret` alias on purpose: the only correct way to hand the
-// secret to AppAuth is `GoogleOAuthConfig.oauthClientSecret`, which maps "no
-// secret" to nil rather than "". A convenience alias for the raw string is what
-// made passing `""` straight through look reasonable.
+// No `googleClientSecret` alias on purpose: pass the secret only via
+// `GoogleOAuthConfig.oauthClientSecret`, which maps "no secret" to nil.
 
 extension OIDServiceConfiguration: @unchecked @retroactive Sendable {}
 
@@ -97,11 +79,6 @@ extension OIDAuthState {
     }
 
     /// The signed-in account address, from the ID token's `email` claim.
-    ///
-    /// Decoding lives in `GoogleIDToken` because the payload is base64URL and
-    /// `Data(base64Encoded:)` rejects it — see that file. The version here
-    /// decoded it as standard base64, so this was very nearly always nil and
-    /// every Google calendar ended up filed under "Other".
     var userEmail: String? {
         GoogleIDToken.email(fromIDToken: lastTokenResponse?.idToken)
     }
@@ -119,29 +96,15 @@ final class GCEventStore: NSObject,
     private static let kIssuer       = "https://accounts.google.com"
     private static let kKeychainName = googleAuthKeychainName
 
-    /// Loopback HTTP listener that receives the OAuth redirect.
+    /// Loopback HTTP listener (127.0.0.1, ephemeral port) that receives the OAuth redirect for one sign-in.
     ///
-    /// REPLACES the reversed-domain custom scheme
-    /// (`com.googleusercontent.apps.<n>:/oauthredirect`). Two reasons, either
-    /// sufficient:
-    ///
-    /// 1. A custom scheme has to be declared in `CFBundleURLTypes` at BUILD
-    ///    time, so a client id supplied at RUNTIME could never receive its
-    ///    redirect — bring-your-own-client is impossible with it.
-    /// 2. Google documents loopback as the recommended redirect for macOS
-    ///    desktop apps and is retiring custom schemes over app-impersonation
-    ///    risk: any other app on the Mac can register the same scheme and
-    ///    intercept the redirect. PKCE keeps an intercepted code unusable, but
-    ///    not receiving it at all is better.
-    ///
-    /// Held per sign-in and torn down after; requires the
-    /// `com.apple.security.network.server` entitlement, which is scoped to
-    /// 127.0.0.1 on an ephemeral port for the duration of the flow.
+    /// Loopback, not a custom URL scheme: a scheme must be declared at build time (blocking runtime
+    /// client ids) and can be registered by another app to intercept the code.
+    /// Requires the `com.apple.security.network.server` entitlement.
     private var redirectHandler: OIDRedirectHTTPHandler?
 
-    /// Serves the branded "connected" page the browser is sent to afterwards.
-    /// Separate from `redirectHandler` on purpose: AppAuth keeps the whole
-    /// OAuth-critical path, and this only serves HTML.
+    /// Serves the branded "connected" page the browser is redirected to after sign-in.
+    /// Kept separate from `redirectHandler` so AppAuth owns the whole OAuth-critical path.
     private let completionPage = OAuthCompletionPageServer()
 
     // MARK: Stored properties
@@ -150,24 +113,19 @@ final class GCEventStore: NSObject,
 
     private var authState: OIDAuthState? {
         didSet {
-            // ensure delegates always set
             authState?.stateChangeDelegate = self
             authState?.errorDelegate       = self
-            // Keep the account address in step with the session that carries it,
-            // including when a token refresh replaces the state.
             userEmail = authState?.userEmail
             persistAuthState()
         }
     }
 
-    /// Google's event colour palette for this run. Google documents `/colors`
-    /// as rarely changing and asks that it be cached.
+    /// Google's event colour palette, cached for the run as Google's `/colors` docs request.
     private var cachedPalette: GoogleColorPalette?
 
     private var signInTask: Task<Void, Error>?
     private var refreshTask: Task<String, Error>?
 
-    // Shared URLSession to leverage connection reuse
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.default
         cfg.httpMaximumConnectionsPerHost = 6
@@ -176,18 +134,14 @@ final class GCEventStore: NSObject,
     }()
     private var urlSession: URLSession { Self.session }
 
-    // Singleton
     static let shared = GCEventStore()
     private override init() {
         super.init()
         self.authState = restoreAuthState()
-        // delegates were set in didSet, but set them again just in case restore returned nil
+        // `didSet` does not run for assignments inside `init`, so delegates and
+        // the account address are applied explicitly here.
         self.authState?.stateChangeDelegate = self
         self.authState?.errorDelegate       = self
-        // `didSet` does not run for assignments inside `init`, so the restored
-        // session's address has to be picked up explicitly. Without this the
-        // account was known only for the launch you signed in on, and every
-        // relaunch filed Google's calendars under "Other" again.
         self.userEmail = self.authState?.userEmail
     }
 
@@ -196,39 +150,25 @@ final class GCEventStore: NSObject,
     var isAuthorized: Bool { authState?.isAuthorized == true }
 
     func signIn(forcePrompt: Bool = false) async throws {
-        // Fail gracefully when there is no usable client — this build carries no
-        // credentials, or the user turned on their own and it is unusable —
-        // rather than starting a flow that cannot succeed.
         guard let client = GoogleOAuthConfig.effectiveClient,
               let issuerURL = URL(string: Self.kIssuer)
         else {
             throw AuthError.notConfigured
         }
 
-        // Tokens are bound to the client that obtained them. If the stored
-        // session belongs to a different client (the user switched to their own,
-        // or edited the id), drop it rather than replaying a refresh token the
-        // new client cannot use — that surfaces as `invalid_grant`, which reads
-        // like a broken account rather than a changed setting.
-        //
-        // BEFORE the reusable-session check on purpose. The stored tokens still
-        // look perfectly valid — they are another client's valid tokens — so
-        // skipping first would keep using them until they expired, and only then
-        // fail on a refresh the new client cannot perform.
+        // Tokens are bound to the client that issued them. Must run before the
+        // reusable-session check: another client's tokens still look valid.
         discardAuthStateIfClientChanged(to: client)
 
         if Self.shouldSkipSignIn(forcePrompt: forcePrompt, state: authState) {
             return
         }
 
-        // Start the page server first so its URL exists to hand to AppAuth. If
-        // it cannot bind, `successURL` stays nil and AppAuth serves its own
-        // plain page — worth losing the branding over, never worth failing the
-        // sign-in over.
+        // A nil `successURL` (page server could not bind) falls back to AppAuth's
+        // plain page; it must never fail the sign-in.
         let successURL = await completionPage.start()
 
-        // Start the loopback listener BEFORE building the request: the redirect
-        // URI has to carry the port it actually bound to.
+        // Listener must start before the request is built: the redirect URI carries its bound port.
         let handler = OIDRedirectHTTPHandler(successURL: successURL)
         redirectHandler = handler
         var listenerError: NSError?
@@ -238,21 +178,19 @@ final class GCEventStore: NSObject,
             throw listenerError
         }
 
-        // discover configuration for Google issuer
         let config = try await withCheckedThrowingContinuation { cont in
             OIDAuthorizationService.discoverConfiguration(forIssuer: issuerURL) { cfg, err in
                 if let cfg { cont.resume(returning: cfg) } else { cont.resume(throwing: err ?? NSError(domain: "GoogleSignIn", code: -1)) }
             }
         }
 
-        // request scopes we need
         let scopes = [
             "email",
             "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
             "https://www.googleapis.com/auth/calendar.events.readonly"
         ]
 
-        // additional parameters to be sure we get refresh_token
+        // `access_type=offline` is required for Google to issue a refresh token.
         var extra = [
             "access_type": "offline"
         ]
@@ -271,14 +209,10 @@ final class GCEventStore: NSObject,
         )
 
         defer {
-            // Whatever happened, stop listening. `cancelHTTPListener` is a no-op
-            // once a valid response has been received.
             redirectHandler?.cancelHTTPListener()
             redirectHandler = nil
-            // The page server outlives this function by design — the browser is
-            // redirected to it AFTER the code is exchanged, so tearing it down
-            // here would race the request it exists to answer. It is stopped on
-            // the next sign-in or sign-out instead.
+            // The page server is deliberately left running: the browser reaches it after
+            // the code exchange. It is stopped on the next sign-in or sign-out.
         }
 
         try await withCheckedThrowingContinuation { cont in
@@ -289,8 +223,6 @@ final class GCEventStore: NSObject,
                     self.authState = state    // didSet handles persistence & delegates
                     self.userEmail = state.userEmail
                     Defaults[.googleTokenClientIdentity] = client.tokenIdentity
-                    // Set before the browser is redirected, so the page can name
-                    // the account that was just connected.
                     self.completionPage.setAccountEmail(state.userEmail)
                     let connected = AppMessage.googleAccountConnected(email: self.userEmail ?? "")
                     if connected.shouldPresent(onboardingCompleted: Defaults[.onboardingCompleted]) {
@@ -302,8 +234,6 @@ final class GCEventStore: NSObject,
                 }
             }
             self.currentAuthorizationFlow = session
-            // The loopback server delivers the redirect to this session; without
-            // it the browser hits 127.0.0.1 and the response goes nowhere.
             handler.currentAuthorizationFlow = session
         }
     }
@@ -336,7 +266,6 @@ final class GCEventStore: NSObject,
         cancelPendingOperations()
         guard let state = authState else { return }
 
-        // Revoke tokens in parallel
         let access  = state.lastTokenResponse?.accessToken
         let refresh = state.refreshToken
         await withTaskGroup(of: Void.self) { grp in
@@ -357,8 +286,6 @@ final class GCEventStore: NSObject,
         currentAuthorizationFlow = nil
         flow?.cancel()
 
-        // Abandoning the flow means nobody is coming to read the completion
-        // page, so stop holding a socket open for it.
         redirectHandler?.cancelHTTPListener()
         redirectHandler = nil
         completionPage.stop()
@@ -406,10 +333,8 @@ final class GCEventStore: NSObject,
     }
 
     static func eventsURL(calendarID: String, timeMin: String, timeMax: String) throws -> URL {
-        // Calendar IDs can contain `#`, `@`, `+`, and group-address punctuation.
-        // Path interpolation without escaping breaks for those calendars
-        // (Google returns 404). Build the path via `URLComponents.path` so
-        // encoding happens once, correctly.
+        // Calendar IDs can contain `#`, `@` and `+`; `URLComponents.path` percent-encodes
+        // them, where string interpolation into a URL makes Google return 404.
         var comps = URLComponents()
         comps.scheme = "https"
         comps.host = "www.googleapis.com"
@@ -567,13 +492,11 @@ final class GCEventStore: NSObject,
         userEmail  = nil
         Keychain.delete(for: Self.kKeychainName)
         cachedPalette = nil
-        // Forget which client the (now deleted) tokens belonged to, so the next
-        // sign-in is not measured against a session that no longer exists.
         Defaults[.googleTokenClientIdentity] = ""
     }
 
     // MARK: Networking helper
-    /// A list endpoint's `items`. Most of the API is shaped this way.
+    /// Fetches a list endpoint and returns its `items` array.
     private func fetchJSON(_ url: URL, calendarID: String? = nil) async throws -> [[String: Any]] {
         let root = try await fetchRootJSON(url, calendarID: calendarID)
         guard let items = root["items"] as? [[String: Any]] else {
@@ -582,10 +505,9 @@ final class GCEventStore: NSObject,
         return items
     }
 
-    /// The raw response object, for the endpoints that are not lists — `/colors`
-    /// returns `event` and `calendar` maps and no `items` at all, so it cannot
-    /// go through `fetchJSON`. Split out rather than duplicated so the token
-    /// refresh and status handling below stay in one place.
+    /// Fetches an endpoint and returns the raw JSON object, for non-list endpoints such as `/colors`.
+    ///
+    /// Retries once with a forced token refresh when the status policy asks for it.
     private func fetchRootJSON(
         _ url: URL,
         calendarID: String? = nil,
@@ -623,10 +545,7 @@ final class GCEventStore: NSObject,
 
     /// Google's per-event colour palette, fetched once and kept for the run.
     ///
-    /// Never throws: a palette that cannot be fetched means events fall back to
-    /// their calendar's colour, which is exactly the behaviour before per-event
-    /// colours existed. Failing a calendar sync over a cosmetic lookup would be
-    /// a bad trade.
+    /// Never throws: on failure it returns `.empty`, so events use their calendar's colour.
     private func eventColorPalette() async -> GoogleColorPalette {
         if let cachedPalette { return cachedPalette }
         guard let url = URL(string: "https://www.googleapis.com/calendar/v3/colors") else {
@@ -658,14 +577,12 @@ final class GCEventStore: NSObject,
 
     // MARK: - OIDAuthState Delegates
     func didChange(_ state: OIDAuthState) {
-        // persist every change (e.g., refreshed token)
         persistAuthState()
     }
 
     func authState(_ state: OIDAuthState, didEncounterAuthorizationError error: Error) {
         let nsErr = error as NSError
         if nsErr.domain == OIDOAuthTokenErrorDomain {
-            // refresh token invalid → clean state & notify
             clearAuthState()
         }
     }
@@ -711,12 +628,8 @@ final class GCEventStore: NSObject,
             let notes = item["description"] as? String
             let location = item["location"] as? String
 
-            // Google Calendar exposes the meeting URL through structured
-            // conferenceData. Surface it as `conferenceURL` so the link
-            // detector can score it ahead of any URL accidentally pasted
-            // into notes (#847). The plain `url` field remains nil for
-            // Google events — Google Calendar has no per-event "user URL"
-            // equivalent of EKEvent.url.
+            // Google has no equivalent of `EKEvent.url`; the meeting link comes from
+            // `conferenceData` and is ranked ahead of URLs found in notes.
             var conferenceURL: URL?
             if let conferenceData = item["conferenceData"] as? [String: Any],
                let entryPoints = conferenceData["entryPoints"] as? [[String: Any]],
@@ -778,12 +691,8 @@ final class GCEventStore: NSObject,
                 isAllDay = false
             } else {
                 let formatter = DateFormatter()
-                // Pin a fixed locale + Gregorian calendar so the date-only
-                // "yyyy-MM-dd" parse is stable regardless of the user's system
-                // calendar/locale (e.g. a Buddhist or Japanese default calendar
-                // would otherwise land the event on the wrong year/day). All-day
-                // dates are floating, so local midnight is the correct instant —
-                // do NOT force UTC.
+                // Fixed POSIX locale and Gregorian calendar so non-Gregorian system calendars
+                // parse correctly. All-day dates are floating: keep local midnight, do not force UTC.
                 formatter.locale = Locale(identifier: "en_US_POSIX")
                 formatter.calendar = Calendar(identifier: .gregorian)
                 formatter.dateFormat = "yyyy-MM-dd"
@@ -803,8 +712,7 @@ final class GCEventStore: NSObject,
 
             let recurrent = (item["recurringEventId"] != nil) ? true : false
 
-            // Web link to the event in Google Calendar; used for "Open in
-            // Calendar" since `ical://ekevent/<google-id>` is not valid.
+            // Google events need their web link for "Open in Calendar"; `ical://ekevent/` does not resolve them.
             let calendarOpenURL = (item["htmlLink"] as? String).flatMap(URL.init(string:))
 
             return MBEvent(
@@ -825,9 +733,7 @@ final class GCEventStore: NSObject,
                 recurrent: recurrent,
                 calendar: calendar,
                 customRegexes: Defaults[.customRegexes],
-                // `colorId` names one of the eleven per-event colours Google's
-                // web UI offers. Absent or unrecognised resolves to nil, and the
-                // event draws in its calendar's colour as it always did.
+                // nil for an absent or unknown `colorId`, so the calendar colour applies.
                 color: palette
                     .background(forEventColorID: item["colorId"] as? String)
                     .map { hexStringToUIColor(hex: $0) }

@@ -1,6 +1,6 @@
 //
 //  EventFilteringTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -139,21 +139,16 @@ final class EventFilteringTests: XCTestCase {
 
     // MARK: - The Filters pane's "Try a title" tester
 
-    /// The tester calls `titleIsFilteredOut` directly, so its promises are these
-    /// and not the pane's. It runs against unsaved input, it must never crash on
-    /// a half-typed pattern, and "no patterns" must read as Kept rather than as
-    /// "everything is hidden".
+    /// Backs the Filters pane's tester: half-typed patterns must not crash, no patterns means kept.
     func testTitleIsFilteredOutAnswersTheTesterDirectly() {
         XCTAssertTrue(EventFiltering.titleIsFilteredOut("Focus time", patterns: ["^Focus"]))
-        // A substring match hides, exactly as the filter itself does.
         XCTAssertTrue(EventFiltering.titleIsFilteredOut("Weekly Focus block", patterns: ["Focus"]))
         XCTAssertFalse(EventFiltering.titleIsFilteredOut("Standup", patterns: ["^Focus"]))
         XCTAssertFalse(EventFiltering.titleIsFilteredOut("Standup", patterns: []))
     }
 
     func testAHalfTypedPatternIsIgnoredRatherThanHidingEverything() {
-        // "[" never compiles. A tester that threw here would be unusable while
-        // typing, and a filter that treated it as a match would empty the menu.
+        // "[" never compiles as a regex, so it must be neither an error nor a match.
         XCTAssertFalse(EventFiltering.titleIsFilteredOut("Standup", patterns: ["["]))
         XCTAssertTrue(EventFiltering.titleIsFilteredOut("Standup", patterns: ["[", "Stand"]))
     }

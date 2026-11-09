@@ -1,5 +1,5 @@
 //
-//  StatusBarPresentation+MeetingBar.swift
+//  StatusBarPresentation+Punctual.swift
 //  MeetingBar
 //
 
@@ -77,8 +77,6 @@ extension StatusBarEventPresentationInput {
             endDate: event.endDate,
             meetingService: event.meetingLink?.service,
             participation: StatusBarEventParticipation(event.participationStatus),
-            // Same condition the dropdown's row Join affordance uses, so the two
-            // surfaces offer Join on exactly the same meetings.
             hasMeetingLink: event.meetingLink != nil
         )
     }
@@ -146,9 +144,7 @@ extension StatusBarTitleSettings {
 // MARK: - Icon policy adapters
 
 extension StatusBarIconFormat {
-    /// Maps the production `EventTitleIconFormat` (defined in
-    /// `Utilities/Constants.swift`, used as a Defaults type) to the hostless
-    /// shadow enum the policy operates on.
+    /// Maps the stored `EventTitleIconFormat` to the hostless mirror.
     init(_ format: EventTitleIconFormat) {
         switch format {
         case .calendar: self = .calendar
@@ -160,8 +156,7 @@ extension StatusBarIconFormat {
 }
 
 extension StatusBarIconAssets {
-    /// Asset names taken from `MenuStyleConstants` so production code stays
-    /// the single source of truth.
+    /// Asset names from `MenuStyleConstants`.
     static var production: StatusBarIconAssets {
         StatusBarIconAssets(
             appIcon: MenuStyleConstants.appIconName,
@@ -171,21 +166,14 @@ extension StatusBarIconAssets {
     }
 }
 
-// MARK: - Composable menu bar adapters (MeetingBarNG)
+// MARK: - Composable menu bar adapters
 
 extension MenuBarComposition {
     /// The user's saved composition, or `nil` when the classic
     /// `StatusBarPresenter` path should draw the menu bar instead.
     ///
-    /// An empty token list means two different things either side of
-    /// `MenuBarTimeFormatDefaultsMigration`, and conflating them is what made
-    /// the old "Customize menu bar layout" toggle destructive:
-    ///
-    ///   • before it has run — the user never composed anything, so the classic
-    ///     path owns the menu bar and existing installs are unchanged;
-    ///   • after it has run — every install has been seeded, so an empty list is
-    ///     a deliberate "every block is switched off". That composes to nothing,
-    ///     and `ensureStatusBarButtonIsVisible` keeps the app icon clickable.
+    /// An empty token list means "classic path" before
+    /// `MenuBarTimeFormatDefaultsMigration` has run, and "every block off" after.
     static var currentIfEnabled: MenuBarComposition? {
         let tokens = MenuBarBlockList.kinds(stored: Defaults[.menuBarTokens])
         if tokens.isEmpty {
@@ -194,9 +182,8 @@ extension MenuBarComposition {
         return MenuBarComposition(tokens: tokens)
     }
 
-    /// A composition mirroring the user's classic status-bar settings. Used to
-    /// seed the composer when they first opt in, so the starting point matches
-    /// their current menu bar.
+    /// A composition mirroring the user's classic status-bar settings, used to
+    /// seed the token list during migration.
     static var derivedFromLegacy: MenuBarComposition {
         var tokens: [MenuBarTokenKind] = []
         if Defaults[.eventTitleIconFormat] != .none { tokens.append(.icon) }
@@ -207,9 +194,7 @@ extension MenuBarComposition {
 }
 
 extension MenuBarComposedSettings {
-    /// Snapshot of the `Defaults` the composed presenter needs. Reuses the
-    /// existing classic adapters (`StatusBarPresentationSettings.current`,
-    /// `StatusBarTitleSettings.current`, `StatusBarIconAssets.production`).
+    /// Snapshot of the `Defaults` the composed presenter needs.
     static var current: MenuBarComposedSettings {
         MenuBarComposedSettings(
             presentation: .current,

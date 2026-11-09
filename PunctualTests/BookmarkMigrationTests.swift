@@ -1,13 +1,8 @@
 //
 //  BookmarkMigrationTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  Verifies that Bookmark decodes correctly from both the old encoding
-//  (service: MeetingServices) and the new encoding (service: String).
-//
-//  Phase 3 PR 6: Bookmark.service changed from MeetingServices to String.
-//  Old stored JSON used the MeetingServices rawValue as the encoded string,
-//  which is identical to the new String encoding, so decoding is transparent.
+//  Bookmark decoding from the older `MeetingServices` encoding and the current `String` one.
 //
 
 import XCTest
@@ -89,7 +84,7 @@ final class BookmarkMigrationTests: XCTestCase {
     // MARK: - Service ID matches MeetingServices rawValue
 
     func testMeetingServicesRawValuesAreUsedAsServiceIDs() {
-        // Critical: Bookmark.service stores the same string as MeetingServices.rawValue
+        // Bookmark.service must store the same string as MeetingServices.rawValue.
         XCTAssertEqual(MeetingServices.meet.rawValue, "Google Meet")
         XCTAssertEqual(MeetingServices.zoom.rawValue, "Zoom")
         XCTAssertEqual(MeetingServices.teams.rawValue, "Microsoft Teams")

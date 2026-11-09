@@ -5,41 +5,7 @@
 //  Created by Andrii Leitsius on 12.06.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  render the status-bar title through the composable menu-bar presenter when
-//  the user has set a custom token composition, and observe its Defaults keys;
-//  assemble the dropdown from the composable-dropdown block-join (toggleable +
-//  reorderable modules, with the enabled-module set resolved through the shared
-//  DropdownCompositionPolicy.enabledRawValues helper so the Display-tab live
-//  preview and the real menu can never drift); remove the "Rate App" action that
-//  opened the original
-//  App Store listing; add an "Open calendar" entry point (dependency closure,
-//  keyboard shortcut, and @objc handler) for the month calendar window; add the
-//  in-app event editor entry points (new/edit/delete dependency closures, the
-//  .newEventShortcut registration, and @objc handlers, with a destructive NSAlert
-//  before delete); add the camera/mic pre-call preview entry points (the
-//  openCameraPreview dependency closure, the .cameraPreviewShortcut registration,
-//  and the standalone/per-event @objc handlers); add a "World clock" entry point
-//  (the openWorldClock dependency closure, the .worldClockShortcut registration,
-//  and the @objc handler) for the multi-zone world-clock panel window; kick a
-//  debounced aggressive calendar force-sync (.forceCalendarSync) whenever the
-//  dropdown is about to show, so a stalled macOS Calendar sync surfaces (and
-//  self-corrects) on open; route a left-click to the SwiftUI dropdown panel
-//  (openDropdownPanel dependency + handlers); split each per-event / per-reminder
-//  @objc action into a
-//  thin sender-unwrapping wrapper over a value-taking method (editEvent,
-//  confirmAndDeleteEvent, copyDetail, copyMeetingLink, openReferenceURL,
-//  emailAttendees, undismiss, completeReminder, snoozeReminder,
-//  openReminderInApp) so the SwiftUI panel's handlers run the SAME code path as
-//  the NSMenu items rather than a reimplementation; wire the panel's "More
-//  actions" menu (open link from clipboard, toggle the menu-bar meeting title,
-//  camera check, world clock, dismiss / remove all dismissals) to those same
-//  @objc handlers, since the panel became the default dropdown and the NSMenu's
-//  quick-actions subsection had no counterpart there. Add the menu bar's Join
-//  chip: draw its capsule as an overlay on the status-item button, and route a
-//  left-click inside that capsule to joinNextMeeting() instead of to the
-//  dropdown.
-//  Punctual, 2026-10-01: add checkForUpdatesAction (Sparkle).
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Cocoa
@@ -55,10 +21,8 @@ enum MenuStyleConstants {
     static let calendarIconName = "iconCalendar"
     static let iconSize: NSSize = .init(width: 16, height: 16)
 
-    /// Loads a named asset; if the asset is missing or has been renamed,
-    /// falls back to the bundle's runtime app icon and finally to a 1x1
-    /// placeholder so the menu bar never crashes on a misconfigured Defaults
-    /// value or a renamed asset.
+    /// Loads a named asset, falling back to the app icon and then to a 1x1
+    /// placeholder, so a missing asset never crashes the menu bar.
     static func iconNamed(_ name: String) -> NSImage {
         if let image = NSImage(named: name) {
             return image
@@ -77,55 +41,44 @@ struct StatusBarDependencies {
     var openPreferences: @MainActor () -> Void = {}
     var openChangelog: @MainActor () -> Void = {}
     var openCommandBar: @MainActor () -> Void = {}
-    /// Opens (or toggles) the SwiftUI dropdown panel below the status
-    /// item. Receives a fresh menu-state snapshot, the panel's handlers, and the
-    /// status-item button's rect in screen coordinates.
+    /// Opens or toggles the dropdown panel below the status item, given a state
+    /// snapshot, the panel's handlers and the status-item button's rect in screen coordinates.
     var openDropdownPanel: @MainActor (StatusBarMenuState, DropdownPanelHandlers, NSRect) -> Void =
         { _, _, _ in }
     var openCalendar: @MainActor () -> Void = {}
     var openWorldClock: @MainActor () -> Void = {}
     var openCameraPreview: @MainActor (MBEvent?) -> Void = { _ in }
     var newEvent: @MainActor () -> Void = {}
-    /// Events in `[from, to)` — the same closure the calendar window is given, so
-    /// the panel's month dots and the window's grid ask one question.
+    /// Fetches events in `[from, to)`; the same closure the calendar window uses.
     var fetchEvents: @MainActor (_ from: Date, _ to: Date) async throws -> [MBEvent] =
         { _, _ in [] }
     var editEvent: @MainActor (MBEvent) -> Void = { _ in }
     var deleteEvent: @MainActor (MBEvent, EventEditSpan) -> Void = { _, _ in }
     var quit: @MainActor () -> Void = {}
     #if DEBUG
-    /// Opens the development harness. Guarded so the release build's dependency
-    /// struct has no member for a tool that does not exist in it.
+    /// Opens the development harness (DEBUG builds only).
     var openDebugHarness: @MainActor () -> Void = {}
     #endif
 }
 
-/// creates the menu in the system status bar, creates the menu items and controls the whole lifecycle.
+/// Owns the status item: renders its title, routes its clicks and shortcuts, and hosts the action handlers.
 @MainActor
 final class StatusBarItemController {
     var statusItem: NSStatusItem!
 
     /// The menu-bar progress indicator, added to the status-item button once and
-    /// reused. Held weakly: the button owns it as a subview, and a strong ref
-    /// here would outlive a status item that got torn down and rebuilt.
+    /// reused. Weak because the button owns it as a subview.
     private weak var meetingProgressOverlay: MeetingProgressOverlayView?
 
-    /// The Join chip's capsule, added and held on the same terms.
+    /// The Join chip's capsule overlay; weak because the button owns it.
     private weak var actionChipOverlay: MenuBarActionChipOverlayView?
 
-    /// Where a left-click means "join" rather than "open the panel", in the
-    /// status-item button's coordinates. `nil` whenever no chip is drawn — which
-    /// is what keeps the click behaviour identical to before whenever the feature
-    /// is off, the meeting is not close yet, or it has nothing to join.
-    ///
-    /// Readable (not settable) outside the controller so a test can assert the
-    /// click target actually lands on a real status item, which is the half of
-    /// this the pure geometry tests cannot reach.
+    /// Area of the status-item button, in its coordinates, where a left-click joins
+    /// the next meeting instead of opening the panel. `nil` when no chip is drawn.
     private(set) var actionChipHitRect: CGRect?
 
-    /// Current event list, driven by the AppModel state.
-    /// A non-nil `_eventsOverride` takes precedence (used by tests to inject
-    /// events without wiring up the full app model chain).
+    /// Current event list from the app model. A non-nil `_eventsOverride` takes
+    /// precedence (used by tests and the debug harness).
     private var _eventsOverride: [MBEvent]?
     var events: [MBEvent] {
         get { _eventsOverride ?? dependencies.events() }
@@ -138,7 +91,7 @@ final class StatusBarItemController {
 
     private var cancellables = Set<AnyCancellable>()
 
-    /// The app's only UI clock: one-shot, re-armed on every `updateTitle()`.
+    /// The menu-bar redraw timer: one-shot, re-armed on every `updateTitle()`.
     private var tickTimer: Timer?
 
     /// Removes the status item from the menu bar and stops the redraw timer.
@@ -159,15 +112,13 @@ final class StatusBarItemController {
 
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusMenuBarAction)
-        // Both halves of both buttons: macOS 27 may deliver only one half of a
-        // click, and `StatusItemClickPolicy` acts on whichever arrives first and
-        // swallows its partner.
+        // Both edges of both buttons: macOS 27 may deliver only one half of a click;
+        // `StatusItemClickPolicy` acts on whichever arrives first and swallows its partner.
         statusItem.button?.sendAction(on: [
             NSEvent.EventTypeMask.rightMouseDown, NSEvent.EventTypeMask.rightMouseUp,
             NSEvent.EventTypeMask.leftMouseUp, NSEvent.EventTypeMask.leftMouseDown
         ])
 
-        // Temporary icon before app delegate setup
         statusItem.button?.image = MenuStyleConstants.iconNamed(MenuStyleConstants.appIconName)
         statusItem.button?.image?.size = MenuStyleConstants.iconSize
         statusItem.button?.imagePosition = .imageLeft
@@ -177,7 +128,6 @@ final class StatusBarItemController {
     }
 
     private func setupDefaultsObservers() {
-        // For all these keys, just redraw:
         Defaults.publisher(
             keys: .statusbarEventTitleLength, .eventTimeFormat,
             .eventTitleIconFormat, .showEventMaxTimeUntilEventThreshold,
@@ -299,25 +249,18 @@ final class StatusBarItemController {
             controlKeyHeld: event?.modifierFlags.contains(.control) ?? false,
             pendingDown: pendingStatusItemDown
         )
-        // Updated AFTER acting, whatever the outcome: a consumed mouse-up clears
-        // the pairing so it cannot swallow the next click too.
+        // Must run after acting on every outcome, so a consumed mouse-up clears the
+        // pairing and cannot swallow the next click.
         defer { pendingStatusItemDown = StatusItemClickPolicy.pendingDown(after: input) }
 
         switch outcome {
         case .ignore:
             return
         case .secondary:
-            // Right button click → compact quick-actions menu. Still an NSMenu,
-            // and rightly so: it is a short list of verbs, which is exactly what
-            // a menu is for.
             showQuickActionsMenu()
         case .primary:
-            // The Join chip is drawn INTO the item's title, not added as a
-            // control: a status item is one button, and its click opens the
-            // panel. So the chip's rect is tested here instead. The same rect the
-            // overlay drew, so the target cannot drift from the capsule the user
-            // is aiming at. Only a real mouse event has a location to test;
-            // macOS 27's event-less click opens the panel.
+            // The Join chip is drawn into the title, not a separate control, so it is
+            // hit-tested here. An event-less click (macOS 27) has no location and opens the panel.
             if let event, input != .nonMouse, isActionChipClick(event) {
                 joinNextMeeting()
                 return
@@ -327,13 +270,11 @@ final class StatusBarItemController {
     }
 
     /// The button whose mouse-down `statusMenuBarAction` acted on and whose
-    /// mouse-up is still to come. See `StatusItemClickPolicy` for why clicks are
-    /// paired rather than acted on at one fixed edge.
+    /// mouse-up is still pending. See `StatusItemClickPolicy`.
     private var pendingStatusItemDown: StatusItemClickPolicy.Button?
 
-    /// Reduces AppKit's current event to the policy's input. Anything that is
-    /// not a mouse button event — including no event at all, which is how
-    /// macOS 27 delivers some status-item clicks — is `.nonMouse`.
+    /// Maps AppKit's current event to the policy's input. Anything other than a
+    /// mouse button event, including no event at all (macOS 27), is `.nonMouse`.
     private static func clickInput(for event: NSEvent?) -> StatusItemClickPolicy.Input {
         switch event?.type {
         case .leftMouseDown: .leftMouseDown
@@ -344,10 +285,10 @@ final class StatusBarItemController {
         }
     }
 
-    /// Draws the status item as selected (or not), the pill a real menu gets
-    /// while it is open. Deferred one run-loop turn: the button runs its own
-    /// highlight tracking for the click that opened or closed the panel, and
-    /// setting the state inside that click would be overwritten as it ends.
+    /// Draws the status item as selected or not, like an open menu's highlight.
+    ///
+    /// Deferred one run-loop turn, because the button's own click tracking would
+    /// overwrite a state set during the click that opened or closed the panel.
     func setStatusItemHighlighted(_ highlighted: Bool) {
         DispatchQueue.main.async { [weak self] in
             self?.statusItem?.button?.highlight(highlighted)
@@ -360,17 +301,15 @@ final class StatusBarItemController {
               let button = statusItem?.button,
               button.window != nil
         else { return false }
-        // Modified clicks stay the panel's: ⌥-click and friends are how the rest
-        // of the app reaches alternates, and joining on one would be a surprise.
+        // Modified clicks always open the panel, never join.
         guard event.modifierFlags.isDisjoint(with: .deviceIndependentFlagsMask) else {
             return false
         }
         return hitRect.contains(button.convert(event.locationInWindow, from: nil))
     }
 
-    /// Opens (or closes, when already open) the SwiftUI dropdown panel with a
-    /// freshly built state snapshot — the same snapshot `updateMenu()` renders
-    /// the NSMenu from — anchored to the status-item button.
+    /// Opens the dropdown panel with a fresh state snapshot, anchored to the
+    /// status-item button, or closes it when already open.
     func toggleDropdownPanel() {
         nudgeCalendarForceSync()
 
@@ -392,11 +331,7 @@ final class StatusBarItemController {
     /// Everything `toggleDropdownPanel` would hand the panel, for the DEBUG
     /// inspector window to host instead.
     ///
-    /// Built from the same three lines rather than a copy, so the inspector shows
-    /// the real snapshot — including whatever `nudgeCalendarForceSync` pulls in.
-    /// `anchor` is `nil` when the status item has no window yet; the inspector
-    /// falls back to a synthetic one rather than refusing to open, since being
-    /// inspectable without a live status item is half the point.
+    /// `anchor` is `nil` when the status item has no window yet.
     func dropdownPanelSnapshotForInspector() -> DropdownInspectorSnapshot {
         nudgeCalendarForceSync()
 
@@ -415,9 +350,8 @@ final class StatusBarItemController {
     }
     #endif
 
-    /// The panel's side effects, routed through the same dependency closures the
-    /// same @objc handlers the right-click quick-actions menu targets, so the two
-    /// surfaces share one behavior surface. `dismiss` is filled in by the host.
+    /// The panel's side effects, routed through the same dependency closures and
+    /// @objc handlers the quick-actions menu uses. `dismiss` is filled in by the host.
     private func dropdownPanelHandlers() -> DropdownPanelHandlers {
         DropdownPanelHandlers(
             joinEvent: { [weak self] event in
@@ -443,9 +377,6 @@ final class StatusBarItemController {
             openCommandBar: { [weak self] in self?.dependencies.openCommandBar() },
             openChangelog: { [weak self] in self?.dependencies.openChangelog() },
             quit: { [weak self] in self?.dependencies.quit() },
-            // The panel's "More actions" menu. Each of these runs the SAME @objc
-            // handler the NSMenu's quick-actions items target, so restoring them
-            // in the panel reimplements nothing.
             openLinkFromClipboard: { [weak self] in self?.openLinkFromClipboardAction() },
             toggleMeetingTitleVisibility: { [weak self] in self?.toggleMeetingTitleVisibility() },
             openCameraPreview: { [weak self] in self?.openCameraPreviewAction() },
@@ -476,10 +407,8 @@ final class StatusBarItemController {
         )
     }
 
-    /// Opening the dropdown is a strong "the user wants current data now" signal, so
-    /// proactively nudge macOS to sync (EventKit `refreshSourcesIfNecessary()`)
-    /// via `CalendarSync`. Debounced there (~30s) so repeated menu-opens don't
-    /// hammer EventKit.
+    /// Asks `CalendarSync` to force an EventKit source refresh. Debounced there
+    /// (~30s), so calling it on every open is safe.
     private func nudgeCalendarForceSync() {
         dependencies.send(.forceCalendarSync)
     }
@@ -493,8 +422,6 @@ final class StatusBarItemController {
         let menuState = StatusBarMenuState.make(from: appState)
         let menu = QuickActionsMenu.build(target: self, state: menuState)
         #if DEBUG
-        // Appended here rather than inside `QuickActionsMenu.build`, so the
-        // shipping menu builder never carries a case for a development tool.
         menu.addItem(.separator())
         let harness = NSMenuItem(
             title: "Debug harness…",
@@ -509,8 +436,8 @@ final class StatusBarItemController {
         statusItem.menu = nil
     }
 
-    /// Copies today's agenda to the pasteboard (same text the Command Bar's
-    /// "Copy agenda" produces), reachable without a shortcut via right-click.
+    /// Copies today's agenda to the pasteboard, in the same format as the Command
+    /// Bar's "Copy agenda".
     @objc func copyTodayAgendaAction() {
         let now = Date()
         let calendar = Calendar.current
@@ -591,9 +518,8 @@ final class StatusBarItemController {
 
     // MARK: - The clock
 
-    /// Arms the redraw for the next instant the menu bar changes because time
-    /// passed: a meeting starting or ending, the ongoing-meeting grace period
-    /// running out, or the next minute so a countdown stays current.
+    /// Arms a one-shot redraw for the next time-driven change: a meeting starting
+    /// or ending, the ongoing grace period expiring, or the next minute.
     private func scheduleNextTick(now: Date, event: MBEvent?) {
         tickTimer?.invalidate()
 
@@ -659,8 +585,7 @@ final class StatusBarItemController {
             button.imagePosition = presentation.iconPosition == .trailing ? .imageRight : .imageLeft
         }
 
-        // Render the composed title whenever there is one (event mode, or a
-        // non-event clock/date composition). `.none` layout ⇒ icon-only.
+        // `.none` layout means icon-only.
         if presentation.layout != .none {
             button.attributedTitle = StatusBarTitleRenderer.attributedTitle(for: presentation)
         }
@@ -670,8 +595,8 @@ final class StatusBarItemController {
 
         ensureStatusBarButtonIsVisible(button)
         renderMeetingProgress(on: button)
-        // Last: the chip is measured against the button's FINAL image and title,
-        // and `renderMeetingProgress` can still claim the image slot above.
+        // Must run last: the chip is measured against the final image and title,
+        // and `renderMeetingProgress` may replace the image.
         renderActionChip(on: button, presentation: presentation)
 
         #if DEBUG
@@ -685,17 +610,11 @@ final class StatusBarItemController {
         dependencies.openDebugHarness()
     }
 
-    /// The last presentation drawn, for the debug harness's readout. Kept behind
-    /// the flag so the release build does not retain a presentation nothing reads.
+    /// The last presentation drawn, for the debug harness's readout.
     private var lastRenderedPresentation: StatusBarPresentation?
 
-    /// Replaces the event list with synthetic ones, or clears back to the real
-    /// calendar when handed `nil`.
-    ///
-    /// The `events` setter cannot express "stop overriding" — it takes a
-    /// non-optional array — so the harness needs this rather than the public
-    /// seam. Redraws immediately so a click in the harness moves the menu bar
-    /// without waiting for the next tick.
+    /// Replaces the event list with synthetic events, or restores the real
+    /// calendar when passed `nil`, then redraws immediately.
     func debugOverrideEvents(_ events: [MBEvent]?) {
         _eventsOverride = events
         updateTitle()
@@ -720,10 +639,8 @@ final class StatusBarItemController {
 
     /// Positions the Join chip's capsule and its click target, or clears both.
     ///
-    /// The chip is the trailing run of the string AppKit just laid out, which is
-    /// the whole trick: measuring that run gives its width, and the presenter
-    /// guarantees it is last (`composedLines`), so nothing has to be re-laid-out
-    /// to find it.
+    /// The chip is the trailing run of the button's attributed title; the presenter
+    /// guarantees the action label comes last (`composedLines`).
     private func renderActionChip(on button: NSStatusBarButton, presentation: StatusBarPresentation) {
         let label = presentation.actionLabel
         let title = button.attributedTitle
@@ -734,9 +651,7 @@ final class StatusBarItemController {
             return
         }
 
-        // Verify the trailing run really is the label. Belt and braces: if the
-        // renderer ever appends something after the chip, this drops the chip
-        // rather than putting a live click target over the wrong glyphs.
+        // Drop the chip rather than put a click target over the wrong glyphs.
         let range = NSRange(location: title.length - labelLength, length: labelLength)
         let trailing = title.attributedSubstring(from: range)
         guard trailing.string == label else {
@@ -783,9 +698,8 @@ final class StatusBarItemController {
         actionChipHitRect = nil
     }
 
-    /// Width of the widest line, so a two-line title measures as it draws.
-    /// `NSAttributedString.size()` does not wrap, and treats the newline as part
-    /// of one long run.
+    /// Width of the widest line. Uses `boundingRect` because `size()` measures a
+    /// two-line string as one run.
     private func renderedWidth(of string: NSAttributedString) -> CGFloat {
         guard string.length > 0 else { return 0 }
         return ceil(
@@ -796,8 +710,8 @@ final class StatusBarItemController {
         )
     }
 
-    /// The range of the text after the last newline — the stack's detail line,
-    /// which is the one the chip rides.
+    /// The range of the text after the last newline: the stacked layout's detail
+    /// line, which carries the chip.
     private func lastLineRange(of string: NSAttributedString) -> NSRange {
         let text = string.string as NSString
         let newline = text.rangeOfCharacter(from: .newlines, options: .backwards)
@@ -810,11 +724,10 @@ final class StatusBarItemController {
 
     // MARK: - Meeting progress (menu bar)
 
-    /// Draws (or clears) the menu-bar progress indicator for the next meeting.
+    /// Draws or clears the menu-bar progress indicator for the next meeting.
     ///
-    /// Runs after the rest of the item is in place, because two of the styles are
-    /// sized from the button's final bounds and the ring needs the icon that was
-    /// just assigned.
+    /// Call after the icon and title are set: styles are sized from the button's
+    /// final bounds and the ring wraps the current icon.
     private func renderMeetingProgress(on button: NSStatusBarButton) {
         let style = MeetingProgressStyle(rawValue: Defaults[.meetingProgressStyle]) ?? .none
         let progress = style.drawsSomething ? currentMeetingProgress() : nil
@@ -825,19 +738,15 @@ final class StatusBarItemController {
         }
 
         if style.occupiesImageSlot {
-            // The bar takes the image slot outright. Documented as the one style
-            // that costs menu-bar width — it is not an overlay, so it cannot
-            // share the space with an icon.
+            // The bar replaces the icon rather than overlaying it.
             button.image = MeetingProgressRenderer.barImage(for: progress)
             button.imagePosition = .imageLeft
             meetingProgressOverlay?.presentation = nil
             return
         }
 
-        // A ring needs something to sit around. With no icon in the item — the
-        // title-only compositions, which are common — an overlay ring lands on
-        // the first letter of the title instead, so it takes the image slot and
-        // becomes the icon.
+        // With no icon, an overlay ring would land on the title's first letter, so
+        // the ring becomes the icon instead.
         if style == .ring, button.image == nil {
             button.image = MeetingProgressRenderer.ringImage(for: progress)
             button.imagePosition = .imageLeft
@@ -964,8 +873,7 @@ final class StatusBarItemController {
 
     @objc
     func openEventInCalendar(sender: NSMenuItem) {
-        // The menu attaches the provider-specific calendar URL directly
-        // (ical://ekevent/… for EventKit, htmlLink for Google).
+        // `representedObject` is the provider-specific calendar URL.
         if let url = sender.representedObject as? URL {
             url.openInDefaultBrowser()
         }
@@ -973,22 +881,17 @@ final class StatusBarItemController {
 
     @objc
     func openPrepLink(sender: NSMenuItem) {
-        // The menu attaches a meeting-prep reference URL (Figma, Notion, GitHub,
-        // Google Docs/…, generic) extracted from the invite. Open it in the
-        // default browser, like the other reference-link actions.
         if let url = sender.representedObject as? URL {
             openReferenceURL(url)
         }
     }
 
-    /// Opens a reference URL (prep link, alternate meeting link) in the default
-    /// browser. Shared by the NSMenu's `openPrepLink(sender:)` and the SwiftUI
-    /// panel's `openURL` handler.
+    /// Opens a reference URL (prep link, alternate meeting link) in the default browser.
     func openReferenceURL(_ url: URL) {
         url.openInDefaultBrowser()
     }
 
-    // MARK: - Reminders (Dot parity)
+    // MARK: - Reminders
 
     @objc
     func toggleReminderComplete(sender: NSMenuItem) {
@@ -1017,7 +920,6 @@ final class StatusBarItemController {
     }
 
     func openReminderInApp(_ reminder: MBReminder) {
-        // Try the reminder's deep link first; fall back to just opening Reminders.
         if let deepLink = URL(string: "x-apple-reminderkit://REMCDReminder/\(reminder.id)") {
             NSWorkspace.shared.open(deepLink)
         } else if let appURL = NSWorkspace.shared.urlForApplication(
@@ -1067,17 +969,14 @@ final class StatusBarItemController {
         reconcileNotifications()
     }
 
-    /// Quick-copy (Dot parity): any detail row carrying a string in
-    /// `representedObject` — location, organizer, attendee — copies it to the
-    /// pasteboard when clicked.
+    /// Copies the menu item's `representedObject` string to the pasteboard.
     @objc
     func copyDetailAction(sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         copyDetail(value)
     }
 
-    /// Copies a trimmed detail string to the pasteboard, ignoring blanks. Shared
-    /// by the NSMenu's quick-copy rows and the panel's `copyText` handler.
+    /// Copies a trimmed detail string to the pasteboard, ignoring blanks.
     func copyDetail(_ value: String) {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -1101,12 +1000,9 @@ final class StatusBarItemController {
         }
     }
 
-    /// Copies the meeting's id (or room name) rather than its whole URL — what
-    /// you need for a phone bridge, or to paste into a client already signed in.
+    /// Copies the meeting's id or room name rather than its URL.
     ///
-    /// Callers only offer this when `meetingIdentifier` is non-nil, so reaching
-    /// here without one means the event changed underneath the open menu; the
-    /// clipboard is left alone rather than cleared to nothing.
+    /// Without a `meetingIdentifier`, posts a message and leaves the pasteboard untouched.
     func copyMeetingIdentifier(for event: MBEvent) {
         guard let identifier = event.meetingIdentifier else {
             AppMessageCenter.shared.post(.meetingLinkMissing(title: event.title))
@@ -1154,23 +1050,20 @@ final class StatusBarItemController {
         dependencies.openWorldClock()
     }
 
-    /// Opens the camera/mic pre-call preview standalone (no event → no Join
-    /// button). Reached from the right-click "Camera check…" quick action and the
-    /// keyboard shortcut.
+    /// Opens the camera/mic pre-call preview without an event, so it shows no Join button.
     @objc
     func openCameraPreviewAction() {
         dependencies.openCameraPreview(nil)
     }
 
-    /// Opens the camera/mic preview for a specific event so the preview shows a
-    /// contextual "Join meeting" button. Reached from the per-event submenu.
+    /// Opens the camera/mic preview for the menu item's event, with a Join button.
     @objc
     func previewCameraForEventAction(sender: NSMenuItem) {
         guard let event = sender.representedObject as? MBEvent else { return }
         dependencies.openCameraPreview(event)
     }
 
-    // MARK: - Event editing (Dot parity)
+    // MARK: - Event editing
 
     @objc
     func newEventAction() {
@@ -1187,17 +1080,14 @@ final class StatusBarItemController {
         dependencies.editEvent(event)
     }
 
-    /// Destructive: confirm via NSAlert BEFORE deleting. The actual delete +
-    /// refresh runs through the injected dependency (EventKit writer).
     @objc
     func deleteEventAction(sender: NSMenuItem) {
         guard let event = sender.representedObject as? MBEvent else { return }
         confirmAndDeleteEvent(event)
     }
 
-    /// The destructive delete flow shared by the NSMenu item and the SwiftUI
-    /// panel: an NSAlert confirmation (with the recurring this-event /
-    /// this-and-future choice) before the injected EventKit write.
+    /// Confirms with a modal alert, offering this-event or this-and-future for a
+    /// recurring event, then deletes through the injected dependency.
     func confirmAndDeleteEvent(_ event: MBEvent) {
         let alert = NSAlert()
         alert.messageText = "event_editor_delete_confirm_title".loco()
@@ -1205,7 +1095,6 @@ final class StatusBarItemController {
         alert.alertStyle = .warning
 
         if event.recurrent {
-            // Recurring: offer the delete scope directly as destructive buttons.
             let thisButton = alert.addButton(withTitle: "event_editor_delete_this_event".loco())
             thisButton.hasDestructiveAction = true
             let futureButton = alert.addButton(withTitle: "event_editor_delete_this_and_future".loco())
@@ -1271,10 +1160,8 @@ enum StatusBarTitleRenderer {
         }
     }
 
-    /// Weight, not colour, carries the emphasis: the menu bar sits on wallpaper
-    /// the app cannot see, so a colour that reads as urgent against one is
-    /// invisible against another, and the system already owns menu-bar tinting
-    /// for light/dark and accent. Weight is legible everywhere.
+    /// Emphasis uses weight, not colour, because the menu bar's background is
+    /// unknown and the system owns its tinting.
     private static func titleFont(ofSize size: CGFloat, emphasized: Bool) -> NSFont {
         emphasized
             ? NSFont.systemFont(ofSize: size, weight: .bold)
@@ -1341,8 +1228,8 @@ private func statusBarCalendar() -> Calendar {
     return calendar
 }
 
-/// Carries a reminder + chosen snooze option through a menu item's
-/// `representedObject` to the `snoozeReminder(sender:)` action.
+/// A reminder and snooze option carried in a menu item's `representedObject`
+/// to `snoozeReminder(sender:)`.
 struct ReminderSnoozeCommand {
     let reminderID: String
     let option: ReminderSnoozeOption

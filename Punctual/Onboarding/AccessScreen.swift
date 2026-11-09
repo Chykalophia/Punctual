@@ -5,10 +5,7 @@
 //  Created by Andrii Leitsius on 13.01.2021.
 //  Copyright © 2021 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  removed the calendar-source picker (Option A ships the macOS Calendar
-//  provider only); this file now holds just the authorization step.
-//  Punctual, 2026-10-01: log the authorization result for each setup attempt.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit

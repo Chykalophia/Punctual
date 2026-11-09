@@ -1,45 +1,25 @@
 //
-//  PreferencesView.swift
+//  Preferences.swift
 //  MeetingBar
 //
 //  Created by Andrii Leitsius on 14.05.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  drop the StoreKit patronage service threaded through the preferences window;
-//  pin the NavigationSplitView sidebar open (non-collapsible) and adopt the
-//  shared PreferencesDesign card/callout/indent language; widen the window
-//  minimum size so the Dropdown tab's two-pane settings + live preview fit.
-//  Preferences UX overhaul Phase 0 (truth pass) deleted the macOS 12/13 fallbacks.
-//  Phase 2 (the IA restructure) replaces the seven old tabs with eight panes in a
-//  FLAT sidebar — `PreferencesSidebarSection` is gone, because grouping eight
-//  concrete names under abstract nouns ("Setup", "Experience") rebuilt exactly
-//  the "everything is miscellaneous" problem the overhaul exists to remove.
-//  About & Support becomes a pinned sidebar FOOTER item rather than a pane, so it
-//  can never accumulate leftovers. Settings search is a custom field in the
-//  sidebar's top safe-area inset (not `.searchable`, which created a toolbar
-//  that overlapped the first rows), backed by the hostless `SettingsIndex`.
-//  `preferenceLabel()` is deleted: colons now come off at source in en.lproj,
-//  not at render time.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 import SwiftUI
 
-/// What the sidebar currently points at. About & Support is deliberately not a
-/// `PreferencesTab` — it is a footer item, not a settings pane.
+/// What the sidebar currently points at: a settings pane, or the About & Support footer item.
 enum PreferencesSelection: Hashable {
     case tab(PreferencesTab)
     case aboutSupport
 }
 
 struct PreferencesView: View {
-    // Non-optional: a settings window always points at exactly one thing.
     @State private var selection: PreferencesSelection = .tab(.defaultSelection)
     @State private var searchQuery = ""
-    // Pinned to `.all` so both columns are visible from the first frame; the
-    // sidebar toggle is removed below, so the sidebar can never be collapsed.
+    // Pinned to `.all` with the sidebar toggle removed, so the sidebar cannot collapse.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    // A pane asking to show another pane ("Change in Joining"). One-shot: the
-    // request is cleared as soon as it is honoured.
     private let navigation = PreferencesNavigation.shared
 
     private var trimmedQuery: String {
@@ -54,9 +34,7 @@ struct PreferencesView: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // Wide enough for the Dropdown pane's two-pane (settings + ~340pt
-        // preview). Every other pane benefits from the narrower width — at
-        // 1100pt a grouped form stretches with a huge dead right margin.
+        // Minimum that fits the Dropdown pane's settings plus its ~340pt preview.
         .frame(minWidth: 860, minHeight: 560)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: navigation.requestedTab) { _, requested in
@@ -69,21 +47,12 @@ struct PreferencesView: View {
 
     // MARK: - Sidebar
 
-    /// A FLAT list of the eight panes, plus one pinned footer item. The native
-    /// sidebar `List(selection:)` provides the System Settings accent-pill
-    /// selection and translucent material for free. No custom `foregroundStyle`
-    /// is applied to the labels — the pill supplies its own contrasting content
-    /// colour, and overriding it broke the selected row.
-    /// The `List` MUST be the root of this view, not a child of a `VStack`.
-    /// A sidebar `List` provides the sidebar role; wrapping it in a stack made
-    /// the stack the sidebar instead, and the first pane ("Calendars") lost
-    /// the sidebar's styling and insets.
+    /// Flat list of panes with a search field on top and the About footer below.
     ///
-    /// The search field attaches as a top safe-area inset so it pushes the first
-    /// row down rather than overlapping it (`.searchable(placement: .sidebar)`
-    /// created a toolbar that overlapped the first two rows). The footer attaches
-    /// as a bottom safe-area inset so it floats above the scrolling rows without
-    /// taking the `List` out of the sidebar role.
+    /// The `List` must stay the root view so it keeps the sidebar role; wrapping it
+    /// in a stack loses the sidebar styling. Labels take no custom `foregroundStyle`,
+    /// which would override the selection pill's contrasting colour. Search is a
+    /// safe-area inset, not `.searchable`, whose toolbar overlaps the first rows.
     private var sidebar: some View {
         List(selection: tabSelection) {
             ForEach(PreferencesTab.allCases) { tab in
@@ -92,8 +61,6 @@ struct PreferencesView: View {
             }
         }
         .listStyle(.sidebar)
-        // Makes the sidebar truly non-collapsible (macOS 14+, below the floor).
-        // https://developer.apple.com/documentation/swiftui/view/toolbar(removing:)
         .toolbar(removing: .sidebarToggle)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
@@ -208,9 +175,8 @@ struct PreferencesView: View {
 }
 
 /// The pane title and one-line purpose shown at the top of the detail column.
-/// Replaces both the `.navigationTitle` (which created an internal navigation
-/// bar that clipped content in a plain `NSWindow`) and the old
-/// `PreferencesPanePurpose` (which showed only the purpose line, not the title).
+///
+/// Used instead of `.navigationTitle`, whose navigation bar clips content in a plain `NSWindow`.
 private struct PreferencesDetailHeader: View {
     let title: String
     var purpose: String?
@@ -257,13 +223,7 @@ private func preferencesTabContent(_ tab: PreferencesTab) -> some View {
     }
 }
 
-/// Returns a row label with any trailing colon removed.
-///
-/// Phase 2 strips colons at source in `en.lproj`, so for migrated strings this
-/// is a no-op. It stays until every pane has been through the migration —
-/// deleting it while call sites still read un-migrated keys would print
-/// "All-day events:" inside a grouped form that supplies its own alignment.
-/// Remove it once the last caller is gone, not before.
+/// Returns the localized label for `key` with any trailing colon (ASCII or full-width) removed.
 func preferenceLabel(_ key: String) -> String {
     var label = key.loco().trimmingCharacters(in: .whitespaces)
     while let last = label.last, last == ":" || last == "：" {
@@ -272,21 +232,11 @@ func preferenceLabel(_ key: String) -> String {
     return label
 }
 
-/// Shared container for preferences panes: a grouped form matching the
-/// System Settings look. Panes built on this manage their own scrolling.
+/// Shared grouped-form container for preferences panes, matching System Settings.
 ///
-/// Note for the builder work in later phases: this is a `Form`, not a `List`,
-/// so `ForEach(...).onMove` inside it is inert — which is why every reorder
-/// control in Preferences is an explicit up/down button until Phase 5 moves the
-/// builders into a real `List`.
-///
-/// The `.frame(maxWidth: .infinity, maxHeight: .infinity)` is load-bearing: a
-/// `Form` with `.formStyle(.grouped)` is a scroll view, but without a bounded
-/// frame it sizes to its content rather than the available space. Inside the
-/// detail `VStack` (which stacks the purpose header above the form), that means
-/// the form grows past the window's bottom edge and its scroll view never
-/// activates — so the last sections are silently clipped. The frame gives the
-/// scroll view a bounded height, which is what makes scrolling work.
+/// `ForEach(...).onMove` is inert inside a `Form`, so reordering uses explicit buttons.
+/// The unbounded `.frame` is required: without it the form sizes to its content inside
+/// the detail `VStack`, overflows the window, and never scrolls.
 struct PreferencesGroupedForm<Content: View>: View {
     @ViewBuilder var content: Content
 

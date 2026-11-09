@@ -1,9 +1,8 @@
 //
 //  MenuBarJoinActionTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the menu bar's Join chip (MeetingBarNG): when it shows,
-//  and where it lands.
+//  Tests for the menu bar's Join chip: when it shows and where it lands.
 //
 
 import XCTest
@@ -355,7 +354,7 @@ final class MenuBarJoinActionTests: XCTestCase {
     }
 
     func testChipFollowsItsOwnLineOnTheStack() {
-        // The detail line is 30pt under a 70pt title, and centred — so the chip
+        // The detail line is 30pt under a 70pt title and centred, so the chip
         // has to stop 20pt short of where the wide line ends.
         let chip = MenuBarActionChipGeometry.rect(
             metrics(lineWidth: 30, isStacked: true)

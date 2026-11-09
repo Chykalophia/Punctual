@@ -1,6 +1,6 @@
 //
 //  AppModelTestHarness.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import Combine
@@ -58,8 +58,7 @@ final class AppModelTestHarness {
             guard await self.waitForAsyncOperationDelay() else { return .cancelled }
             self.providerChanges.append((provider, signOut))
             if self.providerSelectionResult == .success {
-                // Connecting ADDS a source; the harness mirrors that so tests
-                // see the same connected set the real repository would report.
+                // Connecting adds a source, as the real repository does.
                 var connected = self.calendarSnapshot.connected
                 if !connected.contains(provider) { connected.append(provider) }
                 self.calendarSnapshot = CalendarSnapshot(

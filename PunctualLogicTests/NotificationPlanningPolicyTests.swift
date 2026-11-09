@@ -1,6 +1,6 @@
 //
-//  NotificationPlannerTests.swift
-//  MeetingBarLogicTests
+//  NotificationPlanningPolicyTests.swift
+//  PunctualLogicTests
 //
 
 import XCTest

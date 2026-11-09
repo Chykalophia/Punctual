@@ -1,6 +1,6 @@
 //
 //  GoogleCalendarParserTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import AppAuthCore
@@ -53,16 +53,10 @@ final class GoogleCalendarParserTests: XCTestCase {
         XCTAssertEqual(event?.status, .confirmed)
         XCTAssertEqual(event?.organizer?.email, "organizer@example.com")
         XCTAssertEqual(event?.attendees.first?.status, .accepted)
-        // Phase 3 PR-B: Google conferenceData URL now flows through the
-        // dedicated `conferenceURL` field instead of `url`. The plain
-        // `url` field stays nil for Google events because Google Calendar
-        // has no per-event "user URL" equivalent of EKEvent.url.
+        // The conferenceData URL goes to `conferenceURL`; Google has no equivalent of `EKEvent.url`.
         XCTAssertNil(event?.url)
         XCTAssertEqual(event?.conferenceURL?.absoluteString, "https://meet.google.com/abc-defg-hij")
-        // The detector populates meetingLink from conferenceURL via the
-        // providerConferenceData source. The Meet URL gets the calendar
-        // owner appended as `authuser` so the host's Google identity is
-        // used when joining.
+        // The Meet link gets the calendar owner as `authuser`.
         XCTAssertEqual(
             event?.meetingLink?.url.absoluteString,
             "https://meet.google.com/abc-defg-hij?authuser=user@example.com"
@@ -290,9 +284,6 @@ final class GoogleCalendarParserTests: XCTestCase {
     // MARK: - Per-event colour
     //
     // A Google event can override its calendar's colour with a `colorId`.
-    // EventKit has no equivalent, so this is the one place the app can know a
-    // day looks the way it looks in Google Calendar rather than one flat colour
-    // per calendar.
 
     private var palette: GoogleColorPalette {
         GoogleColorPalette(eventBackgrounds: ["11": "#dc2127"])
@@ -334,8 +325,6 @@ final class GoogleCalendarParserTests: XCTestCase {
         XCTAssertEqual(event.displayColor, calendar.color)
     }
 
-    /// A colour Google adds later, or a palette that could not be fetched, must
-    /// degrade to the calendar's colour rather than to black.
     func testUnknownColorIDFallsBackToTheCalendarColour() throws {
         for palette in [self.palette, .empty] {
             let event = try XCTUnwrap(GCEventStore.GCParser.event(

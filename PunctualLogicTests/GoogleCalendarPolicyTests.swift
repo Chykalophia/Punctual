@@ -1,6 +1,6 @@
 //
 //  GoogleCalendarPolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest

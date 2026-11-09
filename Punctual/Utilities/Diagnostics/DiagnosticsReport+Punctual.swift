@@ -1,5 +1,5 @@
 //
-//  DiagnosticsReport+MeetingBar.swift
+//  DiagnosticsReport+Punctual.swift
 //  MeetingBar
 //
 
@@ -70,8 +70,7 @@ extension DiagnosticsContext {
         )
     }
 
-    /// Adds platform metadata and permissions to the application-state
-    /// snapshot used by the issue-report formatter.
+    /// Adds platform metadata and permissions to the application-state snapshot.
     @MainActor
     static func current(snapshot: DiagnosticsSnapshot) async -> DiagnosticsContext {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -93,12 +92,7 @@ extension DiagnosticsContext {
 @MainActor
 enum DiagnosticsClipboard {
     /// Copies the formatted diagnostics report to the system pasteboard.
-    /// Single entry point so views don't reach into NSPasteboard directly.
-    ///
-    /// `async` rather than fire-and-forget: gathering the context is itself
-    /// async, so the caller previously had no moment at which the copy was known
-    /// to have happened and could not acknowledge it. Awaiting this is what lets
-    /// the button show a visible "Copied" confirmation.
+    /// Returns once the copy has happened, so the caller can confirm it.
     static func copy(snapshot: DiagnosticsSnapshot) async {
         let context = await DiagnosticsContext.current(snapshot: snapshot)
         let pasteboard = NSPasteboard.general

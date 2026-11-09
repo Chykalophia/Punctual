@@ -1,12 +1,9 @@
 //
 //  ProviderBrowserMigrationTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  Verifies the pure MeetingOpenPreferencesMigration.migrate() logic and
-//  the Defaults-backed migrateDefaultsIfNeeded() runner.
-//
-//  Phase 3 PR 6: six legacy per-provider browser Defaults keys are consolidated
-//  into the unified providerBrowsers map.
+//  Tests for `MeetingOpenPreferencesMigration`, which folds the legacy per-provider browser keys
+//  into the `providerBrowsers` map.
 //
 
 import Defaults
@@ -72,38 +69,31 @@ final class ProviderBrowserMigrationTests: BaseTestCase {
     // MARK: - Defaults-backed migration runner
 
     func testMigrateDefaultsIfNeeded_populatesMapFromLegacyKeys() {
-        // Arrange: set a non-default legacy browser key
         Defaults[.zoomBrowser] = zoomApp
         Defaults[.providerBrowsers] = [:]
 
-        // Act
         MeetingOpenPreferencesMigration.migrateDefaultsIfNeeded()
 
-        // Assert: providerBrowsers map should contain the zoom entry
         XCTAssertEqual(Defaults[.providerBrowsers]["Zoom"], zoomApp)
     }
 
     func testMigrateDefaultsIfNeeded_skipsWhenAlreadyPopulated() {
-        // Arrange: map already populated
+        // Map already populated.
         let existingMap = ["Zoom": chrome]
         Defaults[.providerBrowsers] = existingMap
         Defaults[.zoomBrowser] = zoomApp
 
-        // Act
         MeetingOpenPreferencesMigration.migrateDefaultsIfNeeded()
 
-        // Assert: existing map is unchanged
         XCTAssertEqual(Defaults[.providerBrowsers]["Zoom"], chrome)
     }
 
     func testMigrateDefaultsIfNeeded_doesNotWriteWhenAllLegacyKeysAreDefault() {
-        // Arrange: all legacy keys at their default (systemDefaultBrowser)
+        // All legacy keys at their default (systemDefaultBrowser).
         Defaults[.providerBrowsers] = [:]
 
-        // Act
         MeetingOpenPreferencesMigration.migrateDefaultsIfNeeded()
 
-        // Assert: map stays empty (no migration needed)
         XCTAssertTrue(Defaults[.providerBrowsers].isEmpty)
     }
 

@@ -1,59 +1,26 @@
 //
 //  FiltersTab.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The Filters pane (Preferences UX overhaul, Phase 2): the ONE place that
-//  decides which meetings exist — in the menu bar, the dropdown and the calendar
-//  window alike.
+//  The Filters pane: decides which meetings appear on every surface (menu bar,
+//  dropdown, calendar window). Filtering only; no per-surface styling belongs here.
 //
-//  The pane is named for the only job it does. Owner decision 1 renamed it from
-//  "Which Meetings" to "Filters" *conditional on it being only about filtering*,
-//  so no styling option may ever land here: every row below removes or
-//  de-emphasises meetings, and nothing on it changes how one surface draws them.
-//  That is also how the old Display-vs-Events confusion is resolved — a setting
-//  is never split into a filter half on one pane and a style half on another.
-//
-//  What lives here, in order:
-//    1. A permanent scope banner. These choices apply everywhere.
-//    2. Look ahead — the fetch window, so "Today" means tomorrow's meetings are
-//       never loaded at all.
-//    3. Merge duplicates across calendars.
-//    4. Preset chips, resolved by the hostless `FilterPreset` (FilterPresets.swift).
-//    5. Under "Pick them one by one": the seven per-kind rows, one vocabulary.
-//    6. The meeting happening now.
-//    7. Hide meetings whose title matches a pattern, with a live tester that runs
-//       the SAME `EventFiltering.titleIsFilteredOut` the filter itself runs.
-//    8. Reset this section.
-//
-//  Stored key NAMES are unchanged by the re-home, so nobody's configuration
-//  resets: `showEventsForPeriod`, `deduplicateEvents`, `allDayEvents`,
-//  `nonAllDayEvents`, `personalEventsAppereance`, `showPendingEvents`,
-//  `showTentativeEvents`, `declinedEventsAppereance`, `pastEventsAppereance`,
-//  `hideFinishedEventsInMenu`, `ongoingEventVisibility`, `filterEventRegexes`.
-//
-//  The per-kind rows and the look-ahead / merge-duplicates controls descend from
-//  `EventsSection` (EventsTab.swift, moved there from AppearanceTab.swift),
-//  originally:
+//  The per-kind rows and the look-ahead / merge-duplicates controls derive from
+//  MeetingBar's events preferences, originally:
 //    Created by Andrii Leitsius on 13.01.2021.
 //    Copyright © 2021 Andrii Leitsius. All rights reserved.
-//  Licensed under the Apache License, Version 2.0. Modified for MeetingBarNG by
-//  Peter Krzyzek / Chykalophia, 2026: re-homed onto the Filters pane, collapsed
-//  behind preset chips and one Show / Dim / Hide vocabulary, merged
-//  `hideFinishedEventsInMenu` into the ended-meetings row, absorbed the Advanced
-//  tab's title-pattern list with a live tester, and stated the menu-bar coupling
-//  that "Dim" has always had and never disclosed.
+//  Licensed under the Apache License, Version 2.0.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
 import SwiftUI
 
 struct FiltersTab: View {
-    // Fetch window + de-duplication.
     @Default(.showEventsForPeriod) private var showEventsForPeriod
     @Default(.deduplicateEvents) private var deduplicateEvents
 
-    // The seven per-kind rows. `pastEventsAppereance` and
-    // `hideFinishedEventsInMenu` are ONE row; see `endedVisibility`.
+    // Per-kind rows. `pastEventsAppereance` and `hideFinishedEventsInMenu` share one row; see `endedVisibility`.
     @Default(.allDayEvents) private var allDayEvents
     @Default(.nonAllDayEvents) private var nonAllDayEvents
     @Default(.personalEventsAppereance) private var personalEventsAppereance
@@ -63,15 +30,13 @@ struct FiltersTab: View {
     @Default(.pastEventsAppereance) private var pastEventsAppereance
     @Default(.hideFinishedEventsInMenu) private var hideFinishedEventsInMenu
 
-    // The meeting happening now, and the title patterns.
     @Default(.ongoingEventVisibility) private var ongoingEventVisibility
     @Default(.filterEventRegexes) private var filterEventRegexes
 
-    // Written by `PreferencesDisclosure`; read here so the "Custom" chip can
-    // reveal the rows it names.
+    // Owned by `PreferencesDisclosure`; written here so the "Custom" chip can expand its rows.
     @Default(.preferencesExpandedDisclosures) private var expandedDisclosures
 
-    /// Typed here, never stored: the tester must work before you save anything.
+    /// Sample title for the pattern tester; never persisted.
     @State private var patternTestTitle = ""
 
     private static let customDisclosureID = "filters.custom"
@@ -91,8 +56,7 @@ struct FiltersTab: View {
 
     // MARK: - Scope
 
-    /// Permanent, not dismissible. Every other pane in the window is scoped to
-    /// one surface, so the one pane that is not has to say so on sight.
+    /// Non-dismissible banner stating that these filters apply to every surface.
     private var scopeBanner: some View {
         Section {
             PreferenceCallout(
@@ -131,9 +95,8 @@ struct FiltersTab: View {
 
     // MARK: - Presets
 
-    /// One-click starting points. The selected chip is DERIVED from the stored
-    /// values (`FilterPreset.detect`), so "Custom" is a label rather than a mode
-    /// you can get stuck in or lose when the window closes.
+    /// Preset chips. The selected chip is derived from the stored values via
+    /// `FilterPreset.detect`, so "Custom" means "matches no preset".
     private var presetSection: some View {
         Section(header: Text("preferences_filters_preset_title".loco())) {
             Picker("", selection: presetSelection) {
@@ -146,9 +109,8 @@ struct FiltersTab: View {
         }
     }
 
-    /// Reads the chip from the stored values; writing a named chip writes all
-    /// eight values at once. Picking "Custom" stores NOTHING — it opens the row
-    /// list it names, which is the only thing "custom" can honestly mean.
+    /// Selecting a named preset writes all its values; selecting "Custom" stores
+    /// nothing and only expands the per-kind rows.
     private var presetSelection: Binding<FilterPreset> {
         Binding(
             get: { FilterPreset.detect(storedFilterValues) },
@@ -162,7 +124,7 @@ struct FiltersTab: View {
         )
     }
 
-    /// The stored values in the hostless module's raw-string vocabulary.
+    /// The stored filter values keyed by `FilterDefaultsKey`, as raw strings.
     private var storedFilterValues: [String: String] {
         [
             FilterDefaultsKey.allDay: allDayEvents.rawValue,
@@ -224,16 +186,10 @@ struct FiltersTab: View {
 
     // MARK: - The seven rows
 
-    /// One vocabulary across all seven: **Show / Dim / Hide**. "show as
-    /// underlined" and "show with strikethrough" are gone as option words —
-    /// three vocabularies collapse into one, and no row is split into a filter
-    /// half here and a style half on another pane.
+    /// The per-kind rows, each offering Show / Dim / Hide.
     ///
-    /// Two rows name their middle value more precisely because the stored value
-    /// genuinely is not "dim": all-day entries can be kept only when they carry
-    /// a meeting link, and declined meetings have no plain-show case at all
-    /// (`DeclinedEventsAppereance` stores `strikethrough`, which the renderer
-    /// draws crossed out). Naming those honestly beats pretending they are Dim.
+    /// Exceptions: all-day offers "only with a meeting link" instead of Dim, and
+    /// declined offers "crossed out" (`.strikethrough`) instead of Show.
     private var customSection: some View {
         Section {
             PreferencesDisclosure(
@@ -311,23 +267,16 @@ struct FiltersTab: View {
                 }
                 helpText("preferences_filters_ended_help")
 
-                // The coupling this pane exists to stop hiding: choosing Dim for
-                // pending or tentative invites ALSO removes them from menu-bar
-                // next-meeting selection — `PendingEventsAppereance
-                // .hidesFromNextEvent` is `.hide || .show_inactive`
-                // (EventSelection+MeetingBar.swift), and the same is true of the
-                // no-link and solo rows. Behaviour preserved exactly; it is only
-                // now stated, because an option whose wording described styling
-                // was quietly changing which meeting the menu bar picks.
+                // Dim also excludes a meeting from menu bar next-meeting selection
+                // (`hidesFromNextEvent` is true for `.hide` and `.show_inactive`).
                 helpText("preferences_filters_menu_bar_note")
             }
         }
     }
 
-    /// "Meetings that have ended" is one row over two stored keys, resolved by
-    /// the hostless `EndedMeetingsVisibility` (hide wins). They overlapped, could
-    /// contradict, and lived on two different tabs with nothing stating
-    /// precedence; writing through both keeps them from disagreeing again.
+    /// "Meetings that have ended": one row over `pastEventsAppereance` and
+    /// `hideFinishedEventsInMenu`, resolved by `EndedMeetingsVisibility` (hide wins).
+    /// Writes both keys.
     private var endedVisibility: Binding<FilterVisibility> {
         Binding(
             get: {
@@ -348,10 +297,7 @@ struct FiltersTab: View {
 
     // MARK: - The meeting happening now
 
-    /// A filter row like its neighbours: it decides whether a meeting that has
-    /// already started still counts as your next one, which is consumed by event
-    /// selection and so changes the dropdown's meeting card too — not just the
-    /// menu bar, which is why it is not on the Menu Bar pane.
+    /// Whether a meeting that has started still counts as the next meeting, on every surface.
     private var ongoingSection: some View {
         Section {
             Picker(
@@ -398,9 +344,7 @@ struct FiltersTab: View {
         }
     }
 
-    /// Live, and it runs the shipping filter rather than a second copy of the
-    /// rule — a tester that re-implements the rule is a tester that can disagree
-    /// with reality.
+    /// Whether the sample title would be hidden; calls the real `EventFiltering` rule.
     private var patternTestHidesTitle: Bool {
         EventFiltering.titleIsFilteredOut(patternTestTitle, patterns: filterEventRegexes)
     }
@@ -417,10 +361,7 @@ struct FiltersTab: View {
         PreferencesHelpText(key: key)
     }
 
-    /// "show as underlined" is retired as an option value, so anyone holding it
-    /// lands on Dim once — deliberately — instead of meeting a picker with
-    /// nothing selected. The stored case still exists on the enum, so nothing
-    /// fails to decode — a value migration, not a schema change.
+    /// Migrates the retired "show as underlined" value to Dim so the pickers always have a selection.
     private func retireDeletedOptionValues() {
         if let replacement = FilterVocabularyMigration.migrated(showPendingEvents.rawValue),
            let migrated = PendingEventsAppereance(rawValue: replacement) {

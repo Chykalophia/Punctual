@@ -1,6 +1,6 @@
 //
 //  MeetingPrepLinksTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -110,7 +110,7 @@ final class MeetingPrepLinksTests: XCTestCase {
 
     func testGoogleDocsAndDriveAreNotTreatedAsMeetingHosts() {
         // docs.google.com / drive.google.com share the google.com parent but are
-        // prep hosts — only meet.google.com is a join host.
+        // prep hosts; only meet.google.com is a join host.
         let notes = """
         https://docs.google.com/document/d/1/edit
         https://drive.google.com/file/d/2/view

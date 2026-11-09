@@ -4,11 +4,8 @@
 //
 //  Copyright © 2026 Peter Krzyzek / Chykalophia. All rights reserved.
 //
-//  Structured "What's New" data model for MeetingBarNG. Each release is a set
-//  of categorized highlights; the category drives an SF Symbol + accent color
-//  in ChangelogView. Entry text stays plain English (not localized), matching
-//  the original per-version changelog behavior — only the surrounding chrome
-//  is localized.
+//  "What's New" data: releases of categorized highlights. Highlight text is plain English,
+//  not localized; only the surrounding chrome is.
 //
 
 import SwiftUI
@@ -40,8 +37,7 @@ enum ChangeKind {
         }
     }
 
-    /// Localization key for the row's accessibility label. The view resolves it
-    /// via `.loco()`; keeping the raw key here leaves the model free of I18N.
+    /// Localization key for the row's accessibility label, resolved by the view.
     var accessibilityLabelKey: String {
         switch self {
         case .feature: "changelog_kind_feature"
@@ -52,7 +48,7 @@ enum ChangeKind {
     }
 }
 
-/// One highlight line within a release. `text` is plain English by design.
+/// One highlight line within a release; `text` is not localized.
 struct ChangeEntry {
     let kind: ChangeKind
     let text: String
@@ -60,10 +56,9 @@ struct ChangeEntry {
 
 /// A single released version and its highlights.
 struct ReleaseNote: Identifiable {
-    /// Semantic version string, e.g. "0.1.0". Also serves as the identity.
+    /// Semantic version string, e.g. "0.1.0"; also the identity.
     let version: String
-    /// Preformatted display date (e.g. "July 2026"), or nil to omit. Stored as
-    /// a static string so the module never calls `Date()` at load time.
+    /// Preformatted display date (e.g. "July 2026"), or nil to omit.
     let date: String?
     let highlights: [ChangeEntry]
 
@@ -72,9 +67,7 @@ struct ReleaseNote: Identifiable {
 
 /// Namespace for the seeded release data plus pure filtering helpers.
 enum ReleaseNotes {
-    /// All shipped releases, newest first. MeetingBarNG resets the changelog to
-    /// a single debut entry; the legacy upstream 3.x–5.0 notes are intentionally
-    /// dropped.
+    /// All shipped releases, newest first.
     static let all: [ReleaseNote] = [
         ReleaseNote(
             version: "1.1.1",
@@ -206,15 +199,12 @@ enum ReleaseNotes {
         )
     ]
 
-    /// Releases strictly newer than the last-acknowledged version. These surface
-    /// as the primary "What's New" cards. Keeps the strictly-greater semantics of
-    /// `compareVersions` used elsewhere for changelog gating.
+    /// Releases strictly newer than the last-acknowledged version (`compareVersions` semantics).
     static func releases(newerThan lastRevised: String) -> [ReleaseNote] {
         all.filter { compareVersions($0.version, lastRevised) }
     }
 
-    /// Releases the user has already seen (version <= lastRevised). Shown, when
-    /// non-empty, under a collapsed "Earlier releases" disclosure.
+    /// Releases at or below the last-acknowledged version.
     static func releases(upToAndIncluding lastRevised: String) -> [ReleaseNote] {
         all.filter { !compareVersions($0.version, lastRevised) }
     }

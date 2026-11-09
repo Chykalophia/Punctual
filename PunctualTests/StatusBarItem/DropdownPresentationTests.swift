@@ -1,11 +1,8 @@
 //
 //  DropdownPresentationTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  Covers the three types pulled out of `MenuBuilder` when the classic NSMenu was
-//  retired: the meeting card's copy, the right-click quick actions, and the
-//  agenda's visibility rules. Each was previously reachable only through the
-//  menu, so without these the deletion would have taken the coverage with it.
+//  Tests for the meeting card copy, the right-click quick actions and the agenda visibility rules.
 //
 
 import Defaults
@@ -45,8 +42,6 @@ final class MeetingSummaryPresenterTests: BaseTestCase {
         )
     }
 
-    /// The same account arrives from calendar email, source and organizer; the
-    /// metadata line must not say it three times.
     func testMetadataDeduplicatesAccountCalendarAndOrganizer() {
         let now = Date()
         let duplicate = "same@example.com"
@@ -89,7 +84,6 @@ final class MeetingSummaryPresenterTests: BaseTestCase {
         XCTAssertEqual(running.sectionTitle, "status_bar_control_current_meeting".loco())
     }
 
-    /// A running meeting has no "in 5m" to show; an upcoming one does.
     func testCountdownOnlyAppearsBeforeTheMeetingStarts() {
         let now = Date()
         XCTAssertNotNil(
@@ -108,9 +102,6 @@ final class MeetingSummaryPresenterTests: BaseTestCase {
         )
     }
 
-    /// The card shows the real title even when the MENU BAR is set to hide it —
-    /// the privacy setting is about the always-visible strip, not the dropdown
-    /// the user deliberately opened.
     func testTitleIsKeptWhenTheStatusBarUsesAGenericTitle() {
         let now = Date()
         let event = makeEvent(title: "Board review", now: now)
@@ -141,7 +132,6 @@ final class MeetingSummaryPresenterTests: BaseTestCase {
 final class QuickActionsMenuTests: BaseTestCase {
     private final class Target: NSObject {}
 
-    /// Join is only actionable when there is something to join.
     func testJoinIsDisabledWithoutAMeetingLink() {
         var state = StatusBarMenuState()
         state.settings = .empty
@@ -154,7 +144,6 @@ final class QuickActionsMenuTests: BaseTestCase {
         XCTAssertFalse(join?.isEnabled ?? true)
     }
 
-    /// In-app event creation is EventKit-only, so the entry hides for Google.
     func testNewEventOnlyAppearsForTheEventKitProvider() {
         var eventKit = StatusBarMenuState()
         eventKit.settings = .empty
@@ -254,7 +243,6 @@ final class DropdownEventVisibilityTests: BaseTestCase {
         )
     }
 
-    /// "Personal" means nobody else is invited.
     func testPersonalEventsAreHiddenOnlyWhenTheSettingSaysSo() {
         let alone = event(id: "SOLO", startsIn: 300, attendees: [])
         let (menu, events) = settings(personal: .hide)
@@ -303,7 +291,6 @@ final class DropdownEventVisibilityTests: BaseTestCase {
         )
     }
 
-    /// A lone meeting must not read "1 meetings tomorrow".
     func testSummaryLinePicksSingularAndPlural() {
         let one = DropdownEventVisibility.tomorrowSummaryText(
             visibleTomorrowEvents: [event(id: "A", startsIn: 86_400)]

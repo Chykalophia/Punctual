@@ -16,20 +16,10 @@ struct CalendarSourcePresentation: Equatable, Identifiable {
 
     var id: EventStoreProvider { provider }
 
-    /// Every calendar source the app knows about — both of them, always.
+    /// Every calendar source, in display order, regardless of build credentials.
     ///
-    /// This used to be gated on the build carrying Google OAuth credentials, so
-    /// a build without them listed macOS Calendar alone. Bring-your-own-client
-    /// makes that wrong: Google can now be made available at RUNTIME by entering
-    /// your own client id, and hiding the row hid the only place to do it.
-    /// Availability is expressed on the row instead — the toggle is disabled,
-    /// with the credentials field right there, until a client exists. Whether a
-    /// source can actually sign in is `CalendarSourceKind.isAvailableInThisBuild`.
-    ///
-    /// **Why use the direct provider at all**, given macOS Calendar already syncs
-    /// Google accounts: the EventKit mirror drops data the Calendar API carries —
-    /// conference entry points, per-attendee response status, and the richer
-    /// description field meeting links are often buried in.
+    /// Google is listed even without a shipped OAuth client, because a user can supply one
+    /// at runtime. Whether a source can sign in is `CalendarSourceKind.isAvailableInThisBuild`.
     static var all: [CalendarSourcePresentation] {
         CalendarSourceKind.displayOrder.map { make(for: $0.provider) }
     }
@@ -59,23 +49,6 @@ struct CalendarSourcePresentation: Equatable, Identifiable {
         }
     }
 }
-
-// `PreferencesTab` moved to `SettingsIndex.swift` in the Phase 2 IA restructure:
-// the eight panes and the settings index are one model, so a pane cannot exist
-// without the index knowing what it holds (which is what makes per-pane reset
-// and settings search impossible to drift). `PreferencesSidebarSection` is gone
-// entirely — the sidebar is flat, because grouping eight concrete names under
-// abstract nouns ("Setup", "Experience") rebuilt the very "everything is
-// miscellaneous" problem this overhaul exists to remove.
-
-// `PreferencesStatusBarTimeOption` is deleted with the "Time next to the title"
-// picker it fed. That control was read only by the classic status-bar path while
-// sitting directly above a composer that ignored it, so it was already inert for
-// anyone who had arranged their menu bar. Its two capabilities now live on the
-// Menu Bar pane, where they are visible in the thing they change: showing the
-// time is the presence of the **Countdown** block, and show-under-title is
-// **One line / Two lines**. `MenuBarTimeFormatDefaultsMigration` carries a
-// stored `eventTimeFormat` across to both, once.
 
 enum PreferencesStatusTone: Equatable {
     case neutral
@@ -107,30 +80,21 @@ struct PreferencesCalendarPresentation: Equatable {
     let providerAccountScopeKey: String
     let statusTextKey: String
     let emptyStateTextKey: String
-    /// Newest event `lastModifiedDate` from the last successful fetch, carried
-    /// over from `ProviderHealth.lastSyncedChange`. `nil` when there are no
-    /// events / no modification dates — the Calendars tab hides the line then.
-    /// The user eyeballs this for staleness; it is surfaced, never auto-judged.
+    /// Newest event `lastModifiedDate` from the last successful fetch; `nil` when no event carried one.
     let lastSyncedChange: Date?
-    /// Offer the "Re-authenticate Account…" affordance (System Settings ▸
-    /// Internet Accounts). EventKit-only: that is where the underlying
-    /// CalDAV/Google/Exchange accounts whose expired credentials cause silent
-    /// stale data are re-signed-in.
+    /// Whether to offer the Internet Accounts shortcut; true only for EventKit.
     let canReauthenticateAccount: Bool
-    /// Every source connected right now, in display order. Drives the source
-    /// toggles; `activeProvider` alone cannot, now that it names only the
-    /// write-capable source.
+    /// Every connected source, in display order. `activeProvider` names only the write-capable one.
     let connectedProviders: [EventStoreProvider]
-    /// Sources failing while another still works. Each one gets its reason and
-    /// (when it is an auth lapse) a reconnect button next to its toggle,
-    /// because otherwise a half-broken setup just shows fewer meetings.
+    /// Sources that are failing while another source still works.
     let degradedSources: [CalendarSourceFailure]
 
-    /// - Parameter authorizationStatus: the live EventKit calendar
-    ///   authorization (from `PermissionReporter.calendarAuthorizationStatus()`).
-    ///   Passed in rather than read here so `make` stays pure/testable. Defaults
-    ///   to `.authorized` so it does not surface a "Grant Access" affordance for
-    ///   non-EventKit providers or call sites that predate the parameter.
+    /// Builds the Calendars pane presentation from app state.
+    ///
+    /// - Parameters:
+    ///   - state: The current app state.
+    ///   - authorizationStatus: The live EventKit calendar authorization, injected to keep this pure.
+    ///     Defaults to `.authorized`, which never offers "Grant access".
     static func make(
         from state: AppState,
         authorizationStatus: PermissionSnapshot.CalendarAccess = .authorized
@@ -139,12 +103,7 @@ struct PreferencesCalendarPresentation: Equatable {
         var statusTone: PreferencesStatusTone
         var statusTextKey: String
 
-        // Phase 2 moved these into the pane's own `preferences_calendars_*`
-        // namespace and out of engineer-speak: "Authorization required" →
-        // "Sign-in needed", "Showing cached data" → "Showing the last data macOS
-        // gave us". `IndirectLocalizationKeyTests` resolves every key this
-        // property can return — ten such keys were once deleted silently and
-        // shipped as raw text in this very pane.
+        // Keys are built indirectly; `IndirectLocalizationKeyTests` checks each one resolves.
         if state.providerHealth.authRequired {
             connectionState = .authRequired
             statusTone = .error
@@ -175,10 +134,7 @@ struct PreferencesCalendarPresentation: Equatable {
 
         let availableCalendarCount = state.calendars.count
 
-        // The provider refreshed successfully but exposes zero calendars (no
-        // calendar accounts / data sources synced on this Mac). That is not
-        // "Up to date" — report it honestly so the user knows to connect an
-        // account, and keep the Calendar-settings shortcut available.
+        // A successful refresh with zero calendars is reported as a warning, not "Up to date".
         let connectedWithoutCalendars = connectionState == .connected
             && availableCalendarCount == 0
         if connectedWithoutCalendars {
@@ -204,29 +160,8 @@ struct PreferencesCalendarPresentation: Equatable {
             availableIDs.contains($0)
         }.count
 
-        // EventKit is the only provider that can be in `.notDetermined`: a
-        // normal post-onboarding launch never runs the provider switch that
-        // prompts, so the app can silently hold no calendar access. Surface an
-        // explicit "Grant Calendar Access" affordance in that state. Once the
-        // status is `.denied`/`.restricted` a request no longer prompts, so we
-        // fall back to the Calendar-settings shortcut instead — hence
-        // `canOpenCalendarSettings` is suppressed while a request can still
-        // prompt (`.notDetermined`).
-        //
-        // BUT the TCC status alone is not enough to put a prominent button on
-        // screen. It can read `.notDetermined` while EventKit is demonstrably
-        // serving calendars — re-signing a local build is one way to get there,
-        // since the existing grant no longer matches the new code signature even
-        // though the running process keeps working. The result was "Grant
-        // calendar access" sitting next to "Up to date · refreshed 3 seconds
-        // ago" above a list of sixteen calendars, which reads as a bug because
-        // it is one.
-        //
-        // So the affordance needs BOTH: a status saying a prompt would achieve
-        // something, AND no evidence to the contrary. Calendars arriving FROM
-        // EVENTKIT are that evidence — if they are, there is nothing to grant.
-        // Counting all calendars would be wrong now that two sources can be
-        // connected: Google's calendars say nothing about EventKit's access.
+        // TCC can report `.notDetermined` while EventKit is serving calendars (e.g. after
+        // re-signing a build), so EventKit calendars present means there is nothing to grant.
         let eventKitCalendarCount = state.calendars
             .filter { $0.provider == .macOSEventKit }
             .count
@@ -282,9 +217,7 @@ struct RegexEditDraft: Equatable, Identifiable {
     let originalValue: String?
     var value: String
 
-    /// Identity for `.sheet(item:)` presentation. `nil` originalValue (an add)
-    /// gets a distinct id from any edit so the editor rebuilds with the right
-    /// seed value each time it is presented.
+    /// Identity for `.sheet(item:)`; an add (`originalValue == nil`) uses the empty string.
     var id: String { originalValue ?? "" }
 
     static func adding() -> RegexEditDraft {

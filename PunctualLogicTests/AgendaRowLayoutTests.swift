@@ -1,15 +1,8 @@
 //
 //  AgendaRowLayoutTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the dropdown panel's single agenda grid (MeetingBarNG,
-//  Preferences UX overhaul Phase 1).
-//
-//  Before `DropdownMetrics` the 330pt panel carried four unrelated left grids —
-//  a 66pt time column, an 18pt action-symbol column, a 32pt detail indent and a
-//  16pt section-header indent — none of which knew about each other. These tests
-//  pin the grid down so "put the marker all the way left" has something to be
-//  left OF.
+//  Tests for the dropdown panel's agenda row grid.
 //
 
 import CoreGraphics
@@ -75,16 +68,11 @@ final class AgendaRowLayoutTests: XCTestCase {
 
     // MARK: - The grid itself
 
-    /// The four grids the plan measured are now one. A section header's indent
-    /// and a row's content origin have to be the same number or headers and rows
-    /// visibly disagree.
     func testTheRowContentBoxAndTheSectionHeaderShareOneIndent() {
         XCTAssertEqual(metrics.rowLeadingInset, metrics.rowOuterPadding + metrics.rowInnerPadding)
         XCTAssertEqual(metrics.sectionHeaderInset, metrics.rowLeadingInset)
     }
 
-    /// The detail disclosure is indented from the same grid rather than from a
-    /// literal, and it sits inside the row's content box, not outside it.
     func testDetailIndentIsDerivedFromTheGrid() {
         XCTAssertEqual(metrics.detailIndent, metrics.rowLeadingInset + metrics.columnSpacing * 2)
         XCTAssertGreaterThan(metrics.detailIndent, metrics.rowLeadingInset)
@@ -100,9 +88,6 @@ final class AgendaRowLayoutTests: XCTestCase {
         XCTAssertEqual(metrics.timeColumnWidth(for: .hidden), 0)
     }
 
-    /// Start-and-end stacks the two times instead of widening the column: a
-    /// single-line "10:00 AM – 10:30 AM" needs ~125pt of a 298pt content box and
-    /// would leave the title unreadable.
     func testStartAndEndKeepsTheSameColumnWidthAsStartOnly() {
         XCTAssertEqual(
             metrics.timeColumnWidth(for: .startAndEnd),
@@ -123,9 +108,6 @@ final class AgendaRowLayoutTests: XCTestCase {
 
     // MARK: - Service icon slot
 
-    /// `showMeetingServiceIcon` was drawn nowhere on agenda rows. Turning it on
-    /// has to cost the title exactly one icon slot plus one gutter — no more, and
-    /// never zero (which is what "the setting does nothing" looks like).
     func testServiceIconShiftsTheTitleByExactlyOneSlot() {
         for combination in allCombinations {
             let without = layout(
@@ -151,8 +133,6 @@ final class AgendaRowLayoutTests: XCTestCase {
 
     // MARK: - Marker resolution
 
-    /// A "left border bar" that is not at the left edge is not a border. The
-    /// position control is therefore resolved, not merely stored.
     func testLeftBorderBarAlwaysResolvesToFarLeft() {
         for position in AgendaMarkerPosition.allCases {
             for timeColumn in AgendaTimeColumn.allCases {
@@ -183,9 +163,7 @@ final class AgendaRowLayoutTests: XCTestCase {
 
     // MARK: - Far left genuinely escapes the row padding
 
-    /// The owner's literal ask: a marker "all the way to the left". Inside
-    /// `PanelRow` that means a NEGATIVE offset — anything ≥ 0 stops at the
-    /// padding and only looks flush.
+    /// Far left means a negative offset: anything >= 0 stops at the `PanelRow` padding.
     func testFarLeftMarkerEscapesPanelRowPadding() {
         for marker in [AgendaMarker.dot, .leftBorderBar] {
             for timeColumn in AgendaTimeColumn.allCases {
@@ -214,7 +192,6 @@ final class AgendaRowLayoutTests: XCTestCase {
         }
     }
 
-    /// A left border bar is a bar: taller than it is wide, unlike the dot.
     func testLeftBorderBarIsTallerThanItIsWide() {
         let frame = layout(.leftBorderBar, .farLeft, .startOnly).markerFrame
         XCTAssertNotNil(frame)
@@ -228,10 +205,8 @@ final class AgendaRowLayoutTests: XCTestCase {
             let result = layout(combination)
             let label = combination.description
 
-            // The title never sits on top of the time column.
             XCTAssertGreaterThanOrEqual(result.titleOrigin, result.timeColumnWidth, label)
 
-            // The title always has room left for it.
             XCTAssertGreaterThan(result.titleWidth, 0, label)
             XCTAssertLessThanOrEqual(
                 result.titleOrigin + result.titleWidth,
@@ -242,9 +217,7 @@ final class AgendaRowLayoutTests: XCTestCase {
             guard let frame = result.markerFrame else { continue }
             XCTAssertGreaterThan(frame.width, 0, label)
             XCTAssertGreaterThan(frame.height, 0, label)
-            // The marker never sits on top of the title …
             XCTAssertLessThanOrEqual(frame.maxX, result.titleOrigin, label)
-            // … nor on top of the time column.
             switch result.resolvedPosition {
             case .farLeft:
                 XCTAssertLessThanOrEqual(frame.maxX, 0, label)
@@ -254,8 +227,6 @@ final class AgendaRowLayoutTests: XCTestCase {
         }
     }
 
-    /// Hiding the time column reclaims its width for the title rather than
-    /// leaving a hole where it used to be.
     func testHidingTheTimeColumnMovesTheTitleLeft() {
         for marker in AgendaMarker.allCases {
             for position in AgendaMarkerPosition.allCases {
@@ -267,13 +238,7 @@ final class AgendaRowLayoutTests: XCTestCase {
         }
     }
 
-    /// Today's shipping row — a dot between the time and the title with the
-    /// start time showing — must keep the exact geometry it has, so Phase 1 is a
-    /// refactor of the grid and not a silent restyle.
-    /// Spelled out as arithmetic so the relationship survives a retune: time
-    /// column, gutter, marker, gutter. The numbers moved in the polish pass when
-    /// the grid was aligned to the mockup's CSS; the STRUCTURE is what this
-    /// pins.
+    /// The expected value is spelled out as arithmetic: time column, gutter, marker, gutter.
     func testTheShippingDefaultRowKeepsItsCurrentGeometry() {
         let result = layout(.dot, .betweenTimeAndTitle, .startOnly)
         XCTAssertEqual(result.timeColumnWidth, 58)
@@ -282,11 +247,7 @@ final class AgendaRowLayoutTests: XCTestCase {
         XCTAssertEqual(result.titleOrigin, 58 + 9 + 7 + 9)
     }
 
-    /// A row reserves space for the RESTING glyph, not for the Join pill that
-    /// only exists on hover — the pill is drawn as an overlay. Asserted against
-    /// the arithmetic rather than a literal so the intent survives a density
-    /// retune, and pinned as a regression: reserving the pill width cost every
-    /// linked event ~32pt of title for a control that was not on screen.
+    /// The Join pill only exists on hover and is drawn as an overlay, so it reserves no width.
     func testRowReservesTheRestingGlyphNotTheHoverPill() {
         let result = layout(.dot, .betweenTimeAndTitle, .startOnly)
         let reserved = metrics.rowContentWidth - result.titleOrigin - result.titleWidth
@@ -303,7 +264,6 @@ final class AgendaRowLayoutTests: XCTestCase {
         )
     }
 
-    /// The saving is real at every density, not just the default one.
     func testEveryDensityGivesTheTitleMoreRoomThanThePillWouldHave() {
         for density in DropdownDensity.allCases {
             let metrics = density.metrics

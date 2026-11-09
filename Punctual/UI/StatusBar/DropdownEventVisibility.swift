@@ -1,17 +1,11 @@
 //
 //  DropdownEventVisibility.swift
-//  MeetingBarNG
+//  Punctual
 //
 //  Whether an event is shown in the dropdown at all, given the user's
-//  hide/show settings.
+//  hide/show settings, plus tomorrow's look-ahead rows and summary line.
 //
-//  Extracted from `DropdownPanelView` when the classic NSMenu was retired. It had
-//  been a private method on the view, which meant the only way to test "choosing
-//  hide for declined meetings actually hides them" was through the NSMenu's own
-//  copy of the rule — so deleting the menu would have deleted the coverage for a
-//  rule the panel still applies.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
@@ -19,8 +13,7 @@ import Foundation
 enum DropdownEventVisibility {
     /// Whether the dropdown draws `event`.
     ///
-    /// - Parameter now: injected so "finished" and "past" are decided against the
-    ///   panel's ticking clock rather than a fresh `Date()` on every row.
+    /// - Parameter now: The panel's clock, used to decide "finished" and "past".
     static func shouldRender(
         _ event: MBEvent,
         menu: MenuSettings,
@@ -46,12 +39,8 @@ enum DropdownEventVisibility {
 
     /// The tomorrow events the agenda renders, before the row cap.
     ///
-    /// The look-ahead setting decides how much of tomorrow is worth showing:
-    /// all of it, just the first meeting, or — in summary mode — no rows at all,
-    /// because that mode replaces them with a one-line count.
-    /// The look-ahead mode is read from `display` rather than passed separately —
-    /// it lives there, and taking both invited a caller to hand over two settings
-    /// that disagreed.
+    /// Per `display.showEventsForPeriod`: all visible events, only the first, or
+    /// none (summary mode, where `tomorrowSummaryText` replaces the rows).
     static func tomorrowRendered(
         _ events: [MBEvent],
         menu: MenuSettings,
@@ -75,18 +64,16 @@ enum DropdownEventVisibility {
         }
     }
 
-    /// The one-line summary that REPLACES tomorrow's rows in summary mode.
+    /// The one-line summary that replaces tomorrow's rows in summary mode.
     ///
-    /// The counterpart of `tomorrowRendered`, which returns no rows for that
-    /// mode. Takes the full visible list, not the rendered one, because the point
-    /// of the line is to count the meetings it is standing in for.
+    /// - Parameter events: The full visible list (not the rendered one), since the
+    ///   line counts the meetings it stands in for.
     static func tomorrowSummaryText(visibleTomorrowEvents events: [MBEvent]) -> String {
         let title = "status_bar_section_tomorrow".loco()
         guard !events.isEmpty else {
             return "status_bar_section_date_nothing".loco(title.lowercased())
         }
-        // Manual `_one`/`_other` split, the same one the day-summary count uses —
-        // without it a lone meeting reads "1 meetings tomorrow".
+        // Manual `_one`/`_other` plural split; these keys are not stringsdict plurals.
         let key = events.count == 1
             ? "status_bar_tomorrow_summary_one"
             : "status_bar_tomorrow_summary_other"

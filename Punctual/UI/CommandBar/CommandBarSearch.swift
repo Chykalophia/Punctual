@@ -1,10 +1,9 @@
 //
 //  CommandBarSearch.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless ranking for the Command Bar. Pure and deterministic (Date/Calendar
-//  injected). Reuses EventSearch for event ranking and adds action matching plus
-//  the empty-query default ordering. No AI/LLM, no natural-language parsing.
+//  Hostless, deterministic ranking for the Command Bar: event ranking via EventSearch plus
+//  action matching and the empty-query default ordering.
 //
 
 import Foundation
@@ -121,8 +120,8 @@ enum CommandBarSearch {
 
     // MARK: - Action scoring
 
-    /// AND-across-terms match of `query` against an action's localized title +
-    /// synonyms. Returns the summed best-tier score, or `nil` if any term misses.
+    /// Matches every term of `query` against an action's title and synonyms. Returns the summed
+    /// best-tier score, or `nil` if any term misses.
     private static func actionScore(query: String, descriptor: CommandBarActionDescriptor) -> Double? {
         let haystack = ([descriptor.title] + descriptor.searchableText).map(TextNormalization.fold)
         let terms = TextNormalization.fold(query)
@@ -145,9 +144,7 @@ enum CommandBarSearch {
     /// Match strength of `term` in an already-folded `field`: exact = 4,
     /// prefix = 3, word-boundary prefix = 2, substring = 1, none = 0.
     ///
-    /// Internal (not private) so `SettingsIndex` ranks settings on the same
-    /// ladder the Command Bar ranks events and actions — one relevance model in
-    /// the app, not two that drift.
+    /// Internal so `SettingsIndex` ranks settings on the same scale.
     static func matchTier(term: String, in field: String) -> Double {
         guard !field.isEmpty, !term.isEmpty else { return 0 }
         if field == term { return 4 }

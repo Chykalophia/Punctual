@@ -1,40 +1,32 @@
 //
 //  EventSearch.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless full-text ranked event search (Dot parity). Pure and deterministic:
-//  it operates on `SearchableEvent` value projections (not MBEvent), so it lives
-//  in the MeetingBarLogic module and is unit-tested without a host. Mirrors the
-//  EventFiltering "value type + pure function + bridge" pattern. This is the data
-//  layer FOR the Command Bar; it builds no UI. No AI/LLM — text matching only.
+//  Pure, deterministic ranked text search over `SearchableEvent` projections,
+//  used by the Command Bar.
 //
 
 import Foundation
 
-/// Flat, EventKit-free projection of an event for ranked search. `sourceIndex`
-/// maps a result back to the caller's original `[MBEvent]` (same convention as
-/// EventFilterEvent / EventSelectionEvent).
+/// Projection of an event for ranked search. `sourceIndex` maps a result back to the caller's array.
 struct SearchableEvent: Equatable {
     let sourceIndex: Int
     let id: String
     let title: String
     let notes: String?
     let location: String?
-    /// Pre-flattened attendee + organizer names and emails ("people"), so the
-    /// pure layer never sees MBEventAttendee / MBEventOrganizer.
+    /// Attendee and organizer names and emails.
     let attendees: [String]
 }
 
-/// Per-field weights for scoring. Higher weight ⇒ a match in that field ranks
-/// the event higher. Mirrors the *Settings structs; `.default` is the built-in.
+/// Per-field scoring weights; a match in a higher-weighted field ranks the event higher.
 struct SearchFieldWeights: Equatable {
     let title: Double
     let attendees: Double
     let location: Double
     let notes: Double
 
-    /// Title wins (you search a standup by name); people next (the meeting with
-    /// Dana); location (room/"zoom"); notes lowest (long, noisy free text).
+    /// Title, then people, then location, then notes.
     static let `default` = SearchFieldWeights(title: 1.0, attendees: 0.7, location: 0.6, notes: 0.4)
 }
 
@@ -45,9 +37,8 @@ struct EventSearchResult: Equatable {
     let score: Double
 }
 
-/// Case- and diacritic-insensitive text folding applied to both event fields and
-/// query terms before matching. `locale: nil` keeps results deterministic and
-/// dodges locale-specific casing surprises (e.g. the Turkish dotless-i).
+/// Case-, diacritic- and width-insensitive folding for event fields and query terms.
+/// `locale: nil` keeps results locale-independent (no Turkish dotless-i surprises).
 enum TextNormalization {
     static func fold(_ value: String) -> String {
         value.folding(
@@ -60,12 +51,9 @@ enum TextNormalization {
 enum EventSearch {
     /// Ranks `events` best-first for `query`.
     ///
-    /// - An empty/whitespace query returns ALL events in input order (score 0),
-    ///   so the caller can show recents/defaults.
-    /// - Multi-term queries use AND semantics: an event must match every term (in
-    ///   some field) to appear — so "team sync" finds "Weekly Team Sync".
-    /// - Score is the sum of each term's best-field score; ties break by
-    ///   `sourceIndex` ascending (stable, preserving the caller's input order).
+    /// - An empty or whitespace query returns every event in input order with score 0.
+    /// - Multi-term queries use AND semantics: an event must match every term in some field.
+    /// - Score is the sum of each term's best-field score; ties keep input order.
     static func rank(
         _ events: [SearchableEvent],
         query: String,
@@ -104,7 +92,7 @@ enum EventSearch {
 
     // MARK: - Internal
 
-    /// Every field folded once per rank() call (not once per term).
+    /// An event's fields, folded once per event rather than once per term.
     private struct FoldedFields {
         let title: String
         let location: String?

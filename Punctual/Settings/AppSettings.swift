@@ -49,25 +49,16 @@ struct MenuSettings: Equatable {
     var showEventDetails: Bool
     var showMeetingServiceIcon: Bool
     var showEventCalendarColor: Bool
-    /// When true, reference links found in an event's invite (Figma, Notion,
-    /// GitHub, Google Docs/Sheets/Slides, generic URLs) are surfaced as clickable
-    /// rows in the event detail submenu. ON by default.
+    /// When true, reference links found in an event's invite are shown as rows in the event detail submenu.
     var showMeetingPrepLinks: Bool
-    /// When true, the menu's day list starts at "now" — meetings that ended more
-    /// than the grace period ago are hidden. When false, the full day is shown.
+    /// When true, the menu's day list hides meetings that ended more than the grace period ago.
     var hideFinishedEventsInMenu: Bool
-    /// Minutes before a meeting starts at which its action control becomes a
-    /// full-strength call to action. Lives on this snapshot rather than being
-    /// read from `Defaults` at each call site, so every surface that draws the
-    /// control agrees about when a meeting is close.
+    /// Minutes before a meeting starts at which its action control becomes a full-strength call to action.
     var eventActionHighlightMinutes: Int
     /// When true, Apple Reminders due today are shown in the dropdown's Today section.
-    /// OFF by default (see `Defaults[.showRemindersInMenu]`).
     var showRemindersInMenu: Bool
     /// When true, overdue reminders are included alongside those due today.
     var remindersIncludeOverdue: Bool
-    // Composable menu dropdown module toggles (MeetingBarNG). greeting/timeline
-    // reuse showGreetingInMenu / showTimelineInMenu; these cover the rest.
     /// When true, the next/current meeting control card is shown.
     var showMeetingControlInMenu: Bool
     /// When true, the today/tomorrow agenda (dates + reminders) is shown.
@@ -76,9 +67,9 @@ struct MenuSettings: Equatable {
     var showJoinSectionInMenu: Bool
     /// When true, the saved bookmarks section is shown.
     var showBookmarksInMenu: Bool
-    /// Compact month grid in the dropdown. OFF by default.
+    /// When true, the compact month grid is shown.
     var showCalendarInMenu: Bool
-    /// The up-next progress card. ON by default.
+    /// When true, the up-next progress card is shown.
     var showUpNextInMenu: Bool
 }
 
@@ -99,8 +90,7 @@ struct MeetingSettings: Equatable {
     var browsers: [Browser]
     var defaultBrowser: Browser
     var browserForCreateMeeting: Browser
-    /// Unified per-provider browser preferences (keyed by provider ID).
-    /// Replaces the individual meetBrowser/zoomBrowser/… fields.
+    /// Per-provider browser preferences, keyed by provider ID.
     var providerBrowsers: [String: Browser]
     var providerOpeningModes: [String: String]
 }
@@ -142,16 +132,10 @@ enum StatusBarTitleFormatMigration {
     }
 }
 
-/// MeetingBarNG changed the time-format default from 24-hour to 12-hour. To
-/// avoid silently flipping people who were already running the app on the old
-/// default, this pins any EXISTING install (already past onboarding) that never
-/// explicitly chose a format back to 24-hour. New installs — and anyone who
-/// picked a value — are left alone, so only fresh installs get the 12-hour default.
+/// One-time migration that pins existing installs which never chose a time format to 24-hour,
+/// since the key's default is 12-hour.
 enum TimeFormatDefaultMigration {
-    /// Pure decision: only an existing install (already past onboarding) that
-    /// never explicitly chose a time format is pinned to the previous 24-hour
-    /// default. New installs — and anyone who picked a value — keep theirs (so
-    /// new installs get the 12-hour key default).
+    /// True for an install past onboarding with no stored time format.
     static func shouldPinToMilitary(onboardingCompleted: Bool, hasStoredTimeFormat: Bool) -> Bool {
         onboardingCompleted && !hasStoredTimeFormat
     }
@@ -189,18 +173,12 @@ enum DropdownModuleMergeMigration {
     }
 }
 
-/// MeetingBarNG reset the app version to a sub-1.0 scheme. Because the "What's
-/// new" gate is a strictly-greater version compare, an install carrying an
-/// inherited upstream value (4.x/5.x) would never see the changelog again. This
-/// one-time migration resets such values so the 0.1.0 notes can surface, while
-/// leaving genuine sub-1.0 (MeetingBarNG) values alone.
+/// One-time migration that resets an inherited upstream changelog version (major >= 1) to "0.0.0",
+/// so the strictly-greater "What's new" compare can fire again.
 enum ChangelogResetMigration {
-    /// Pure decision: reset only when the stored value is a >= 1.0 (inherited)
-    /// version. nil / sub-1.0 / unparseable values are left as-is.
+    /// True when the stored version's major component is >= 1; false for nil, sub-1.0 or unparseable values.
     ///
-    /// Punctual's own 1.0.0 does not trip this: the migration runs once per
-    /// install (`changelogResetMigrated`), on first launch, before any version
-    /// has been acknowledged, and never again.
+    /// Runs once per install (`changelogResetMigrated`), so the app's own 1.x versions are never reset.
     static func shouldReset(storedLastRevised: String?) -> Bool {
         guard let stored = storedLastRevised,
               let majorText = stored.split(separator: ".").first,
@@ -221,23 +199,11 @@ enum ChangelogResetMigration {
     }
 }
 
-/// Retires the "Time next to the title" picker (`eventTimeFormat`) without
-/// dropping anybody's answer to it.
+/// One-time migration of the retired `eventTimeFormat` setting into the menu bar composer.
 ///
-/// The picker offered show / show-under-title / hide, was read only by the
-/// classic status-bar path, and sat directly above a composer that ignored it.
-/// Both of its capabilities now live in clearer places on the Menu Bar pane:
-/// showing the time is the presence of the **Countdown** block, and
-/// show-under-title is **Two lines**. So this runs once per install and:
-///
-///   • seeds the block list from the classic settings (`derivedFromLegacy`,
-///     which appends a Countdown block for anyone who was NOT on `.hide`), and
-///   • turns Two lines on for anyone who was on `.show_under_title`.
-///
-/// Someone who had already composed a menu bar is left completely alone: the
-/// picker was already inert for them, so honouring it now would change a menu
-/// bar they never saw it affect. The decision itself is hostless and tested
-/// (`MenuBarTimeFormatMigration`); this is only the Defaults plumbing.
+/// Seeds the block list from the legacy settings and turns on Two lines for `.show_under_title`.
+/// Installs that already have a composed menu bar are left unchanged.
+/// Defaults plumbing only; the decision is `MenuBarTimeFormatMigration`.
 enum MenuBarTimeFormatDefaultsMigration {
     @MainActor
     static func migrateDefaultsIfNeeded() {
@@ -352,9 +318,8 @@ extension AppSettings {
         )
     }
 
-    /// Zero-state `AppSettings` whose values mirror the hard-coded defaults in
-    /// `Extensions/DefaultsKeys.swift`. Used by tests and value renderers that
-    /// need clean-install behavior without reading `Defaults`.
+    /// Clean-install `AppSettings` mirroring the defaults in `Extensions/DefaultsKeys.swift`,
+    /// built without reading `Defaults`.
     static var empty: AppSettings {
         AppSettings(
             calendar: CalendarSettings(
@@ -467,13 +432,10 @@ extension AppSettings {
         setCalendarSelection(provider: Defaults[.eventStoreProvider], id: id, selected: selected)
     }
 
-    /// Ticks or unticks a calendar within a SPECIFIC source's selection.
+    /// Ticks or unticks a calendar within the given provider's selection.
     ///
-    /// With more than one source connected, the calendar's own provider — not
-    /// `Defaults[.eventStoreProvider]`, which now names the write-capable source
-    /// — decides which list to write. Keying on the ambient provider would file
-    /// a ticked Google calendar under macOS Calendar's selection, where nothing
-    /// would ever read it and the tick would appear to do nothing.
+    /// Pass the calendar's own provider, not `Defaults[.eventStoreProvider]`,
+    /// which names only the write-capable source.
     @MainActor
     static func setCalendarSelection(provider: EventStoreProvider, id: String, selected: Bool) {
         migrateSelectedCalendarsByProviderIfNeeded()
@@ -505,21 +467,18 @@ extension AppSettings {
 
     // MARK: - Connected sources
 
-    /// The sources connected right now, filtered to what this build can reach.
-    /// Read this rather than `Defaults[.eventStoreProvider]` anywhere the answer
-    /// is "where do events come from" — that key now only tracks which provider
-    /// handles writes.
+    /// The connected sources this build can reach.
+    /// Use this, not `Defaults[.eventStoreProvider]`, to find where events come from.
     @MainActor
     static func enabledCalendarSources() -> CalendarSourceSelection {
         migrateEnabledCalendarSourcesIfNeeded()
         return CalendarSourceSelection(providers: Defaults[.enabledCalendarSources]).usable
     }
 
-    /// Persists a new selection. `eventStoreProvider` is kept pointing at the
-    /// write-capable source (EventKit when connected) so event creation and
-    /// reminders keep working; when only Google is connected there is nothing
-    /// writable, and it holds Google so per-provider calendar selection and the
-    /// diagnostics report still name the source actually in use.
+    /// Persists a new source selection.
+    ///
+    /// Also points `eventStoreProvider` at the write-capable source (EventKit when connected),
+    /// otherwise the first selected source, and refreshes the legacy flat selection mirror.
     @MainActor
     static func setEnabledCalendarSources(_ selection: CalendarSourceSelection) {
         migrateEnabledCalendarSourcesIfNeeded()
@@ -530,22 +489,15 @@ extension AppSettings {
         Defaults[.selectedCalendarIDs] = selectedCalendarIDs(for: primary)
     }
 
-    /// Records the connected set WITHOUT touching the primary provider or the
-    /// legacy flat selection mirror.
-    ///
-    /// `setEnabledCalendarSources` re-derives both of those, which is right when
-    /// the user changes sources but wrong when merely announcing an already-built
-    /// repository — it would overwrite `selectedCalendarIDs` from a per-provider
-    /// map that may not have been populated yet.
+    /// Records the connected set without touching the primary provider or the
+    /// legacy flat selection mirror, unlike `setEnabledCalendarSources`.
     @MainActor
     static func recordEnabledCalendarSources(_ selection: CalendarSourceSelection) {
         Defaults[.enabledCalendarSources] = selection.providers
         Defaults[.enabledCalendarSourcesMigrated] = true
     }
 
-    /// Seeds the multi-source key from the single provider an existing install
-    /// was already using, so updating changes nothing until the user opts into a
-    /// second source.
+    /// One-time seed of the multi-source key from the install's single legacy provider.
     @MainActor
     static func migrateEnabledCalendarSourcesIfNeeded() {
         guard !Defaults[.enabledCalendarSourcesMigrated] else { return }
@@ -623,10 +575,7 @@ extension AppSettings {
                 return nil
             }
 
-            // Preserve the lastModifiedDate captured at dismissal time. Refreshing
-            // only prunes ended events and refreshes the end date; it must not
-            // strip the modified-date metadata, otherwise a dismissed event could
-            // never be re-surfaced when the underlying event changes.
+            // Keep the dismissal-time lastModifiedDate: it is what re-surfaces a dismissed event after it changes.
             return ProcessedEvent(
                 id: dismissedEvent.id,
                 lastModifiedDate: dismissedEvent.lastModifiedDate,

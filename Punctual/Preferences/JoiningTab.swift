@@ -1,39 +1,16 @@
 //
 //  JoiningTab.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  What happens when you click Join, and where new meetings get created.
+//  The Joining pane: how meeting links open, where new meetings are created,
+//  saved links, and custom meeting-link patterns.
 //
-//  Originally MeetingsTab.swift (itself once LinksTab.swift):
+//  Derived from MeetingBar's MeetingsTab.swift, originally:
 //    Created by Andrii Leitsius on 13.01.2021.
 //    Copyright © 2021 Andrii Leitsius. All rights reserved.
 //    Licensed under the Apache License, Version 2.0.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026 — the
-//  Preferences UX overhaul, Phase 2:
-//
-//    • the per-service overrides move into a "Send some services somewhere
-//      else" disclosure, with the explanation ABOVE the control instead of
-//      appearing only after you had already chosen, and the flat list of
-//      opening modes and browsers split into labelled **Apps** and **Browsers**
-//      groups. Nothing said that picking an app bypasses the browser above.
-//    • "Use web browser" — which never mentioned creating anything, and so read
-//      as a second, contradictory copy of the browser setting 60 lines above —
-//      becomes "Open new meetings in".
-//    • "Bookmarks" becomes "My saved links": name / service / address in
-//      columns rather than one truncated `name (service): url` string, and the
-//      section header stops reusing `preferences_tab_bookmarks`, which now names
-//      only the dropdown block.
-//    • the meeting-link text patterns arrive from the deleted Advanced tab, into
-//      a "Find meeting links in unusual formats" disclosure — free of the
-//      blanket "for advanced users" warning that used to be stamped across the
-//      whole tab. The tester works BEFORE you save a pattern (it was disabled
-//      while the list was empty, so you had to ship one to try one) and feeds
-//      the sample text to notes, location AND event URL, like the real detector.
-//
-//  Reordering saved links stays on explicit up/down buttons: `.onMove` is inert
-//  inside a `Form` (`PreferencesGroupedForm`), and moving these lists into a real
-//  `List` is Phase 5.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
@@ -83,8 +60,6 @@ private struct MeetingLinkOpeningSection: View {
                 id: "joining.overrides",
                 titleKey: "preferences_joining_overrides_title"
             ) {
-                // Above the control, not after it: this sentence is what tells
-                // you that choosing an app ignores the browser you just picked.
                 Text("preferences_joining_overrides_help".loco())
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -114,9 +89,7 @@ private struct MeetingLinkOpeningSection: View {
     }
 }
 
-/// One service's row inside the overrides disclosure: the opening modes and the
-/// configured browsers, in two labelled groups so it is clear which of them
-/// leaves the browser choice behind.
+/// One service's override picker, with opening modes (apps) and browsers in two labelled groups.
 struct MeetingProviderOpeningPicker: View {
     let provider: MeetingProvider
 
@@ -228,8 +201,6 @@ private struct CreateMeetingSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Was "Use web browser", which never said what it was for and so
-            // read as a contradictory second copy of the setting above.
             Picker(
                 "preferences_joining_create_browser_title".loco(),
                 selection: $browserForCreateMeeting
@@ -265,8 +236,7 @@ struct CreateMeetingServicePicker: View {
 
 // MARK: - My saved links
 
-/// Was "Bookmarks". Rows are name / service / address in columns rather than one
-/// truncated string, and the header no longer borrows the dropdown block's name.
+/// The user's saved meeting links (`bookmarks`), shown as name, service and address columns.
 private struct SavedLinksSection: View {
     @Default(.bookmarks) private var bookmarks
 
@@ -365,8 +335,7 @@ private struct SavedLinkRow: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Explicit buttons, not a drag handle: `.onMove` does nothing inside
-            // a Form. The real handle arrives with the Phase 5 List.
+            // Buttons, not a drag handle: `.onMove` is inert inside a `Form`.
             Button(action: moveUp) {
                 Image(systemName: "chevron.up")
             }
@@ -468,9 +437,9 @@ struct AddSavedLinkModal: View {
 
 // MARK: - Find meeting links in unusual formats
 
-/// The `customRegexes` list, arrived from the deleted Advanced tab. The word
-/// "regex" is banned from user-facing copy — these are text patterns, and the
-/// editor is the shared `TextPatternList`.
+/// Editor and tester for `customRegexes`, the extra meeting-link patterns.
+///
+/// User-facing copy calls these "text patterns", never "regex".
 private struct MeetingLinkPatternsSection: View {
     @Default(.customRegexes) private var customRegexes
 
@@ -506,10 +475,7 @@ private struct MeetingLinkPatternsSection: View {
                             "preferences_joining_link_patterns_test_button".loco(),
                             action: test
                         )
-                        // Enabled with an empty pattern list on purpose: knowing
-                        // whether MeetingBarNG already finds the link is exactly
-                        // what you need before writing a pattern. Previously you
-                        // had to save one to find out.
+                        // Enabled with no patterns, to check whether the built-in detector already finds the link.
                         .disabled(sampleText.isEmpty)
                         if let testResult {
                             Text(testResult)
@@ -522,8 +488,7 @@ private struct MeetingLinkPatternsSection: View {
         }
     }
 
-    /// Runs the real detector over the sample text as notes, location AND event
-    /// URL — the three places it looks — rather than notes alone.
+    /// Runs the meeting-link detector with the sample text as notes, location and event URL.
     private func test() {
         let trimmed = sampleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let candidates = MeetingLinkDetector.allCandidates(

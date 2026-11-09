@@ -5,11 +5,7 @@
 //  Created by Andrii Leitsius on 12.06.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  remove the original author's donation/support/rate links and repoint the
-//  GitHub and contact links to the MeetingBarNG fork; add the Internet-Accounts
-//  and System-Settings deep links used by the Calendars-tab "Re-authenticate
-//  Account…" fix-path.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Cocoa
@@ -34,23 +30,13 @@ enum Links {
     static let calendarPreferences = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!
     static let cameraPreferences = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!
     static let microphonePreferences = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
-    /// System Settings ▸ Privacy & Security ▸ Reminders. Once reminders access
-    /// has been DENIED, `requestAccess` no longer prompts — macOS will not ask
-    /// twice — so this is the only way back, and a disabled switch with no route
-    /// to it is a dead end.
+    /// System Settings ▸ Privacy & Security ▸ Reminders; the only route back once access was denied.
     static let remindersPreferences = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")!
-    /// System Settings ▸ Internet Accounts — where expired CalDAV/Google/Exchange
-    /// credentials are re-authenticated. When an account's sync stalls, macOS
-    /// Calendar serves stale data silently; re-signing in here is the real fix.
+    /// System Settings ▸ Internet Accounts, where expired account credentials are re-authenticated.
     static let internetAccountsPreferences = URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension")!
-    /// System Settings ▸ Notifications ▸ MeetingBarNG — where notifications are
-    /// switched back on, and where Banners becomes Alerts. The Alerts pane says
-    /// what macOS is currently doing and then offers this, rather than telling
-    /// the user to go and find it.
+    /// System Settings ▸ Notifications for this app.
     static let notificationPreferences = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!
-    /// Bare System Settings, used as a fallback if the Internet-Accounts or
-    /// Notifications pane scheme fails to open (pane identifiers drift across
-    /// macOS releases).
+    /// Bare System Settings; fallback when a pane URL fails to open, since pane identifiers change across macOS releases.
     static let systemSettings = URL(string: "x-apple.systempreferences:")!
 }
 
@@ -59,7 +45,7 @@ enum TimeFormat: String, Defaults.Serializable, Codable, CaseIterable {
     case military = "24-hour"
 }
 
-/// the icon to display in the status bar
+/// The icon to display in the status bar.
 enum EventTitleIconFormat: String, Defaults.Serializable, Codable, CaseIterable {
     case calendar = "iconCalendar"
     case appicon = "AppIcon"
@@ -74,7 +60,7 @@ enum EventTitleFormat: String, Defaults.Serializable, Codable, CaseIterable {
     case none
 }
 
-/// format for time in statusbar - can be shown, be under title or be hidden
+/// Where the event time shows in the status bar: next to the title, under it, or hidden.
 enum EventTimeFormat: String, Defaults.Serializable, Codable, CaseIterable {
     case show
     case show_under_title

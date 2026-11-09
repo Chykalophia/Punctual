@@ -1,10 +1,8 @@
 //
 //  MonthWeekFoldTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the compact calendar's month/week fold (MeetingBarNG):
-//  what a step means in each mode, what rows come back, and the range a title
-//  can honestly claim.
+//  Tests for the compact calendar's month/week fold: stepping, rows and visible range.
 //
 
 import XCTest
@@ -46,8 +44,6 @@ final class MonthWeekFoldTests: XCTestCase {
     }
 
     func testWeekFoldStepsByWeeks() {
-        // Paging a week view by a whole month would skip four weeks of the thing
-        // being looked at — the step unit has to follow the fold.
         let now = date(2026, 8, 15)
         let next = MonthGridLayout.anchor(from: now, offset: 1, isWeekFold: true, calendar: calendar())
         XCTAssertEqual(month(next), 8)
@@ -129,7 +125,6 @@ final class MonthWeekFoldTests: XCTestCase {
     }
 
     func testWeekRangeIsSevenDaysAndCanStraddleTwoMonths() {
-        // The reason a folded title cannot just say "August 2026".
         let range = MonthGridLayout.visibleRange(
             anchoredOn: date(2026, 9, 1), isWeekFold: true, calendar: calendar()
         )
@@ -139,8 +134,7 @@ final class MonthWeekFoldTests: XCTestCase {
     }
 
     func testWeekRangeRespectsFirstWeekday() {
-        // firstWeekday 2 = Monday. The row must start on Monday, or the header
-        // labels and the cells disagree.
+        // firstWeekday 2 = Monday.
         let mondayFirst = calendar(firstWeekday: 2)
         let range = MonthGridLayout.visibleRange(
             anchoredOn: date(2026, 8, 15), isWeekFold: true, calendar: mondayFirst

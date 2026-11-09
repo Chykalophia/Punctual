@@ -1,16 +1,11 @@
 //
 //  SettingsSearchResults.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The detail pane while the sidebar search field has text in it. Ranking lives
-//  in the hostless `SettingsIndex`; this file only draws the hits and moves the
-//  window to the pane that holds one.
+//  The detail pane shown while the sidebar search field has text. Ranking is
+//  `SettingsIndex.search`; this view draws the results and opens the chosen pane.
 //
-//  Search ships in Phase 2 — three phases BEFORE the first gear popover exists —
-//  because "nothing hidden is unfindable" has to be true before anything is
-//  hidden, not afterwards.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import SwiftUI

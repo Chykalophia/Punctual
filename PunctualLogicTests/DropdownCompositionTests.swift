@@ -1,8 +1,8 @@
 //
 //  DropdownCompositionTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the composable menu dropdown policy (MeetingBarNG).
+//  Tests for the composable dropdown module policy.
 //
 
 import XCTest
@@ -40,12 +40,8 @@ final class DropdownCompositionTests: XCTestCase {
             order: ["greeting", "made_up_module", "timeline", ""],
             enabled: allEnabled
         )
-        // Unknowns vanish; remaining modules keep their GIVEN order (greeting then
-        // timeline), and only then do the missing standard modules append. The
-        // stored order wins for anything it mentions.
-        //
-        // This is also what retires a module safely: a stored order still naming
-        // "upNext" hits the same path as "made_up_module" and is simply dropped.
+        // Unknowns vanish, the given order is kept (greeting then timeline), then missing
+        // standard modules append. A retired module such as "upNext" is dropped the same way.
         XCTAssertEqual(
             resolved,
             [.greeting, .timeline, .meeting, .calendar, .agenda, .join, .bookmarks]
@@ -132,9 +128,6 @@ final class DropdownCompositionTests: XCTestCase {
         )
     }
 
-    /// The controller resolves the real dropdown by feeding `enabledRawValues`
-    /// into `resolve`; the preview must produce the identical module list from the
-    /// same toggles, so exercise the two together.
     func testEnabledRawValuesFeedsResolveDeterministically() {
         let enabled = DropdownCompositionPolicy.enabledRawValues(
             greeting: true, timeline: false, meeting: true,
@@ -146,8 +139,6 @@ final class DropdownCompositionTests: XCTestCase {
 
     // MARK: - Separators
 
-    /// Content modules run together. The panel used to draw a rule between EVERY
-    /// module, which made one sheet read as a stack of strips.
     func test_contentModulesGetNoSeparators() {
         XCTAssertEqual(
             DropdownSeparatorPolicy.separatorIndices(
@@ -157,8 +148,6 @@ final class DropdownCompositionTests: XCTestCase {
         )
     }
 
-    /// One rule marks the boundary between what is happening and what you can do
-    /// about it.
     func test_separatorSitsAboveTheActionList() {
         XCTAssertEqual(
             DropdownSeparatorPolicy.separatorIndices(
@@ -168,7 +157,6 @@ final class DropdownCompositionTests: XCTestCase {
         )
     }
 
-    /// Join followed by bookmarks is ONE group of verbs, so it gets one rule.
     func test_adjacentActionListsShareASingleSeparator() {
         XCTAssertEqual(
             DropdownSeparatorPolicy.separatorIndices(
@@ -178,13 +166,11 @@ final class DropdownCompositionTests: XCTestCase {
         )
     }
 
-    /// A rule against the panel's top edge separates nothing.
     func test_neverSeparatesTheFirstModule() {
         XCTAssertEqual(DropdownSeparatorPolicy.separatorIndices(for: [.join, .agenda]), [])
         XCTAssertEqual(DropdownSeparatorPolicy.separatorIndices(for: []), [])
     }
 
-    /// Content between two action lists breaks the run, so each side is marked.
     func test_actionListsSplitByContentGetTheirOwnSeparators() {
         XCTAssertEqual(
             DropdownSeparatorPolicy.separatorIndices(

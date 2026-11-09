@@ -1,10 +1,8 @@
 //
 //  TimeFormatDefaultMigrationTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  MeetingBarNG defaults new installs to 12-hour; the migration pins existing
-//  installs (that never chose a format) to their prior 24-hour so upgraders are
-//  never silently flipped. The decision is tested as pure logic.
+//  Tests the migration that keeps existing installs on 24-hour time while new installs default to 12-hour.
 //
 
 import XCTest

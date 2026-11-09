@@ -1,23 +1,15 @@
 //
 //  TextPatternList.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The shared editor for the two pattern lists — "Hide meetings whose title
-//  matches a pattern" (Filters) and "Find meeting links in unusual formats"
-//  (Joining). Both were on the deleted Advanced tab, where a blanket orange
-//  "for advanced users" warning was stamped across ordinary wishes like *hide
-//  meetings called Focus time*.
+//  Shared editor for the title-pattern list (Filters) and the meeting-link
+//  pattern list (Joining). User-facing copy says "text pattern", never "regex".
 //
-//  The word "regex" is banned from user-facing copy: it is a **text pattern**.
-//  The lowercase "edit" button — the only lowercase button label in the app — is
-//  now "Edit".
-//
-//  Extracted from AdvancedTab.swift, originally:
+//  Derived from MeetingBar's AdvancedTab.swift, originally:
 //    Created by Andrii Leitsius on 13.01.2021.
 //    Copyright © 2021 Andrii Leitsius. All rights reserved.
-//  Licensed under the Apache License, Version 2.0. Modified for MeetingBarNG by
-//  Peter Krzyzek / Chykalophia, 2026: split out of the Advanced tab, plain-language
-//  labels, and an example placeholder in the editor.
+//  Licensed under the Apache License, Version 2.0.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import SwiftUI
@@ -72,8 +64,7 @@ struct TextPatternList: View {
     }
 }
 
-/// The add/edit sheet. Validates the pattern before saving and reports the
-/// system's own message rather than a generic failure.
+/// The add/edit sheet. Validates the pattern before saving and shows the system's error message.
 struct TextPatternEditor: View {
     @Environment(\.presentationMode) var presentationMode
     let onSave: (_ pattern: String) -> Bool
@@ -82,9 +73,7 @@ struct TextPatternEditor: View {
     @State private var showingAlert = false
     @State private var errorMessage = ""
 
-    // Seeded in init rather than onAppear: `.sheet(item:)` gives the sheet a
-    // fresh identity per presentation, so the initial value is applied before
-    // the first render and the field never flashes empty.
+    // Seeded in init, not onAppear, so the field never renders empty first.
     init(pattern: String, onSave: @escaping (_ pattern: String) -> Bool) {
         _draftPattern = State(initialValue: pattern)
         self.onSave = onSave

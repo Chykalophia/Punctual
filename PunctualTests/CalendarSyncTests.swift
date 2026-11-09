@@ -16,7 +16,6 @@ class CalendarSyncTests: BaseTestCase {
     private var cancellables = Set<AnyCancellable>()
 
     func testInjectedStorePublishesCalendarsAndEvents() {
-        // 1) Prepare fakes
         let fakeCal = MBCalendar(title: "Cal A", id: "calA", source: nil, email: nil, color: .black)
         let fakeEvt = makeFakeEvent(
             id: "E1",
@@ -28,13 +27,11 @@ class CalendarSyncTests: BaseTestCase {
             events: [fakeEvt]
         )
 
-        // 2) Create manager with test initializer
         let manager = CalendarSync(
             provider: fakeStore,
             refreshInterval: 0.05
         )
 
-        // 3) Observe first non-empty values of calendars & events
         let calExpectation = expectation(description: "calendars published")
         manager.$calendars
             .drop(while: \.isEmpty)
@@ -55,7 +52,6 @@ class CalendarSyncTests: BaseTestCase {
             }
             .store(in: &cancellables)
 
-        // 4) Wait
         wait(for: [calExpectation, evtExpectation], timeout: 1.0)
     }
 
@@ -119,7 +115,6 @@ class CalendarSyncTests: BaseTestCase {
     private var cancellables = Set<AnyCancellable>()
 
     func testSwitchProviderPublishesNewEvents() async throws {
-        // Arrange: two fake stores with different events
         let firstEvent = makeFakeEvent(
             id: "A",
             start: Date(),
@@ -134,10 +129,8 @@ class CalendarSyncTests: BaseTestCase {
         let storeA = FakeEventStore(events: [firstEvent])
         let storeB = FakeEventStore(events: [secondEvent])
 
-        // Start CalendarSync with Store A
         let manager = CalendarSync(provider: storeA, refreshInterval: 0)
 
-        // Expect the first publication to contain [firstEvent]
         let initialExp = expectation(description: "initial events")
         manager.$events
             .drop(while: \.isEmpty)
@@ -167,7 +160,6 @@ class CalendarSyncTests: BaseTestCase {
             )
             .store(in: &cancellables)
 
-        // Act: replace the provider and trigger refresh
         manager.repository = CalendarRepository(store: storeB)
         try await manager.refreshSources()  // sends refreshSubject
 
@@ -178,10 +170,7 @@ class CalendarSyncTests: BaseTestCase {
     func testStoreChangeSubscriptionDoesNotStackAfterProviderSwitches() async throws {
         let calendar = MBCalendar(title: "C", id: "c1", source: nil, email: nil, color: .black)
         let eventKitStore = FakeEventStore(calendars: [calendar])
-        // A store PER provider, so the count below is unambiguous: with one
-        // shared fake, connecting both sources would legitimately refresh it
-        // twice per notification and the assertion could not tell that apart
-        // from a stacked subscription, which is what this test is about.
+        // One store per provider, so the fetch count isolates stacked subscriptions.
         let googleStore = FakeEventStore(calendars: [
             MBCalendar(
                 title: "G", id: "g1", source: nil, email: nil, color: .black,
@@ -200,8 +189,6 @@ class CalendarSyncTests: BaseTestCase {
             .store(in: &cancellables)
         await fulfillment(of: [initialExp], timeout: 1.0)
 
-        // Connecting and disconnecting re-subscribes each time; the sinks must
-        // not accumulate.
         _ = await manager.changeEventStoreProvider(.googleCalendar)
         await manager.disconnectEventStoreProvider(.googleCalendar)
 
@@ -215,9 +202,6 @@ class CalendarSyncTests: BaseTestCase {
             "one store-change notification should trigger one refreshSources call")
     }
 
-    /// Connecting a second source must NOT tear the first one down — that is the
-    /// whole point of multi-source. Disconnecting cancels only the source being
-    /// disconnected, and `stop()` cancels everything still connected.
     func testConnectingASecondSourceLeavesTheFirstRunning() async throws {
         let storeA = FakeEventStore(calendars: [
             MBCalendar(title: "EventKit", id: "eventkit", source: nil, email: nil, color: .black)
@@ -279,8 +263,6 @@ class CalendarSyncTests: BaseTestCase {
         XCTAssertEqual(storeA.cancelPendingOperationsCallCount, 0)
     }
 
-    /// The last connected source cannot be disconnected — an install that
-    /// reaches no source at all renders an empty dropdown that reads as broken.
     func testDisconnectingTheLastSourceIsRefused() async throws {
         let storeA = FakeEventStore(calendars: [
             MBCalendar(title: "EventKit", id: "eventkit", source: nil, email: nil, color: .black)
@@ -293,7 +275,6 @@ class CalendarSyncTests: BaseTestCase {
         XCTAssertEqual(storeA.cancelPendingOperationsCallCount, 0)
     }
 
-    /// One source failing must not blank out the source that worked.
     func testAFailingSourceDoesNotHideTheWorkingOne() async throws {
         let eventKitCalendar = MBCalendar(
             title: "EventKit", id: "eventkit", source: nil, email: nil, color: .black
@@ -403,8 +384,6 @@ class CalendarSyncTests: BaseTestCase {
         XCTAssertTrue(manager.providerHealth.isStale)
     }
 
-    /// Each source keeps its own calendar selection, and connecting a second
-    /// source neither disturbs the first's selection nor disconnects it.
     func testConnectingASecondSourceKeepsBothProviderScopedSelections() async {
         let eventKitCalendar = MBCalendar(
             title: "EventKit",
@@ -441,8 +420,7 @@ class CalendarSyncTests: BaseTestCase {
             repository.selection.providers,
             [.macOSEventKit, .googleCalendar],
             "connecting Google must not disconnect macOS Calendar")
-        // EventKit stays the write-capable provider, so the legacy mirror key
-        // keeps pointing at its selection.
+        // The legacy mirror key follows EventKit, the write-capable provider.
         XCTAssertEqual(Defaults[.eventStoreProvider], .macOSEventKit)
         XCTAssertEqual(Defaults[.selectedCalendarIDs], [eventKitCalendar.id])
 
@@ -589,12 +567,12 @@ final class RefreshCoalescingTests: BaseTestCase {
 
         let countBefore = store.fetchCallCount
 
-        // Fire three triggers in rapid succession — only the first should start a fetch
+        // Three rapid triggers: only the first should start a fetch.
         manager.refreshSubject.send()
         manager.refreshSubject.send()
         manager.refreshSubject.send()
 
-        // Wait longer than fetchDelay so the single fetch can complete
+        // Longer than fetchDelay, so the single fetch can complete.
         try await Task.sleep(nanoseconds: 400_000_000)
 
         XCTAssertEqual(
@@ -621,11 +599,9 @@ final class RefreshTriggerTests: BaseTestCase {
 
         let store = FakeEventStore(events: [first])
 
-        // Start with `.today`
         Defaults[.showEventsForPeriod] = .today
         let manager = CalendarSync(provider: store, refreshInterval: 0)
 
-        // Expect initial publication with [first]
         let initialExp = expectation(description: "initial events")
         manager.$events
             .drop(while: \.isEmpty)
@@ -649,7 +625,7 @@ final class RefreshTriggerTests: BaseTestCase {
             }
             .store(in: &cancellables)
 
-        // ↻ Mutate store, then toggle Default → Combine trigger fires
+        // Mutate the store, then toggle the Default that triggers a refresh.
         store.stubbedEvents = [second]
         Defaults[.showEventsForPeriod] = .today_n_tomorrow
 
@@ -675,7 +651,6 @@ final class RefreshTriggerTests: BaseTestCase {
             }
             .store(in: &cancellables)
 
-        // Act
         try await manager.refreshSources()
 
         await fulfillment(of: [exp], timeout: 1)

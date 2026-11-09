@@ -1,6 +1,6 @@
 //
-//  StatusBarPresentationTests.swift
-//  MeetingBarLogicTests
+//  StatusBarPresentationPolicyTests.swift
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -110,8 +110,7 @@ final class StatusBarPresentationTests: XCTestCase {
     }
 
     func testNextEventWhenThresholdDisabled() {
-        // Even an event 12 hours away renders as "next" when the threshold
-        // toggle is off — that is the legacy default behavior.
+        // With the threshold toggle off, even an event 12 hours away renders as next.
         let mode = StatusBarPresentationPolicy.mode(
             nextEventStartDate: now.addingTimeInterval(43_200),
             settings: settings(showEventMaxTimeUntilEventEnabled: false),
@@ -121,8 +120,7 @@ final class StatusBarPresentationTests: XCTestCase {
     }
 
     func testNextEventWhenWithinThreshold() {
-        // Threshold 30 min, event 10 min away → within threshold → render
-        // as next event with title.
+        // Threshold 30 min, event 10 min away: within the threshold.
         let mode = StatusBarPresentationPolicy.mode(
             nextEventStartDate: now.addingTimeInterval(600),
             settings: settings(showEventMaxTimeUntilEventEnabled: true, threshold: 30),
@@ -155,9 +153,7 @@ final class StatusBarPresentationTests: XCTestCase {
     }
 
     func testThresholdBoundaryIsExclusive() {
-        // Threshold 30 min, event exactly 30 min away → not strictly less
-        // than the threshold → afterThreshold. Documents the existing
-        // boundary semantics inherited from updateTitle().
+        // Exactly at the threshold is not strictly less, so it is afterThreshold.
         let mode = StatusBarPresentationPolicy.mode(
             nextEventStartDate: now.addingTimeInterval(1800),
             settings: settings(showEventMaxTimeUntilEventEnabled: true, threshold: 30),
@@ -316,8 +312,6 @@ final class StatusBarPresentationTests: XCTestCase {
     // MARK: - titleLayout: titleFormat .none + timeDisplay .showUnderTitle
 
     func testPresenterTitleFormatNoneWithTimeUnderTitleUsesInlineNoTime() {
-        // titleFormat == .none AND timeDisplay == .showUnderTitle
-        // → titleLayout exits early via guard and returns .inline(showTime: false)
         let presentation = StatusBarPresenter.presentation(
             nextEvent: event(),
             settings: presenterSettings(titleFormat: .none, timeDisplay: .showUnderTitle),
@@ -331,8 +325,6 @@ final class StatusBarPresentationTests: XCTestCase {
     // MARK: - titleLayout: titleFormat .show + timeDisplay .hide
 
     func testPresenterShowTitleWithHideTimeUsesInlineNoTime() {
-        // titleFormat != .none AND timeDisplay == .hide
-        // → titleLayout switch case .hide: return .inline(showTime: false)
         let presentation = StatusBarPresenter.presentation(
             nextEvent: event(),
             settings: presenterSettings(titleFormat: .show, timeDisplay: .hide),
@@ -344,10 +336,7 @@ final class StatusBarPresentationTests: XCTestCase {
     }
 
     // MARK: - Emphasis when the meeting is about to start
-    //
-    // The menu bar has no button to mute, so the dropdown's "is this actionable
-    // yet" signal shows up here as weight instead: normal all day, heavier once
-    // the meeting is within the shared lead window.
+    // Title weight is normal all day and heavier once the meeting is within the lead window.
 
     private func emphasis(
         startsIn: TimeInterval,
@@ -401,12 +390,7 @@ final class StatusBarPresentationTests: XCTestCase {
         XCTAssertTrue(emphasis(startsIn: 1800, leadMinutes: 60))
     }
 
-    /// A pending meeting rendered inactive is dimmed precisely because it is not
-    /// yet yours; shouting about it a minute beforehand would argue with that.
-    ///
-    /// Stacked layout on purpose — `titleStyle` only resolves `.inactive` there
-    /// (inline keeps `.normal`), so this is the only layout where a meeting is
-    /// actually dimmed and the interaction can be observed at all.
+    /// Stacked layout on purpose: `titleStyle` only resolves `.inactive` there.
     func testADimmedMeetingIsNeverEmphasised() {
         XCTAssertFalse(
             emphasis(
@@ -419,8 +403,7 @@ final class StatusBarPresentationTests: XCTestCase {
     }
 
     func testANormalMeetingIsStillEmphasisedWhenPendingsAreDimmed() {
-        // Guards the rule above against over-reach: dimming pendings must not
-        // switch emphasis off for everyone else.
+        // Non-pending meetings are still emphasised.
         XCTAssertTrue(
             emphasis(
                 startsIn: 60,
@@ -431,9 +414,6 @@ final class StatusBarPresentationTests: XCTestCase {
         )
     }
 
-    /// In inline layout a pending meeting is NOT dimmed (`titleStyle` returns
-    /// `.normal`), so emphasis is consistent with how it already looks. Pins that
-    /// asymmetry so it is a decision rather than a surprise.
     func testAPendingMeetingIsEmphasisedInInlineLayoutWhereItIsNotDimmed() {
         XCTAssertTrue(
             emphasis(startsIn: 60, participation: .pending, pendingDisplay: .inactive)

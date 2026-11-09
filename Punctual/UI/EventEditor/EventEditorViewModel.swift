@@ -1,15 +1,11 @@
 //
 //  EventEditorViewModel.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  App-target view model for the in-app event editor (Dot parity: create / edit /
-//  delete calendar events). Owns the editable fields, projects them into the
-//  hostless `EventDraft`, runs `EventDraftValidation` to gate Save, and dispatches
-//  create/update/delete through injected handlers (resolved by AppDelegate from
-//  the EventKit writer). Delete requires an NSAlert confirmation first. The
-//  SwiftUI view stays presentation-only.
+//  View model for the event editor: owns the editable fields, validates them as an `EventDraft`,
+//  and dispatches create, update and delete through injected handlers.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -21,18 +17,14 @@ enum EventEditorMode {
     case edit(MBEvent)
 }
 
-/// Scope of an edit/delete on a recurring event: just the chosen occurrence, or
-/// that occurrence and every later one in the series. Maps to `EKSpan`
-/// (`.thisEvent` / `.futureEvents`) in `EventKitEventWriter`. Ignored for
-/// non-recurring events (always effectively `.thisEvent`).
+/// Scope of an edit or delete on a recurring event; maps to `EKSpan` in `EventKitEventWriter`.
+/// Ignored for non-recurring events.
 enum EventEditSpan: Hashable {
     case thisEvent
     case thisAndFuture
 }
 
-/// Closures the editor needs from the app, injected by AppDelegate so the view
-/// model stays decoupled from the EventKit writer / CalendarSync / coordinator.
-/// `dismiss` is supplied by the WindowCoordinator (it owns the window).
+/// App closures the editor needs, injected by AppDelegate. `dismiss` closes the editor window.
 struct EventEditorHandlers {
     var create: @MainActor (_ draft: EventDraft) async throws -> Void
     var update: @MainActor (_ id: String, _ draft: EventDraft, _ span: EventEditSpan) async throws -> Void
@@ -56,14 +48,12 @@ final class EventEditorViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var isSaving = false
 
-    /// Chosen scope when editing/deleting a recurring event. Only surfaced (and
-    /// only meaningful) when `isRecurring`; otherwise stays `.thisEvent`.
+    /// Scope for editing or deleting a recurring event; only meaningful when `isRecurring`.
     @Published var editSpan: EventEditSpan = .thisEvent
 
     let writableCalendars: [MBCalendar]
     let isEditing: Bool
-    /// Whether the event being edited is part of a recurring series — drives the
-    /// "This event / This and future events" scope picker.
+    /// Whether the edited event belongs to a recurring series.
     let isRecurring: Bool
 
     private let handlers: EventEditorHandlers
@@ -97,8 +87,7 @@ final class EventEditorViewModel: ObservableObject {
             isAllDay = event.isAllDay
             startDate = event.startDate
             endDate = event.endDate
-            // Prefer the event's own calendar; fall back to the first writable one
-            // if the event lives in a read-only calendar.
+            // Fall back to the first writable calendar when the event's calendar is read-only.
             let eventCalendarID = event.calendar.id
             selectedCalendarID = calendars.contains { $0.id == eventCalendarID }
                 ? eventCalendarID
@@ -177,15 +166,12 @@ final class EventEditorViewModel: ObservableObject {
         }
     }
 
-    /// Confirms via a destructive NSAlert BEFORE deleting; only proceeds on the
-    /// explicit Delete button.
+    /// Asks for confirmation in a destructive alert, then deletes.
     func confirmAndDelete() {
         guard let editingID else { return }
 
         let alert = NSAlert()
         alert.messageText = "event_editor_delete_confirm_title".loco()
-        // For a recurring event, spell out the scope the user picked so the
-        // destructive action is unambiguous.
         alert.informativeText = isRecurring
             ? "event_editor_delete_confirm_message_recurring".loco(
                 title,
@@ -229,7 +215,7 @@ final class EventEditorViewModel: ObservableObject {
         case update(String)
     }
 
-    /// Next top-of-the-hour from now, so a new event defaults to a sensible slot.
+    /// The next top of the hour.
     private static func defaultStartDate() -> Date {
         let calendar = Calendar.current
         let now = Date()

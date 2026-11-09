@@ -1,22 +1,18 @@
 //
 //  MicLevel.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Pure, hostless normalization for the pre-call camera/mic preview meter. Maps
-//  a raw dBFS reading (as reported by an `AVCaptureAudioChannel.averagePowerLevel`,
-//  roughly -160…0) onto a 0…1 scale for a simple input-level bar. Kept free of
-//  AVFoundation/AppKit so it compiles into the MeetingBarLogic test target and is
-//  unit-testable without a live capture session.
+//  Normalizes a dBFS reading (`AVCaptureAudioChannel.averagePowerLevel`, roughly
+//  -160…0) to 0…1 for the preview meter. No AVFoundation, so it is unit-testable.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
 /// Normalizes microphone power readings for the preview meter.
 public enum MicLevel {
-    /// dB reading at or below which the meter reads empty. -60 dBFS is a common
-    /// noise-floor choice for a coarse input meter.
+    /// Reading at or below which the meter is empty; a common coarse noise floor.
     public static let defaultFloorDecibels: Float = -60
 
     /// Maps a `decibels` reading (dBFS, ≤ 0 at full scale) to a clamped 0…1

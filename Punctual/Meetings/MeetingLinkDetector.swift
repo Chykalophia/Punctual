@@ -2,11 +2,9 @@
 //  MeetingLinkDetector.swift
 //  MeetingBar
 //
-//  Owns everything related to extracting a meeting URL from an event:
-//  the public `MeetingLink` value type, regex catalogue compiled from
-//  `MeetingProvider.all`, helper functions for cleaning Outlook SafeLinks
-//  and stripping HTML notes, the candidate ranking policy, and the
-//  detector that orchestrates them.
+//  Extracts a meeting URL from an event: the `MeetingLink` value type, the regex
+//  catalogue built from `MeetingProvider.all`, Outlook SafeLink and HTML cleanup,
+//  candidate ranking, and the detector.
 //
 
 import AppKit
@@ -14,9 +12,8 @@ import Foundation
 
 // MARK: - Public value types
 
-/// Catalogue of meeting service identifiers used as the primary key for
-/// detection regexes, icons, browser preferences, and bookmarks. Provider
-/// metadata (regex, icon, native-app browser) lives on `MeetingProvider.all`.
+/// Meeting service identifiers, used as the key for detection regexes, icons, browser
+/// preferences and bookmarks. Raw values are persisted. Metadata lives on `MeetingProvider`.
 enum MeetingServices: String, Codable, CaseIterable, Sendable {
     case phone = "Phone"
     case meet = "Google Meet"
@@ -101,33 +98,26 @@ public struct MeetingLink: Hashable, Equatable, Sendable {
 /// Where a meeting link candidate was extracted from. Higher-priority sources
 /// are preferred when more than one candidate is found for an event.
 enum MeetingLinkSource: Hashable, Sendable {
-    /// Structured conference data exposed by the provider — e.g. Google
-    /// Calendar's `conferenceData.entryPoints[type=video]`. Highest priority
-    /// because the provider has explicitly tagged this URL as the meeting.
+    /// Structured conference data tagged by the provider, e.g. Google Calendar's
+    /// `conferenceData.entryPoints[type=video]`.
     case providerConferenceData
 
-    /// The event's explicit `url` field (EventKit `EKEvent.url`, Google
-    /// Calendar `event.hangoutLink` style fields surfaced as a URL).
+    /// The event's explicit URL field.
     case eventURL
 
-    /// The event's location field — sometimes hosts paste the meeting URL
-    /// here when there is no structured conference data.
+    /// The event's location field.
     case location
 
     /// Free-text notes / description.
     case notes
 
-    /// Notes field after HTML tag / entity stripping. Lower priority than
-    /// raw `notes` because stripping can occasionally normalise legitimate
-    /// links into a less canonical form.
+    /// Notes after HTML stripping. Ranked below raw notes because stripping can alter links.
     case strippedHTMLNotes
 
-    /// User-provided regex match. Last-resort fallback so a custom regex
-    /// cannot override a real provider conference URL.
+    /// A user-provided regex match. Lowest priority, so it never overrides provider data.
     case customRegex
 
-    /// Numeric priority — larger wins. Gaps allow inserting new sources
-    /// later without renumbering existing ones.
+    /// Numeric priority; larger wins.
     var priority: Int {
         switch self {
         case .providerConferenceData: return 60
@@ -148,12 +138,8 @@ struct MeetingLinkCandidate: Hashable, Sendable {
 }
 
 enum MeetingLinkCandidatePolicy {
-    /// Picks the best candidate for an event:
-    ///
-    /// 1. by source priority — provider conference data beats notes;
-    /// 2. within the same source, the longer URL wins so a Zoom link that
-    ///    carries a password/token suffix beats a truncated form of the
-    ///    same URL found in another source slot.
+    /// The best candidate: highest source priority, then the longest URL, so a link with a
+    /// password or token suffix beats a truncated copy.
     static func best(from candidates: [MeetingLinkCandidate]) -> MeetingLinkCandidate? {
         candidates.max { lhs, rhs in
             if lhs.source.priority != rhs.source.priority {
@@ -163,8 +149,7 @@ enum MeetingLinkCandidatePolicy {
         }
     }
 
-    /// Returns candidates ranked best-to-worst, deduplicated by URL string.
-    /// Useful for a "open with another link" menu without re-running detection.
+    /// Candidates ranked best to worst, deduplicated by URL string.
     static func ranked(from candidates: [MeetingLinkCandidate]) -> [MeetingLinkCandidate] {
         let unique = Dictionary(grouping: candidates, by: { $0.url.absoluteString })
             .compactMapValues { best(from: $0) }
@@ -220,35 +205,15 @@ func detectMeetingLink(_ rawText: String, customRegexes: [String] = []) -> Meeti
     return nil
 }
 
-/// Rewrites Outlook SafeLink wrappers in `rawText` back to their real
-/// targets, so meeting-link detection sees the underlying URL rather than the
-/// `…safelinks.protection.outlook.com/…url=<encoded>` redirect. Each pass
-/// unwraps the first SafeLink and re-scans, which also resolves SafeLinks
-/// nested inside one another.
-///
-/// The loop is deliberately bounded and only continues while it makes forward
-/// progress. It stops when:
-///
-/// 1. the `url=` value can't be percent-decoded — a malformed or truncated
-///    `%` escape, which `removingPercentEncoding` reports as `nil`;
-/// 2. a rewrite leaves the text unchanged, so the same match would be found
-///    again; or
-/// 3. a hard pass cap is reached, as a final backstop.
-///
-/// Without these guards a single event carrying a malformed SafeLink would
-/// loop forever and wedge calendar sync.
+/// Replaces Outlook SafeLink wrappers in `rawText` with their decoded targets,
+/// including nested ones.
 func cleanupOutlookSafeLinks(rawText: String) -> String {
     guard let outlookSafeLinkRegex else { return rawText }
 
     var text = rawText
     autoreleasepool {
-        // Each pass unwraps the first remaining SafeLink and re-scans, which
-        // also handles nested SafeLinks. The loop MUST make forward progress on
-        // every iteration or it spins forever: if the `url=` value can't be
-        // percent-decoded (an invalid `%` sequence) or the rewrite leaves the
-        // text unchanged, the same match is found again every pass. Bound it by
-        // a no-progress break and a hard cap so a single malformed SafeLink can
-        // never wedge calendar sync.
+        // Bounded: stops on an undecodable `url=` value, on no progress, or at the pass cap,
+        // so a malformed SafeLink cannot wedge calendar sync.
         let maxPasses = 32
         for _ in 0 ..< maxPasses {
             let matches = outlookSafeLinkRegex.matches(
@@ -314,26 +279,9 @@ extension String {
 
 // MARK: - Detector
 
-/// Picks the best meeting link from an event's available fields.
-///
-/// Each available field becomes a `MeetingLinkCandidate` tagged with its
-/// `MeetingLinkSource`. Candidates are then ranked by source priority and
-/// — within the same source — by URL length, so a Zoom URL with a
-/// password/token suffix beats a truncated form of the same link.
-///
-/// Source order (highest priority first):
-///
-/// 1. `providerConferenceData` — `conferenceURL` is the structured field set
-///    by the provider (Google `conferenceData.entryPoints[type=video]`);
-/// 2. `eventURL` — the event's plain URL field;
-/// 3. `location` — event location text;
-/// 4. `notes` — event notes / description text;
-/// 5. `strippedHTMLNotes` — notes after HTML tag/entity stripping;
-/// 6. `customRegex` — user-provided fallback patterns over the combined
-///    text fields.
-///
-/// Google Meet URLs are post-processed with an `authuser` query parameter
-/// when an account email is available.
+/// Picks the best meeting link from an event's fields. Each field yields candidates
+/// tagged with a `MeetingLinkSource` and ranked by `MeetingLinkCandidatePolicy`.
+/// Google Meet URLs get an `authuser` query parameter when an account email is known.
 enum MeetingLinkDetector {
     static func detect(
         conferenceURL: URL? = nil,
@@ -411,11 +359,8 @@ enum MeetingLinkDetector {
     ) -> [MeetingLinkCandidate] {
         var candidates: [MeetingLinkCandidate] = []
 
-        // 1. Provider conference data.
         if let conferenceURL {
-            // Run through the regex catalog so we know whether it's Google Meet,
-            // Zoom, etc. If it doesn't match any built-in service, classify as
-            // `.other` so it still scores at the providerConferenceData priority.
+            // An unmatched conference URL is `.other` but keeps conference-data priority.
             let service = detectMeetingLink(conferenceURL.absoluteString)?.service ?? .other
             candidates.append(MeetingLinkCandidate(
                 url: conferenceURL,
@@ -424,7 +369,6 @@ enum MeetingLinkDetector {
             ))
         }
 
-        // 2. Event URL.
         if let eventURL {
             candidates.append(contentsOf: builtInCandidates(
                 in: eventURL.absoluteString,
@@ -432,7 +376,6 @@ enum MeetingLinkDetector {
             ))
         }
 
-        // 3. Location.
         if let location {
             candidates.append(contentsOf: builtInCandidates(
                 in: location,
@@ -441,15 +384,12 @@ enum MeetingLinkDetector {
         }
 
         if let notes {
-            // 4. Raw notes.
             candidates.append(contentsOf: builtInCandidates(
                 in: notes,
                 source: .notes
             ))
 
-            // 5. Notes after HTML tag/entity stripping. Only contributes when
-            //    stripping changes the text — otherwise it would duplicate the
-            //    notes candidate.
+            // Only when stripping changed the text; otherwise it duplicates the notes candidate.
             let stripped = htmlTagsStrippedForMeetingLinks(notes)
             if stripped != notes {
                 candidates.append(contentsOf: builtInCandidates(
@@ -459,8 +399,7 @@ enum MeetingLinkDetector {
             }
         }
 
-        // 6. Custom regex fallback over combined text. Lowest priority so a
-        //    custom regex cannot override a real provider conference URL.
+        // Custom regexes run over the combined text fields.
         if !customRegexes.isEmpty {
             let combined = [location, eventURL?.absoluteString, notes]
                 .compactMap { $0 }
@@ -543,9 +482,8 @@ enum MeetingLinkDetector {
 
 // MARK: - Opening policy
 
-/// Pure decision: given an event with optional meeting link and event URL,
-/// what should we do when the user clicks "join"? Side effects (running the
-/// script, calling NSWorkspace.open) are performed by `MeetingOpener`.
+/// Input to `MeetingOpeningPolicy`, which decides what joining an event does.
+/// `MeetingOpener` performs the side effects.
 struct MeetingOpeningEvent: Equatable {
     let title: String
     let meetingLink: MeetingLink?

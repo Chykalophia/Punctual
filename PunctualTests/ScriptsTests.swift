@@ -4,7 +4,6 @@ import XCTest
 
 final class ScriptsTests: XCTestCase {
     func testCreateAppleScriptParametersForEvent() {
-        // Given: Create a test event with calendar information
         let calendar = MBCalendar(title: "Work Calendar", id: "x", source: "iCloud", email: nil, color: .black)
         let event = MBEvent(
             id: "test-id",
@@ -26,18 +25,14 @@ final class ScriptsTests: XCTestCase {
             calendar: calendar
         )
 
-        // When: Create AppleScript parameters
         let parameters = createAppleScriptParametersForEvent(event: event)
 
-        // Then: Verify all parameters are present and in correct order
         XCTAssertEqual(parameters.numberOfItems, 14, "Should have 14 parameters")
 
-        // Verify calendar parameters (last two parameters)
         XCTAssertEqual(parameters.atIndex(14)?.stringValue, "John Smith <j@s.com>, Olivia Smith <p@s.com>", "Calendar source should be last parameter")
         XCTAssertEqual(parameters.atIndex(13)?.stringValue, "iCloud", "Calendar source should be last parameter")
         XCTAssertEqual(parameters.atIndex(12)?.stringValue, "Work Calendar", "Calendar name should be second to last")
 
-        // Verify other parameters maintain their positions
         XCTAssertEqual(parameters.atIndex(11)?.stringValue, "Test Notes", "Notes parameter position")
         XCTAssertEqual(parameters.atIndex(10)?.stringValue, "Zoom", "Meeting service parameter position")
         XCTAssertEqual(parameters.atIndex(9)?.stringValue, "https://zoom.us/j/5551112222", "Meeting URL parameter position")
@@ -52,9 +47,7 @@ final class ScriptsTests: XCTestCase {
     }
 
     func testEventIdParameterUsesScriptIdentifierNotInternalId() {
-        // scriptIdentifier diverges from id for EventKit occurrences: id carries
-        // a per-occurrence suffix for dedup, but meetingStart scripts must still
-        // receive the raw identifier they were written against.
+        // id carries a per-occurrence suffix; scripts receive the raw EventKit identifier.
         let calendar = MBCalendar(title: "Work Calendar", id: "x", source: "iCloud", email: nil, color: .black)
         let event = MBEvent(
             id: "raw-id:1751610600",
@@ -84,7 +77,6 @@ final class ScriptsTests: XCTestCase {
     }
 
     func testCreateAppleScriptParametersWithEmptyCalendarInfo() {
-        // Given: Create a test event with minimal calendar information
         let calendar = MBCalendar(title: "", id: "", source: "", email: nil, color: .black)
 
         let event = MBEvent(
@@ -103,14 +95,11 @@ final class ScriptsTests: XCTestCase {
             calendar: calendar
         )
 
-        // When: Create AppleScript parameters
         let parameters = createAppleScriptParametersForEvent(event: event)
 
-        // Then: Verify empty calendar values are handled correctly
         XCTAssertEqual(parameters.atIndex(13)?.stringValue, "", "Empty calendar source should be preserved")
         XCTAssertEqual(parameters.atIndex(12)?.stringValue, "", "Empty calendar name should be preserved")
 
-        // Verify default values for optional parameters
         XCTAssertEqual(parameters.atIndex(11)?.stringValue, "EMPTY", "Empty notes should be 'EMPTY'")
         XCTAssertEqual(parameters.atIndex(10)?.stringValue, "EMPTY", "Empty meeting service should be 'EMPTY'")
         XCTAssertEqual(parameters.atIndex(9)?.stringValue, "EMPTY", "Empty meeting URL should be 'EMPTY'")

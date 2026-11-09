@@ -1,16 +1,9 @@
 //
 //  DebugHarnessTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  Drives the DEBUG harness the way a developer would — pick a scenario, look at
-//  the menu bar — and asserts the app actually lands in the state the scenario
-//  advertises.
-//
-//  Worth testing despite being a development tool, for one reason: a harness that
-//  quietly stops reflecting reality is worse than no harness, because everything
-//  it is used to check afterwards gets a false pass. The scenario that must never
-//  rot is `nolink` — if its URL ever became detectable as a meeting link, it would
-//  grow a Join chip and silently stop being the negative case people rely on.
+//  Asserts each DEBUG harness scenario puts the app in the state it advertises; `nolink` must
+//  stay a negative case with no detectable meeting link.
 //
 
 #if DEBUG
@@ -65,7 +58,6 @@ final class DebugHarnessTests: BaseTestCase {
         XCTAssertTrue(summary.firstLine.contains("Debug meeting"))
     }
 
-    /// The negative case the harness is most relied on for.
     func testNoLinkScenarioProducesNoChip() {
         let controller = makeController()
         defer { controller.removeFromStatusBar() }
@@ -128,8 +120,6 @@ final class DebugHarnessTests: BaseTestCase {
 
     // MARK: - The scenarios themselves
 
-    /// The synthetic link has to survive `MeetingLinkDetector`, or every
-    /// join-related scenario silently degrades into the no-link case.
     func testTheSyntheticMeetingLinkIsDetected() {
         let event = DebugScenario.meeting(now: Date(), startsIn: 90)
         XCTAssertNotNil(event.meetingLink, "the harness URL stopped being recognised as a meeting")
@@ -160,8 +150,6 @@ final class DebugHarnessTests: BaseTestCase {
         }
     }
 
-    /// Scenarios are rebased on the moment they are applied, which is what makes
-    /// "replay" work and what stops a stale one drifting out of its window.
     func testScenariosAreRebasedOnEachApplication() {
         let first = scenario("chip").build?(Date()).first?.startDate
         let later = Date().addingTimeInterval(600)

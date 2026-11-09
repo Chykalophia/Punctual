@@ -1,35 +1,21 @@
 //
 //  SettingsIndex.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless model of the Preferences window: the eight panes, and one entry per
-//  user-facing setting. Two jobs, one source of truth:
+//  Hostless model of the Preferences window: the panes, and one entry per
+//  user-facing setting. Backs settings search and per-pane reset. Key names are
+//  plain strings so this compiles into PunctualLogic.
 //
-//    1. Settings search. `search(_:localized:)` ranks entries against the
-//       localized label, help text, pane name and hand-authored synonyms, using
-//       the same tier ladder as the Command Bar (`CommandBarSearch.matchTier`).
-//    2. Per-pane reset. `defaultsKeys(in:)` is the exact set of `Defaults` key
-//       names a pane owns, so "Reset this section" can never drift from what the
-//       pane actually shows.
-//
-//  Deliberately hostless: no Defaults, no AppKit, no SwiftUI. Key NAMES are
-//  plain strings so this file compiles into MeetingBarLogic and is unit-tested
-//  without a host app (`MeetingBarLogicTests/SettingsIndexTests.swift`).
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026
-//  (Preferences UX overhaul, Phase 2 — the IA restructure).
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
 /// The panes of the Preferences window, in sidebar order.
 ///
-/// The routing rule, applied with zero exceptions: *which meetings exist* →
-/// `filters`; *how one surface draws them* → that surface's pane; *what happens
-/// when you act* → `joining` / `alerts`; *the app itself* → `general`.
-///
-/// "About & Support" is deliberately NOT a case here: it is a pinned sidebar
-/// footer item, not a settings pane, so it can never become a leftovers bin.
+/// Routing: which meetings appear goes in `filters`; how one surface draws them goes
+/// in that surface's pane; actions go in `joining` / `alerts`; app-wide settings in `general`.
+/// About & Support is a sidebar footer item, not a case.
 enum PreferencesTab: String, CaseIterable, Hashable, Sendable, Identifiable {
     case calendars
     case filters
@@ -42,10 +28,10 @@ enum PreferencesTab: String, CaseIterable, Hashable, Sendable, Identifiable {
 
     var id: String { rawValue }
 
-    /// Opening Preferences lands on the first pane, never on credits.
+    /// The pane shown when Preferences opens.
     static let defaultSelection: PreferencesTab = .calendars
 
-    /// Sidebar label. Single source of truth for the pane's name.
+    /// Localization key of the pane's sidebar and header title.
     var titleKey: String {
         switch self {
         case .calendars: "preferences_tab_calendars"
@@ -59,8 +45,7 @@ enum PreferencesTab: String, CaseIterable, Hashable, Sendable, Identifiable {
         }
     }
 
-    /// One line under the pane header saying what the pane is for. Eight panes
-    /// are only holdable if each one states its own purpose.
+    /// Localization key of the one-line purpose shown under the pane header.
     var purposeKey: String {
         switch self {
         case .calendars: "preferences_purpose_calendars"
@@ -92,7 +77,6 @@ enum PreferencesTab: String, CaseIterable, Hashable, Sendable, Identifiable {
 struct SettingsIndexEntry: Hashable, Sendable, Identifiable {
     /// Stable identity, unique across the index (also used by search results).
     let id: String
-    /// The pane the control lives on.
     let tab: PreferencesTab
     /// Localization key of the control's label.
     let labelKey: String
@@ -125,9 +109,7 @@ enum SettingsIndex {
 
     /// Every setting the Preferences window exposes, in pane order.
     ///
-    /// Adding a control means adding a row here. `SettingsIndexTests` fails if a
-    /// label key does not resolve, so the index cannot silently drift out of
-    /// date as settings move between panes.
+    /// Every new control needs an entry here; `SettingsIndexTests` checks each label key resolves.
     static let all: [SettingsIndexEntry] = calendars + filters + menuBar
         + dropdown + calendarWindow + joining + alerts + general
 
@@ -137,11 +119,7 @@ enum SettingsIndex {
             tab: .calendars,
             labelKey: "preferences_calendars_list_title",
             helpKey: "preferences_calendars_list_help",
-            // Deliberately NO `defaultsKeys`. Which calendars you picked is your
-            // DATA, not a setting — and both reset dialogs promise in so many
-            // words that "your calendars … are untouched". Indexing
-            // `selectedCalendarIDs` here made "Reset all settings…" clear the
-            // selection while saying it would not. Searchable, never resettable.
+            // No `defaultsKeys`: the calendar selection is user data, and the reset dialogs promise to keep it.
             synonyms: ["calendar", "account", "icloud", "google", "exchange", "work", "personal"]
         ),
         SettingsIndexEntry(
@@ -265,11 +243,7 @@ enum SettingsIndex {
             tab: .menuBar,
             labelKey: "preferences_menubar_blocks_title",
             helpKey: "preferences_menubar_blocks_help",
-            // The seeding flag rides with the arrangement it seeded. Without it,
-            // "Reset this section" would empty the block list and leave it
-            // empty — a menu bar showing nothing but the app icon, which is not
-            // the shipped default. Reset instead returns the pane to the state a
-            // fresh install is in, and the seed re-derives.
+            // Resets the seeding flag with the blocks so the default arrangement is re-seeded, not left empty.
             defaultsKeys: ["menuBarTokens", "menuBarTimeFormatMigrated"],
             synonyms: ["block", "token", "order", "reorder", "clock", "date", "week number"]
         ),
@@ -299,10 +273,6 @@ enum SettingsIndex {
             id: "menubar.lines",
             tab: .menuBar,
             labelKey: "preferences_menubar_lines_title",
-            // `eventTimeFormat` is no longer a control: showing the time is the
-            // presence of the Countdown block, and show-under-title is this row.
-            // Searchable by the old vocabulary too — someone looking for "time
-            // under title" is looking for this, whatever it is now called.
             defaultsKeys: ["menuBarTwoLineLayout"],
             synonyms: ["time", "clock", "under title", "two lines", "one line", "start time", "stacked"]
         ),
@@ -369,9 +339,7 @@ enum SettingsIndex {
             labelKey: "preferences_menubar_meeting_progress_style_title",
             helpKey: "preferences_menubar_meeting_progress_help",
             defaultsKeys: ["meetingProgressStyle"],
-            // "progress" is deliberately shared with the day/year entry below:
-            // a user searching it does not know which of the two we mean, so both
-            // should come back.
+            // "progress" is shared with the day/year entry on purpose, so a search returns both.
             synonyms: ["progress", "meeting progress", "ring", "underline", "capsule", "bar", "countdown bar"]
         ),
         SettingsIndexEntry(
@@ -686,8 +654,7 @@ enum SettingsIndex {
         all.filter { $0.tab == tab }
     }
 
-    /// The `Defaults` key names a pane owns, de-duplicated, in index order.
-    /// This is exactly what "Reset this section" restores.
+    /// The `Defaults` key names a pane owns, de-duplicated, in index order; what "Reset this section" restores.
     static func defaultsKeys(in tab: PreferencesTab) -> [String] {
         var seen = Set<String>()
         var keys: [String] = []
@@ -713,16 +680,15 @@ enum SettingsIndex {
 
     // MARK: - Search
 
-    /// Ranked settings for `query`.
+    /// Ranked settings for `query`, matched against label, pane title, help text and synonyms.
     ///
-    /// - Parameter localized: resolves a localization key to display text. The
-    ///   app passes `{ $0.loco() }`; tests pass a catalog reader, which is what
-    ///   makes this hostless and deterministic.
+    /// Every whitespace-separated term must match some field; each term scores its best
+    /// `CommandBarSearch.matchTier`. Ties keep index order.
     ///
-    /// Scoring mirrors `CommandBarSearch`: every whitespace-separated term must
-    /// match something (AND), each term contributing its best tier — exact 4,
-    /// prefix 3, word-boundary prefix 2, substring 1. Ties keep index order, so
-    /// results are stable.
+    /// - Parameters:
+    ///   - query: The raw search text. Blank returns no results.
+    ///   - localized: Resolves a localization key to display text.
+    /// - Returns: Matching entries, highest score first.
     static func search(
         _ query: String,
         localized: (String) -> String
@@ -735,9 +701,7 @@ enum SettingsIndex {
             .map(String.init)
         guard !terms.isEmpty else { return [] }
 
-        /// A match plus the tie-breaker that keeps ranking stable: equal scores
-        /// resolve to index order, so search results never shuffle between
-        /// keystrokes for no visible reason.
+        /// A match with its score and index position, used as the tie-breaker.
         struct ScoredEntry {
             let entry: SettingsIndexEntry
             let score: Double

@@ -1,6 +1,6 @@
 //
 //  OnboardingFlowTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import XCTest

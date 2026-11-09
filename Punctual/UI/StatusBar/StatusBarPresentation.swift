@@ -1,46 +1,34 @@
 //
-//  StatusBarPresentationPolicy.swift
+//  StatusBarPresentation.swift
 //  MeetingBar
 //
 
 import Foundation
 
-/// Per-event-list settings the status bar presentation policy needs.
-///
-/// Constructed at the call site from `Defaults` so the policy itself stays
-/// pure and testable.
+/// Settings the status bar presentation policy needs, snapshotted from `Defaults`.
 struct StatusBarPresentationSettings: Equatable {
     let hasSelectedCalendars: Bool
     let showEventMaxTimeUntilEventEnabled: Bool
-    /// Threshold in minutes — events starting more than this far in the future
-    /// are rendered as "afterThreshold" when the toggle is on.
+    /// Minutes; events starting further out render as `.afterThreshold` when enabled.
     let showEventMaxTimeUntilEventThreshold: Int
-    /// Whether the menu bar emphasises the next meeting once it is close enough
-    /// to act on. ON by default.
+    /// Whether the menu bar emphasises the next meeting once it is imminent.
     var highlightImminentEvent: Bool = true
-    /// Minutes before the start at which "close enough" begins. Shared with the
-    /// dropdown's action buttons (`eventActionHighlightMinutes`) on purpose: one
-    /// notion of "now-ish" across the whole app, not two that can disagree.
+    /// Minutes before the start at which a meeting is imminent
+    /// (`eventActionHighlightMinutes`, shared with the dropdown's action buttons).
     var imminentLeadMinutes: Int = 2
 }
 
-/// Coarse classification of what the status bar should show. Used to drive
-/// the title text, icon and tooltip in `StatusBarItemController.updateTitle`.
+/// Coarse classification of what the status bar shows; drives its title, icon,
+/// and tooltip.
 enum StatusBarTitleMode: Equatable {
-    /// User has not selected any calendars yet — render the app icon.
+    /// No calendars selected; render the app icon.
     case idle
-    /// Calendars are selected, but no upcoming event matches the current
-    /// filters — render the "done for today" icon.
+    /// No upcoming event matches the current filters; render the "done for today" icon.
     case noUpcoming
     /// An upcoming event exists and should be rendered with its title.
     case nextEvent
-    /// An upcoming event exists but starts beyond the configured threshold.
-    /// Drop the event and render the status icon in its place — the calendar
-    /// glyph, or the app icon when that is the chosen icon format (see
-    /// `StatusBarIconPolicy`), plus whatever event-independent blocks the user
-    /// composed. NOT an alarm-clock glyph: the app ships no such asset, and this
-    /// comment claimed one for long enough that the Menu Bar pane's help text
-    /// repeated it to users.
+    /// An upcoming event starts beyond the configured threshold. Render the
+    /// status icon (see `StatusBarIconPolicy`) plus any event-independent blocks.
     case afterThreshold
 }
 
@@ -80,9 +68,7 @@ struct StatusBarEventPresentationInput: Equatable {
     let endDate: Date
     let meetingService: MeetingServices?
     let participation: StatusBarEventParticipation
-    /// Whether the event has somewhere to join. Only the Join chip reads it, and
-    /// it defaults to `false` so every existing construction site (and test) is
-    /// unchanged — a meeting is opt-in joinable, never assumed to be.
+    /// Whether the event has a meeting link. Read only by the Join chip.
     var hasMeetingLink: Bool = false
 }
 
@@ -97,10 +83,8 @@ struct StatusBarPresenterSettings: Equatable {
     let tentativeDisplay: StatusBarParticipationDisplay
 }
 
-/// Which side of the title the icon renders on. The classic path is always
-/// `.leading`; the composable path derives it from where the user placed the
-/// icon token relative to the text tokens (leading if nothing precedes it,
-/// otherwise trailing — `NSStatusBarButton` only supports left/right).
+/// Which side of the title the icon renders on. Always `.leading` on the classic
+/// path; on the composed path, `.leading` only if no text token precedes the icon.
 enum StatusBarIconPosition: Equatable {
     case leading
     case trailing
@@ -115,24 +99,11 @@ struct StatusBarPresentation: Equatable {
     let iconPosition: StatusBarIconPosition
     let layout: StatusBarTitleLayout
     let titleStyle: StatusBarTitleStyle
-    /// Whether the renderer should draw the title in a heavier weight because the
-    /// meeting is close enough to act on.
-    ///
-    /// Separate from `titleStyle` rather than another case of it, because the two
-    /// answer different questions — style says what KIND of event this is
-    /// (declined, pending, past), emphasis says WHEN it is. The presenter only
-    /// ever sets this alongside `.normal`, so a declined meeting stays dimmed
-    /// instead of being shouted about a minute before a meeting you are not
-    /// attending.
+    /// Whether to draw the title in a heavier weight because the meeting is
+    /// imminent. Only ever set alongside a `.normal` `titleStyle`.
     let emphasizeTitle: Bool
-    /// The Join chip's text, already appended to the end of the last rendered
-    /// line, or `""` when there is no chip. Composed path only — see
-    /// `composedPresentation`.
-    ///
-    /// Carried on the presentation rather than left for the renderer to work out
-    /// because the renderer needs two things from it that only the presenter
-    /// knows: that the chip is the trailing run of the drawn string (so it can be
-    /// measured), and that a click there means join rather than open the panel.
+    /// The Join chip's text, already appended as the trailing run of the last
+    /// rendered line, or `""` for no chip. Composed path only.
     let actionLabel: String
     let removeDeliveredNotifications: Bool
 
@@ -164,10 +135,6 @@ struct StatusBarPresentation: Equatable {
 }
 
 /// Picks the status bar mode for the current next-event candidate.
-///
-/// Pure: takes the next event's `startDate` (not the full `MBEvent`) plus a
-/// settings snapshot. The renderer already has the `MBEvent`, so the policy
-/// does not need to thread it through.
 enum StatusBarPresentationPolicy {
     static func mode(
         nextEventStartDate: Date?,
@@ -232,9 +199,7 @@ enum StatusBarPresenter {
             pendingDisplay: settings.pendingDisplay,
             tentativeDisplay: settings.tentativeDisplay
         )
-        // Emphasis rides on top of a NORMAL title only. A declined or pending
-        // meeting is dimmed/underlined precisely because you are not treating it
-        // as yours; bolding it a minute beforehand would argue with that.
+        // Only a `.normal` title is emphasised; dimmed/underlined styles win.
         let emphasize =
             settings.presentation.highlightImminentEvent
             && resolvedStyle == .normal
@@ -402,8 +367,7 @@ enum StatusBarTitlePolicy {
 
 // MARK: - Icon policy
 
-/// Shadow of `EventTitleIconFormat` so the policy stays hostless. The
-/// `+MeetingBar.swift` adapter converts from the production Defaults enum.
+/// Hostless mirror of `EventTitleIconFormat`, converted in `StatusBarPresentation+Punctual.swift`.
 enum StatusBarIconFormat: Equatable {
     case calendar
     case appicon
@@ -413,17 +377,15 @@ enum StatusBarIconFormat: Equatable {
 
 /// What the status bar should render as its icon.
 ///
-/// `asset(name)` is loaded via `NSImage(named:)` by the renderer; the renderer
-/// is expected to fall back to a safe placeholder when the asset is missing
-/// (see `MenuStyleConstants.iconNamed(_:)`).
+/// `asset(name)` is loaded by the renderer, which falls back to a placeholder
+/// when the asset is missing (see `MenuStyleConstants.iconNamed(_:)`).
 enum StatusBarIcon: Equatable {
     case asset(String)
     case meetingService(MeetingServices?)
     case none
 }
 
-/// Asset names the renderer needs. Passed in by the caller so the policy is
-/// fully decoupled from `MenuStyleConstants` and easy to test.
+/// Asset names the icon policy can choose from.
 struct StatusBarIconAssets: Equatable {
     let appIcon: String
     let calendarCheckmark: String
@@ -478,16 +440,14 @@ enum StatusBarIconPolicy {
     }
 }
 
-// MARK: - Composable menu bar (MeetingBarNG)
+// MARK: - Composable menu bar
 
-/// A single token the user can place, in any order, into the composable
-/// menu-bar title. New in MeetingBarNG. The classic status-bar path
-/// (`StatusBarPresenter.presentation`) is untouched and used whenever the user
-/// has not opted into a custom composition, so existing installs are unchanged.
+/// A token the user can place, in any order, into the composable menu-bar title.
+/// The classic `StatusBarPresenter.presentation` path is used when no composition is set.
 enum MenuBarTokenKind: String, CaseIterable, Codable, Hashable {
-    /// The status/meeting icon (rendered leading, per `StatusBarIconPolicy`).
+    /// The status/meeting icon, per `StatusBarIconPolicy`.
     case icon
-    /// The next event's title (respects the classic title format + length).
+    /// The next event's title, using the title format and length settings.
     case title
     /// A bare countdown to the event (start, or end when the event is active),
     /// formatted per `CountdownStyle`.
@@ -506,7 +466,7 @@ enum MenuBarTokenKind: String, CaseIterable, Codable, Hashable {
     case worldClock
 }
 
-/// Countdown rendering styles. Mirrors the ROADMAP "Countdown styles" item.
+/// Countdown rendering styles.
 enum CountdownStyle: String, CaseIterable, Codable, Hashable {
     /// Largest unit only, e.g. `2h`.
     case compact
@@ -528,27 +488,22 @@ enum MenuBarDateStyle: String, CaseIterable, Codable, Hashable {
 
 /// Progress-token rendering styles.
 enum MenuBarProgressStyle: String, CaseIterable, Codable, Hashable {
-    /// Fraction of the current day elapsed (midnight → midnight).
+    /// Fraction of the current day elapsed.
     case day
-    /// Fraction of the current year elapsed (Jan 1 → Jan 1).
+    /// Fraction of the current year elapsed.
     case year
 }
 
-/// An ordered list of tokens. Considered "enabled" only when non-empty; the
-/// adapter returns `nil` for an empty composition so the classic path runs.
+/// An ordered list of tokens. An empty composition means the classic path renders.
 struct MenuBarComposition: Equatable {
     var tokens: [MenuBarTokenKind]
 
-    /// Sensible default when a user first opts in without deriving from their
-    /// existing settings: icon, then title, then a countdown.
+    /// Icon, title, countdown.
     static let standard = MenuBarComposition(tokens: [.icon, .title, .countdown])
 }
 
-/// One-click starting points for the composable menu bar (Dot parity). Each
-/// named case maps to a fixed, ordered token list the existing composition
-/// pipeline already understands — presets never introduce new behavior, they
-/// just WRITE token lists. `.custom` is a sentinel meaning "user-defined
-/// order"; its `tokens` is empty and must never be applied.
+/// Named token lists for the composable menu bar. `.custom` is a sentinel for a
+/// user-defined order; its `tokens` is empty and must never be applied.
 enum MenuBarPreset: String, CaseIterable, Codable {
     case classic
     case minimal
@@ -567,10 +522,8 @@ enum MenuBarPreset: String, CaseIterable, Codable {
         }
     }
 
-    /// The named preset whose `tokens` exactly equals the given ordered list,
-    /// else `.custom`. An empty/unset list detects as `.classic`: the derived
-    /// legacy default ≈ icon+title+countdown, so an unconfigured menu bar reads
-    /// as the classic preset rather than an empty custom one.
+    /// The named preset whose `tokens` exactly equals the given list, else
+    /// `.custom`. An empty list detects as `.classic`.
     static func detect(tokens: [MenuBarTokenKind]) -> MenuBarPreset {
         if tokens.isEmpty { return .classic }
         return allCases.first { $0 != .custom && $0.tokens == tokens } ?? .custom
@@ -586,19 +539,11 @@ struct MenuBarBlock: Equatable {
     let isOn: Bool
 }
 
-/// The Menu Bar pane's list model, kept hostless so it is unit-tested without a
-/// window: the stored token array in, the complete inventory of blocks out.
-///
-/// The pane always shows every kind the menu bar can hold. A block that is off
-/// stays on screen, dimmed, one click from returning — which is what makes the
-/// switch non-destructive. Before this, "off" meant *removed from the list*,
-/// and the whole builder had an enable toggle whose off state wrote an empty
-/// token array: the user's arrangement was destroyed with no undo, and turning
-/// it back on reseeded from the legacy settings rather than from what they had.
+/// The Menu Bar pane's list model: the stored token array in, every block kind
+/// out, with hidden blocks listed (off) rather than removed.
 enum MenuBarBlockList {
-    /// Showing blocks first, in their stored left-to-right order, then the
-    /// hidden ones in canonical order. Unknown and duplicate stored values are
-    /// dropped, so a downgrade or a hand-edited plist degrades gracefully.
+    /// Showing blocks first in stored order, then hidden ones in canonical order.
+    /// Unknown and duplicate stored values are dropped.
     static func blocks(stored: [String]) -> [MenuBarBlock] {
         let showing = kinds(stored: stored)
         let hidden = MenuBarTokenKind.allCases.filter { !showing.contains($0) }
@@ -625,8 +570,7 @@ enum MenuBarBlockList {
         return rawValues(showing)
     }
 
-    /// Turns a block on (appended last, where the user can see it arrive) or off
-    /// (removed from the showing order; every other block keeps its place).
+    /// Turns a block on (appended last) or off (removed; others keep their order).
     static func setting(stored: [String], kind: MenuBarTokenKind, isOn: Bool) -> [String] {
         var showing = kinds(stored: stored)
         if isOn {
@@ -654,17 +598,8 @@ struct MenuBarTimeFormatMigrationPlan: Equatable {
     static let noChange = MenuBarTimeFormatMigrationPlan(tokens: nil, twoLines: nil)
 }
 
-/// The pure decision behind retiring `eventTimeFormat` as a control.
-///
-/// The picker offered show / show-under-title / hide, was read only by the
-/// classic status-bar path, and sat directly above a composer that ignored it.
-/// Its two capabilities survive in clearer places — a Countdown block, and
-/// "One line / Two lines" — so the migration exists to carry the user's answer
-/// across rather than silently dropping it.
-///
-/// Anyone who had already composed their menu bar is left untouched: for them
-/// the picker was already inert, so honouring it now would change a menu bar
-/// they never saw it affect.
+/// Migrates the retired `eventTimeFormat` setting into a token list and the
+/// "Two lines" flag. A non-empty stored composition is left unchanged.
 enum MenuBarTimeFormatMigration {
     static func plan(
         storedTokens: [String],
@@ -676,18 +611,13 @@ enum MenuBarTimeFormatMigration {
     }
 }
 
-/// Everything the composed presenter needs beyond the classic title/mode
-/// snapshots. Built in the `+MeetingBar` adapter from `Defaults`.
+/// Settings for the composed presenter, built from `Defaults` in
+/// `StatusBarPresentation+Punctual.swift`.
 struct MenuBarComposedSettings: Equatable {
     let presentation: StatusBarPresentationSettings
     let title: StatusBarTitleSettings
     let countdownStyle: CountdownStyle
-    /// How early the countdown starts counting; `0` is no limit.
-    ///
-    /// Defaulted so the memberwise init stays source-compatible, and defaulted to
-    /// the value that preserves the block's original behaviour rather than to
-    /// something merely convenient — a new setting should not move anyone's menu
-    /// bar until they ask it to.
+    /// Minutes before the start that the countdown appears; `0` means always.
     var countdownLeadMinutes: Int = 0
     let dateStyle: MenuBarDateStyle
     let progressStyle: MenuBarProgressStyle
@@ -705,43 +635,24 @@ struct MenuBarComposedSettings: Equatable {
     let tokenSeparator: String
     let pendingDisplay: StatusBarParticipationDisplay
     let tentativeDisplay: StatusBarParticipationDisplay
-    /// "Two lines" on the Menu Bar pane: the meeting title takes the first line
-    /// and every other block sits under it in smaller type. Defaults to off (one
-    /// line), which is also what keeps the memberwise init source-compatible.
-    ///
-    /// This is the capability the deleted `eventTimeFormat` control carried as
-    /// `.show_under_title`. That value was read only by the classic status-bar
-    /// path, so it silently did nothing for anyone who composed their menu bar;
-    /// implementing it here is what makes the deletion lossless.
+    /// "Two lines": the meeting title on the first line, every other block under it.
     var twoLines: Bool = false
-    /// The Join chip appended after every block. Defaults to off so the
-    /// memberwise init stays source-compatible; production always passes it.
+    /// The Join chip appended after every block.
     var joinAction: MenuBarJoinActionSettings = .disabled
 }
 
-/// Pure formatters for the new tokens. Hostless and fully unit-tested.
+/// Formatters for the composable menu-bar tokens.
 enum MenuBarCompositionPolicy {
-    /// Cell count for the `.progress` token's Unicode-block bar. Fixed (not a
-    /// user setting yet) so the composer stays simple; ~1/8-cell resolution is
-    /// plenty for a menu-bar day/year indicator.
+    /// Cell count for the `.progress` token's Unicode-block bar.
     static let progressBarWidth = 8
 
-    /// Whether the Countdown block should render at all yet.
+    /// Whether the Countdown block renders yet: while running, or within
+    /// `leadMinutes` of the start (per `EventActionProminence`).
     ///
-    /// A countdown is only information while it is actionable. At three hours out
-    /// it is a number that changes every minute and tells you nothing you would
-    /// act on; inside the last hour it is the reason the menu bar is there. This
-    /// is the line between the two, and the block simply does not draw before it.
+    /// Independent of the "keep the menu bar quiet" threshold, which hides the
+    /// whole event rather than only the countdown.
     ///
-    /// Composes with, rather than duplicates, the pane's "keep the menu bar quiet"
-    /// threshold. That one drops the WHOLE event back to the status icon — title
-    /// and all — so it answers "should this meeting be on screen"; this answers "should
-    /// it be counting". Setting only this one leaves the meeting named all day and
-    /// silent until it matters, which the quiet threshold cannot express.
-    ///
-    /// - Parameter leadMinutes: `0` (or any non-positive value, so a corrupt
-    ///   preference degrades to showing MORE rather than silently blanking the
-    ///   block) means no limit — the block's original behaviour.
+    /// - Parameter leadMinutes: Non-positive values mean no limit.
     static func showsCountdown(
         start: Date,
         end: Date,
@@ -749,23 +660,19 @@ enum MenuBarCompositionPolicy {
         leadMinutes: Int
     ) -> Bool {
         guard leadMinutes > 0 else { return true }
-        // Same "close enough to care" rule the Join chip and the bold emphasis
-        // use, so a running meeting always counts down to its end no matter how
-        // tight the lead is.
         return EventActionProminence.isImminent(
             start: start, end: end, now: now, leadMinutes: leadMinutes
         )
     }
 
-    /// The instant the countdown is due to appear, for the redraw clock, or `nil`
-    /// when there is no limit and so no transition to wake up for.
+    /// The instant the countdown is due to appear, for scheduling a redraw.
+    /// - Returns: `nil` when there is no lead limit.
     static func countdownAppearanceDate(eventStart: Date, leadMinutes: Int) -> Date? {
         guard leadMinutes > 0 else { return nil }
         return eventStart.addingTimeInterval(-Double(leadMinutes) * 60)
     }
 
-    /// Bare countdown between two dates. Returns an empty string for a
-    /// non-positive interval so a stale/negative countdown never renders.
+    /// Bare countdown between two dates, or `""` for a non-positive interval.
     static func countdownText(
         from start: Date,
         to end: Date,
@@ -774,11 +681,8 @@ enum MenuBarCompositionPolicy {
     ) -> String {
         guard end > start else { return "" }
 
-        // Digital is built by hand to guarantee a stable `H:MM` shape
-        // (e.g. "2:30", "0:16"); DateComponentsFormatter's positional style
-        // pads the leading unit to "02:30", which reads poorly in a menu bar.
-        // Intervals of a day or more get a `Nd ` prefix so the hours field
-        // never overflows into a clock-like "50:00".
+        // Hand-built `H:MM` (with an `Nd ` prefix past a day): DateComponentsFormatter's
+        // positional style zero-pads the leading unit ("02:30").
         if style == .digital {
             let totalMinutes = Int((end.timeIntervalSince(start) / 60).rounded(.down))
             let days = totalMinutes / (24 * 60)
@@ -793,7 +697,6 @@ enum MenuBarCompositionPolicy {
         formatter.unitsStyle = .abbreviated
         formatter.allowedUnits = [.day, .hour, .minute]
         if style == .compact {
-            // Largest non-zero unit only (localized), e.g. "2h" / "45m".
             formatter.maximumUnitCount = 1
         }
         return formatter.string(from: start, to: end) ?? ""
@@ -803,8 +706,6 @@ enum MenuBarCompositionPolicy {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = calendar.locale ?? Locale.current
-        // DateFormatter renders in its own time zone (system by default); pin it
-        // to the calendar's so the function honors the calendar it's handed.
         formatter.timeZone = calendar.timeZone
         switch style {
         case .weekday:
@@ -828,8 +729,7 @@ enum MenuBarCompositionPolicy {
     }
 
     /// The current time in `timeZone`, formatted like `clockText`, prefixed with
-    /// a trimmed non-empty `label` (e.g. `SF 9:41`). Empty label yields the time
-    /// alone. Differs from `clockText` only in pinning the chosen time zone.
+    /// the trimmed `label` when non-empty (e.g. `SF 9:41`).
     static func worldClockText(
         now: Date,
         timeZone: TimeZone,
@@ -848,10 +748,9 @@ enum MenuBarCompositionPolicy {
     }
 
     /// ISO-8601 week number (e.g. `W29`) with a caller-supplied prefix.
-    /// Computed on a dedicated ISO-8601 calendar (Monday-start, 4-day first
-    /// week) — copying only the passed calendar's time zone and locale — so the
-    /// result is correct near year boundaries regardless of the passed
-    /// calendar's `firstWeekday`/`minimumDaysInFirstWeek`.
+    ///
+    /// Always uses ISO-8601 week rules; only the time zone and locale are taken
+    /// from `calendar`.
     static func weekNumberText(now: Date, calendar: Calendar, prefix: String) -> String {
         var isoCalendar = Calendar(identifier: .iso8601)
         isoCalendar.timeZone = calendar.timeZone
@@ -860,9 +759,8 @@ enum MenuBarCompositionPolicy {
         return "\(prefix)\(week)"
     }
 
-    /// Fraction (0...1) of the current calendar day elapsed at `now`. Uses the
-    /// calendar's own day boundaries (not a hardcoded 86 400s) so DST-short and
-    /// DST-long days stay correct.
+    /// Fraction (0...1) of the current calendar day elapsed at `now`, using the
+    /// calendar's actual day length (DST-aware).
     static func dayFraction(now: Date, calendar: Calendar) -> Double {
         let startOfDay = calendar.startOfDay(for: now)
         guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
@@ -871,8 +769,7 @@ enum MenuBarCompositionPolicy {
         return min(1, max(0, now.timeIntervalSince(startOfDay) / dayLength))
     }
 
-    /// Fraction (0...1) of the current calendar year elapsed at `now`. Measures
-    /// the actual year span (Jan 1 → next Jan 1), so leap years are automatic.
+    /// Fraction (0...1) of the current calendar year elapsed at `now`.
     static func yearFraction(now: Date, calendar: Calendar) -> Double {
         let year = calendar.component(.year, from: now)
         guard
@@ -894,9 +791,8 @@ enum MenuBarCompositionPolicy {
         }
     }
 
-    /// Renders `fraction` (clamped to 0...1) as a fixed-width bar of `width`
-    /// cells: full `█` cells, one partial eighth-block glyph for the fractional
-    /// cell, and `░` for the remainder — e.g. `███▍░░░░`.
+    /// Renders `fraction` (clamped to 0...1) as a `width`-cell bar of full blocks,
+    /// one eighth-block partial, and `░` padding, e.g. `███▍░░░░`.
     static func progressBarText(fraction: Double, width: Int) -> String {
         guard width > 0 else { return "" }
         let clamped = min(1, max(0, fraction))
@@ -920,11 +816,9 @@ enum MenuBarCompositionPolicy {
 
 extension StatusBarPresenter {
     /// Builds the status-bar presentation from a user-defined token composition.
-    /// Non-event modes (idle / noUpcoming / afterThreshold) render the status
-    /// icon plus any event-independent tokens (clock/date) the user chose;
-    /// title/countdown need an event, so they drop out there. The status icon
-    /// always shows in those modes, so menu-bar visibility stays a reliability
-    /// guarantee regardless of which tokens the user picked.
+    ///
+    /// Outside `.nextEvent` mode, renders the status icon (always, even without
+    /// an `.icon` token) plus event-independent tokens only.
     static func composedPresentation(
         nextEvent: StatusBarEventPresentationInput?,
         composition: MenuBarComposition,
@@ -999,20 +893,12 @@ extension StatusBarPresenter {
         )
     }
 
-    /// Splits the composed segments into the one or two lines the renderer draws.
+    /// Splits the composed segments into one or two lines.
     ///
-    /// "Two lines" means the meeting title is the headline and everything else
-    /// sits under it, wherever the user put the Title block — a stack whose top
-    /// line was a countdown would not be a title with detail beneath it. When
-    /// there is no title, or nothing to put under it, the request cannot mean
-    /// anything, so the strip stays on one line rather than rendering an empty
-    /// second row.
-    ///
-    /// The Join chip is appended after everything else on whichever line is
-    /// drawn last — the one line, or the detail line of a stack. It is not a
-    /// block and has no place in the user's order: it is the thing you press, so
-    /// it goes where a button goes, at the end. The renderer relies on this,
-    /// measuring the chip as the trailing run of the string it draws.
+    /// With "Two lines", the title is the first line and every other segment the
+    /// second, regardless of the title's position; falls back to one line when
+    /// there is no title or nothing else. The Join label is always the trailing run
+    /// of the last line; the renderer measures the chip from that.
     private static func composedLines(
         segments: [(kind: MenuBarTokenKind, text: String)],
         actionLabel: String,
@@ -1032,8 +918,7 @@ extension StatusBarPresenter {
         return (segments[titleIndex].text, rest)
     }
 
-    /// Rendered text for a single event-mode token. `.icon` sets the icon rather
-    /// than a text segment, so it's handled by the caller and returns "" here.
+    /// Rendered text for a single event-mode token; `""` for `.icon`, which the caller handles.
     private static func eventTokenText(
         _ token: MenuBarTokenKind,
         nextEvent: StatusBarEventPresentationInput,
@@ -1096,8 +981,7 @@ extension StatusBarPresenter {
         }
     }
 
-    /// Non-event composition: the status icon plus event-independent tokens
-    /// (clock/date) only. Title/countdown are dropped (they need an event).
+    /// Non-event composition: the status icon plus event-independent tokens only.
     private static func composedNonEventPresentation(
         mode: StatusBarTitleMode,
         composition: MenuBarComposition,

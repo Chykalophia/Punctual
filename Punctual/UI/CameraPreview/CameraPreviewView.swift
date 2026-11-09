@@ -1,24 +1,18 @@
 //
 //  CameraPreviewView.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  SwiftUI surface for the pre-call "mirror check": a live self-view camera
-//  preview (an AVCaptureVideoPreviewLayer wrapped in an NSViewRepresentable), a
-//  horizontal microphone input-level meter, camera/mic device pickers, and a
-//  permission-denied state with a System Settings affordance. When opened for a
-//  specific event it shows a prominent "Join meeting" button; opened standalone
-//  it shows Close only. Presentation-only over CameraPreviewController — no
-//  recording, saving, or transcription.
+//  Pre-call camera and microphone check: live self-view, mic level meter, device pickers and a
+//  permission-denied state. Nothing is recorded or saved. State lives in CameraPreviewController.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AVFoundation
 import SwiftUI
 
-/// Closures the preview window needs from the app, injected by AppDelegate /
-/// WindowCoordinator. `joinEventID` is non-nil only when the preview was opened
-/// for a specific event, which is what gates the "Join meeting" button.
+/// App closures the preview window needs. `joinEventID` is non-nil only when the preview was
+/// opened for a specific event, and gates the "Join meeting" button.
 struct CameraPreviewHandlers {
     var joinEventID: String?
     var join: @MainActor (String) -> Void = { _ in }
@@ -206,8 +200,7 @@ struct CameraPreviewView: View {
     }
 }
 
-/// Simple horizontal mic-level bar filled proportionally to a 0…1 level, with a
-/// color that warms as the level climbs — a coarse visual meter, not a precise VU.
+/// Horizontal mic-level bar for a 0...1 level, tinted warmer as the level rises.
 struct MicLevelBar: View {
     let level: Float
 
@@ -236,8 +229,7 @@ struct MicLevelBar: View {
     }
 }
 
-/// Wraps an NSView whose backing layer is an `AVCaptureVideoPreviewLayer` fed by
-/// the controller's session — the live self-view.
+/// Hosts an `AVCaptureVideoPreviewLayer` fed by the controller's session.
 struct CameraLivePreview: NSViewRepresentable {
     let session: AVCaptureSession
 

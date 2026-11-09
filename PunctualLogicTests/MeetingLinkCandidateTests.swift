@@ -1,6 +1,6 @@
 //
 //  MeetingLinkCandidateTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -58,9 +58,8 @@ final class MeetingLinkCandidateTests: XCTestCase {
     }
 
     func testLongerURLBeatsShorterWithinSameSource() {
-        // Zoom truncation case: one source has the URL with a password/token
-        // suffix, another has a chopped form. We prefer the longer URL because
-        // the password is required to actually join the meeting.
+        // One source has the Zoom URL with its password suffix, another a truncated form;
+        // the longer URL wins because the password is required to join.
         let truncated = make("https://us02web.zoom.us/j/123", service: .zoom, source: .notes)
         let withPassword = make("https://us02web.zoom.us/j/123?pwd=abcdef", service: .zoom, source: .notes)
         XCTAssertEqual(MeetingLinkCandidatePolicy.best(from: [truncated, withPassword]), withPassword)

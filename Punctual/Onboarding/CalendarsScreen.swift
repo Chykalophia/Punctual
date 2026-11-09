@@ -21,9 +21,7 @@ struct CalendarsScreen: View {
                 .foregroundStyle(.secondary)
 
             if let appModel = onboardingHandler.appModel {
-                // Observe appModel here so the footer's enabled state recomputes
-                // when a calendar is toggled (CalendarsScreen itself only
-                // observes the router and handler, which don't change on toggle).
+                // Observes appModel so the footer's enabled state updates when a calendar is toggled.
                 CalendarSelectionStep(router: router, appModel: appModel)
             } else {
                 ProgressView()
@@ -62,8 +60,7 @@ private struct CalendarSelectionContent: View {
     @ObservedObject var appModel: AppModel
 
     var body: some View {
-        // Same grouped-form presentation as Preferences → Calendars, so the
-        // selection list looks identical in both places.
+        // Same grouped-form presentation as Preferences > Calendars.
         PreferencesGroupedForm {
             if appModel.state.calendars.isEmpty {
                 Section {

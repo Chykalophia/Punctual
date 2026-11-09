@@ -1,6 +1,6 @@
 //
-//  TimelineSpanTests.swift
-//  MeetingBarLogicTests
+//  TimelineStyleTests.swift
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -23,9 +23,6 @@ final class TimelineSpanTests: XCTestCase {
 
     // MARK: - Relative
 
-    /// The bug this style was reworked for: at 16:00 with nothing until 19:45,
-    /// the fixed -3h window opened on three hours of empty past, so the bar
-    /// looked like it started in the middle of nowhere.
     func testRelativeDoesNotOpenOnEmptyPast() {
         let range = DayTimelineRange.range(
             style: .relative,
@@ -39,8 +36,6 @@ final class TimelineSpanTests: XCTestCase {
         )
     }
 
-    /// Trimming the past must not go so far that "now" sits flush against the
-    /// leading edge — that reads as clipped rather than as current.
     func testRelativeAlwaysKeepsSomePastOnScreen() {
         for startsIn in [0.25, 1.0, 3.75, 8.0] {
             let range = DayTimelineRange.range(
@@ -56,7 +51,6 @@ final class TimelineSpanTests: XCTestCase {
         }
     }
 
-    /// It must still open early enough to show a meeting that IS behind us.
     func testRelativeReachesBackForAMeetingAlreadyStarted() {
         let range = DayTimelineRange.range(
             style: .relative,
@@ -66,7 +60,6 @@ final class TimelineSpanTests: XCTestCase {
         XCTAssertLessThanOrEqual(range.lowerBound, offset(-2))
     }
 
-    /// However far the day reaches, the marker has to be on the bar.
     func testRelativeAlwaysContainsNow() {
         let cases: [(first: Date, last: Date)?] = [
             nil,
@@ -80,7 +73,6 @@ final class TimelineSpanTests: XCTestCase {
         }
     }
 
-    /// A single short meeting must not collapse the bar around itself.
     func testRelativeKeepsAMinimumSpan() {
         let range = DayTimelineRange.range(
             style: .relative,
@@ -93,8 +85,6 @@ final class TimelineSpanTests: XCTestCase {
         )
     }
 
-    /// It never grows past the fixed window, or "around now" stops meaning
-    /// anything.
     func testRelativeNeverExceedsTheFixedWindow() {
         let range = DayTimelineRange.range(
             style: .relative,
@@ -122,7 +112,6 @@ final class TimelineSpanTests: XCTestCase {
         XCTAssertEqual(calendar.component(.hour, from: range.upperBound), DayTimelineRange.dayEndHour)
     }
 
-    /// An early standup or a late call widens the day rather than falling off it.
     func testDayWidensForEventsOutsideWorkingHours() {
         let early = DayTimelineRange.range(
             style: .day,
@@ -148,8 +137,6 @@ final class TimelineSpanTests: XCTestCase {
         XCTAssertTrue(range.contains(smallHours))
     }
 
-    /// The day style gives a meeting the same place on the bar all day, which is
-    /// the property that distinguishes it from the relative one.
     func testDayRangeDoesNotMoveAsTheAfternoonPasses() {
         let bounds = (first: offset(-2), last: offset(2))
         let atFour = DayTimelineRange.range(style: .day, now: now, bounds: bounds)
@@ -163,16 +150,12 @@ final class TimelineSpanTests: XCTestCase {
         XCTAssertEqual(TimelineSpan.allCases.map(\.rawValue), ["off", "relative", "day"])
     }
 
-    /// `off` is a style rather than a separate toggle, so exactly one control
-    /// answers both "is it shown" and "how".
     func testOnlyOffIsHidden() {
         for style in TimelineSpan.allCases {
             XCTAssertEqual(style.isVisible, style != .off, "\(style)")
         }
     }
 
-    /// `.off` never draws, but the range function stays total — a pure function
-    /// that traps on a valid case is a crash waiting for a refactor.
     func testOffStillAnswersWithAUsableRange() {
         let range = DayTimelineRange.range(style: .off, now: now, bounds: nil)
         XCTAssertTrue(range.contains(now))
