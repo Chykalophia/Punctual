@@ -35,7 +35,7 @@ A Spotlight-style box for finding meetings and running actions. Open it with its
 
 ## Event editor
 
-Create, edit, or delete calendar events without leaving Punctual. This writes to your calendar.
+Create, edit, or delete calendar events without leaving Punctual. This writes to your calendar through Apple Calendar, so it can only save to calendars macOS can see; a calendar that exists only through a directly connected Google account isn't offered.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/app/event-editor-new-dark.png">

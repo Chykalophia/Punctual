@@ -73,4 +73,8 @@ Everything here can be changed later in [Preferences](preferences/README.md).
 | Reminders | Only when you click **Allow Access…** in [Calendars](preferences/calendars.md) | Today's reminders in the dropdown | System Settings ▸ Privacy & Security ▸ Reminders |
 | Camera and microphone | Only when you open [Camera check](windows.md#camera-check) | Self-view before a call | System Settings ▸ Privacy & Security ▸ Camera / Microphone |
 
-Punctual does not send your calendar anywhere. The two network features are opt-in or obvious: update checks against GitHub ([About & Support](preferences/about.md)) and location autocomplete in the event editor, which is off by default.
+Punctual does not send your calendar to any Punctual server. It goes online in three cases:
+
+- **Google Calendar connected directly**: Punctual talks to Google's Calendar API with your account.
+- **Update checks** against GitHub ([About & Support](preferences/about.md)).
+- **Location autocomplete** in the event editor, which is off by default and sends what you type to Apple.

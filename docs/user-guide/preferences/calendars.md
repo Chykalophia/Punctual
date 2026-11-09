@@ -27,6 +27,8 @@ Shows whether Punctual may read Reminders: **Allow Access…** asks macOS; once 
 
 ## Calendar isn't updating?
 
+This applies to calendars read through Apple Calendar. For a Google account connected directly, use **Reconnect** under [Sources](#sources) instead.
+
 Punctual shows whatever the macOS Calendar app has already synced; account access and sync frequency are macOS's. This section shows **Newest change the app can see** (if it's hours old, macOS has probably stopped syncing), any error macOS reported, **Refresh now**, and **Open Internet Accounts**.
 
 ## All settings on this pane

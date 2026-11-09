@@ -20,7 +20,7 @@ Nothing is sent until you press Send in your mail app. There are no settings for
 
 ## Copy a report for support
 
-[About & Support](preferences/about.md) ▸ **Copy a report for support** copies a plain-text diagnostics report to the clipboard, ready to paste into an email or a GitHub issue. It contains no meeting titles, attendees, or calendar names:
+[About & Support](preferences/about.md) ▸ **Copy a report for support** copies a plain-text diagnostics report to the clipboard, ready to paste into an email or a GitHub issue. It contains no meeting titles or attendees. The **Last error** line repeats the most recent error message as the app recorded it, which can name an account address or a calendar ID, so read it before you share the report:
 
 ```
 Punctual 1.1.2 (42)
@@ -45,7 +45,7 @@ App source: direct
 
 ## Google sign-in confirmation page
 
-When you connect Google Calendar (during [setup](getting-started.md) or in [Preferences ▸ Calendars](preferences/calendars.md)), Google's sign-in opens in your browser. After you approve, the browser returns to Punctual and shows this page, served once from your own Mac and then closed. It follows the browser's light or dark appearance, and shows the account you connected.
+When you connect Google Calendar (during [setup](getting-started.md) or in [Preferences ▸ Calendars](preferences/calendars.md)), Google's sign-in opens in your browser. After you approve, the browser returns to Punctual and shows this page, served from your own Mac (127.0.0.1) only while sign-in is in progress. It follows the browser's light or dark appearance, and shows the account you connected.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/web/oauth-complete-dark.png">

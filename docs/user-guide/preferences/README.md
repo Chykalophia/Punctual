@@ -28,4 +28,4 @@ Each pane ends with **Reset this section…**, which returns that pane to its de
 | [General](general.md) | The app itself: how it starts, how it reads time, and the way back to calm. |
 | [About & Support](about.md) | Version, links, What's New, and a support report. |
 
-Each pane page ends with a table of every setting, generated from the app's own settings index. The "Stored as" column is the `defaults` key, for people who script their setup (`defaults read com.chykalophia.Punctual <key>`).
+Each pane page ends with a table of the settings in the app's own settings index, which is also what search finds and what **Reset** covers. A few controls aren't in the index yet (Row spacing, the meeting limit, and button highlighting in the dropdown) and are described in the page text only. The "Stored as" column is the `defaults` key, for people who script their setup (`defaults read com.chykalophia.Punctual <key>`).

@@ -52,4 +52,4 @@ Other menu-bar options:
 
 ## Hiding the meeting title
 
-Before screen-sharing, use **Hide meeting title** in the dropdown's More actions, or assign the **Hide the meeting title in the menu bar** [shortcut](keyboard-shortcuts-and-automation.md). Notifications also use "Meeting" instead of the title while it's hidden.
+Before screen-sharing, use **Hide meeting title** in the dropdown's More actions, or assign the **Hide the meeting title in the menu bar** [shortcut](keyboard-shortcuts-and-automation.md). Notifications also use "Meeting" instead of the title while it's hidden. It doesn't hide titles anywhere else: the dropdown, the calendar window, the fullscreen reminder, and the "Dismissed *title*" message still show them.

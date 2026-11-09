@@ -240,7 +240,7 @@ docs-screenshots:
 
 # The browser page shown after Google sign-in, rendered from its real template (Node + Playwright).
 docs-web-screenshots:
-	node Scripts/docs/render-web-pages.js
+	NODE_PATH="$$(npm root -g)" node Scripts/docs/render-web-pages.js
 
 # Regenerates the settings tables in docs/user-guide/preferences from SettingsIndex.swift.
 docs-settings:

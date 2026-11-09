@@ -42,7 +42,7 @@ Click a meeting to expand its details. Depending on the meeting you'll see:
 
 ## Reminders
 
-With Apple Reminders allowed ([Calendars](preferences/calendars.md)) and shown ([Dropdown](preferences/dropdown.md)), reminders due today and overdue appear in a Reminders section. Each one can be **Completed**, **Snoozed** (Later today, This evening, Tomorrow), or **Opened in Reminders**. Changes write back to Apple Reminders.
+With Apple Reminders allowed ([Calendars](preferences/calendars.md)) and shown ([Dropdown](preferences/dropdown.md)), reminders due today and overdue appear in a Reminders section. Click a reminder to complete it. Right-click it to **Complete**, **Snooze** (Later today, This evening, Tomorrow), or **Open in Reminders**. Changes write back to Apple Reminders.
 
 ## More actions
 

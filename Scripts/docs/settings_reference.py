@@ -13,6 +13,7 @@ Each pane page carries a block between these markers, which this script rewrites
 Usage: python3 Scripts/docs/settings_reference.py [--check]
 --check exits 1 when a page is out of date (for CI).
 """
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -91,7 +92,9 @@ def render(tab, entries, strings, defaults):
 
 
 def main():
-    check = "--check" in sys.argv
+    parser = argparse.ArgumentParser(description="Regenerate the user guide's settings tables.")
+    parser.add_argument("--check", action="store_true", help="fail if a table is out of date; write nothing")
+    check = parser.parse_args().check
     strings, entries, defaults = load_strings(), load_entries(), load_defaults()
     stale = []
     for tab, name in PANE_FILES.items():

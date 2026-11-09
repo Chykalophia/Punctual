@@ -9,7 +9,7 @@
 
 - **Open Punctual when I log in.**
 - **Time format**: 12-hour (3:30 PM) or 24-hour (15:30).
-- **Location autocomplete** in the event editor. Off by default; when on, what you type in Location is sent to Apple to look up places, and nothing is sent until you've typed three characters. It's the only thing Punctual sends off your Mac.
+- **Location autocomplete** in the event editor. Off by default; when on, what you type in Location is sent to Apple to look up places, and nothing is sent until you've typed three characters. Apart from a directly connected Google Calendar and update checks, it's the only thing Punctual sends off your Mac.
 - **Keyboard shortcuts**: see [Keyboard shortcuts](../keyboard-shortcuts-and-automation.md).
 - **Reset all settings…**
 

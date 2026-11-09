@@ -2,7 +2,7 @@
 
 Punctual can interrupt you in five ways. All of them are set in [Preferences ▸ Alerts](preferences/alerts.md), and the per-meeting **Remind me** menu in the [dropdown](dropdown.md#meeting-rows) can change the start reminder for one meeting.
 
-None of them fire for all-day events, cancelled meetings, meetings you declined, or meetings you dismissed.
+None of them fire for cancelled meetings, meetings you declined, or meetings you dismissed. Start and end notifications never fire for all-day events. The fullscreen reminder, auto-join, and the before-meeting script can still act on an all-day event that is in progress and has a meeting link.
 
 ## 1. Meeting starts (macOS notification)
 
@@ -83,4 +83,4 @@ The switches are in [About & Support](preferences/about.md).
 
 ## If notifications don't appear
 
-Check System Settings ▸ Notifications ▸ Punctual: allow notifications, and choose Banners or Alerts. With notifications off, the in-app messages above fall back to dialogs, but meeting reminders can't be shown at all. **Copy a report for support** in [About & Support](preferences/about.md) includes the notification permission state.
+Check System Settings ▸ Notifications ▸ Punctual: allow notifications, and choose Banners or Alerts. With notifications off, the in-app messages above fall back to dialogs and macOS banners for meetings can't be shown. The fullscreen reminder, auto-join, and before-meeting scripts don't depend on notification permission and keep working. **Copy a report for support** in [About & Support](preferences/about.md) includes the notification permission state.
