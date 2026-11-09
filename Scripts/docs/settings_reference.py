@@ -100,6 +100,8 @@ def main():
         if BEGIN not in text:
             sys.exit(f"{page}: missing {BEGIN}")
         head, rest = text.split(BEGIN, 1)
+        if END not in rest:
+            sys.exit(f"{page}: missing {END}")
         _, tail = rest.split(END, 1)
         note = ("_Generated from `SettingsIndex.swift` by `Scripts/docs/settings_reference.py`. "
                 "Do not edit by hand._\n\n")

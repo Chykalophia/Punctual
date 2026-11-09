@@ -29,7 +29,9 @@ const body = swift.split('static func html')[1];
 const literal = body.match(/return """\n([\s\S]*?)\n\s*"""/);
 if (!literal) throw new Error('Could not find the HTML literal in OAuthCompletionPage.swift');
 // Swift strips the closing delimiter's indentation from every line.
-const indent = body.match(/\n(\s*)"""\n\s*}/)[1].length;
+const closing = body.match(/\n(\s*)"""\n\s*}/);
+if (!closing) throw new Error('Could not find the end of the HTML literal in OAuthCompletionPage.swift');
+const indent = closing[1].length;
 const template = literal[1].split('\n').map((l) => l.slice(indent)).join('\n');
 
 function build(accountEmail) {
