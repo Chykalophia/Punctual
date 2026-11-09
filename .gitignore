@@ -36,3 +36,5 @@ all_keys_ever.txt
 .ignore
 AGENTS.md
 CLAUDE.md
+
+__pycache__/

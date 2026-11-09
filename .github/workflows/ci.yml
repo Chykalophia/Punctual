@@ -61,6 +61,9 @@ jobs:
       - name: Validate localizations
         run: make validate-strings
 
+      - name: Check the user guide's settings tables
+        run: make docs-settings-check
+
       - name: Run SwiftPM logic tests
         run: make test-logic-quiet
 

@@ -63,6 +63,9 @@ Preferences ▸ About ▸ Updates, or from the right-click menu. Every update is
 Chykalophia and verified before it installs. Versions
 before 1.1.0 have no updater, so moving to 1.1.0 is a one-time manual download.
 
+**Using Punctual:** the [user guide](docs/user-guide/README.md) walks through every window,
+notification and setting.
+
 ---
 
 ## Features

@@ -36,7 +36,7 @@ JUNIT_REPORT := $(shell command -v xcbeautify >/dev/null 2>&1 && echo '--report 
 # overlap, or a stale dmg could be notarized or signed for Sparkle.
 .NOTPARALLEL:
 
-.PHONY: build build-quiet build-release test test-quiet test-app test-app-quiet test-logic test-logic-quiet coverage coverage-report coverage-logic-report coverage-app-report coverage-gate test-summary coverage-codecov lint lint-fix open validate-strings lint-strings sign-local run-local archive export-app dmg notarize release-local brand-check appcast release-preflight screenshots
+.PHONY: build build-quiet build-release test test-quiet test-app test-app-quiet test-logic test-logic-quiet coverage coverage-report coverage-logic-report coverage-app-report coverage-gate test-summary coverage-codecov lint lint-fix open validate-strings lint-strings sign-local run-local archive export-app dmg notarize release-local brand-check appcast release-preflight screenshots docs-screenshots docs-web-screenshots docs-settings docs-settings-check
 
 # ---------------------------------------------------------------------------
 # Distribution (Developer ID / direct download)
@@ -226,6 +226,28 @@ screenshots:
 		$(XCODEBUILD) $(XCODEBUILD_FLAGS) -configuration Debug \
 		-only-testing:PunctualTests/MarketingScreenshotTests test $(LOCAL_CODESIGN_FLAGS)
 	@ls -l "$(SCREENSHOT_DIR)"/dropdown-*.png
+
+# User-guide screenshots of every window and Preferences pane, light and dark, rendered
+# from sample data (PreviewFixtures, never your calendar) with the clock pinned to 9:35 AM.
+# Needs a Mac with Xcode. See docs/user-guide/SCREENSHOTS.md.
+DOCS_SCREENSHOT_DIR ?= docs/user-guide/images/app
+docs-screenshots:
+	@mkdir -p "$(DOCS_SCREENSHOT_DIR)"
+	TEST_RUNNER_PUNCTUAL_DOCS_SCREENSHOT_DIR="$(abspath $(DOCS_SCREENSHOT_DIR))" \
+		$(XCODEBUILD) $(XCODEBUILD_FLAGS) -configuration Debug \
+		-only-testing:PunctualTests/DocsScreenshotTests test $(LOCAL_CODESIGN_FLAGS)
+	@ls "$(DOCS_SCREENSHOT_DIR)" | wc -l | xargs echo "PNG files:"
+
+# The browser page shown after Google sign-in, rendered from its real template (Node + Playwright).
+docs-web-screenshots:
+	NODE_PATH="$$(npm root -g)" node Scripts/docs/render-web-pages.js
+
+# Regenerates the settings tables in docs/user-guide/preferences from SettingsIndex.swift.
+docs-settings:
+	python3 Scripts/docs/settings_reference.py
+
+docs-settings-check:
+	python3 Scripts/docs/settings_reference.py --check
 
 test-app-quiet:
 	@mkdir -p $(COVERAGE_DIR) $(BUILD_DIR)/test-results

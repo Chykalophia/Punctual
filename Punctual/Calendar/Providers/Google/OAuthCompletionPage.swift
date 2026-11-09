@@ -134,7 +134,8 @@ private final class OneShotGuard: @unchecked Sendable {
 enum OAuthCompletionPage {
     /// Returns the self-contained page, following the system light or dark appearance.
     ///
-    /// All styles and images are inline: the server closes after one response.
+    /// All styles and images are inline: every request gets this page and the
+    /// connection closes after one response, so the browser can't fetch anything else.
     static func html(accountEmail: String?) -> String {
         let account = accountEmail.flatMap { $0.isEmpty ? nil : $0 }
         let accountLine = account.map {

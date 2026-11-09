@@ -4,6 +4,12 @@ Punctual (formerly MeetingBarNG) is built on [MeetingBar](https://github.com/lei
 by Andrii Leitsius and the MeetingBar contributors. This file lists Punctual's own releases.
 Versions 0.2.0 and 0.3.0 shipped under the name MeetingBarNG.
 
+## Unreleased
+
+* **A user guide**, in [`docs/user-guide`](docs/user-guide/README.md): every window, menu,
+  notification and setting, with screenshots generated from the app (`make docs-screenshots`)
+  and settings tables generated from the settings index (`make docs-settings`).
+
 ## 1.1.2 (2026-11-09)
 
 * **The menu bar shows your next meeting again** when you have both macOS Calendar and

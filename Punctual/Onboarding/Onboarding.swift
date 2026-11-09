@@ -89,7 +89,17 @@ enum OnboardingProgressPolicy {
 }
 
 struct OnboardingView: View {
-    @StateObject private var router = OnboardingRouter()
+    @StateObject private var router: OnboardingRouter
+
+    /// - Parameters:
+    ///   - initialStep: The step shown first. The user guide's screenshots open each step in turn.
+    ///   - provider: The calendar source already picked, for steps after Welcome.
+    init(initialStep: OnboardingStep = .welcome, provider: EventStoreProvider? = nil) {
+        let router = OnboardingRouter()
+        router.selectedProvider = provider
+        router.currentStep = initialStep
+        _router = StateObject(wrappedValue: router)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
