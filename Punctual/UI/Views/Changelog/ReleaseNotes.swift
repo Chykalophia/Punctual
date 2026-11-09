@@ -70,6 +70,17 @@ enum ReleaseNotes {
     /// All shipped releases, newest first.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.1.2",
+            date: "November 2026",
+            highlights: [
+                ChangeEntry(
+                    kind: .fix,
+                    text: "The menu bar shows your next meeting again when your calendars come from "
+                        + "Google while macOS Calendar is also connected."
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.1.1",
             date: "November 2026",
             highlights: [
