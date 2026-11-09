@@ -1,43 +1,25 @@
 //
 //  CalendarSourceSelection.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Which calendar SOURCES are connected, as pure hostless logic.
-//
-//  MeetingBar historically had exactly one active provider: picking Google
-//  Calendar meant giving up macOS Calendar, so anyone with an Exchange or
-//  iCloud calendar alongside a Google one had to choose which half of their day
-//  the app could see. This type replaces that either/or with a set, so macOS
-//  Calendar and the direct Google provider can be connected at the same time.
-//
-//  It deliberately knows nothing about `EventStoreProvider`, `Defaults` or
-//  EventKit — `CalendarSourceKind` mirrors the app-layer enum the same way
-//  `DiagnosticsProvider` already does, and `CalendarSourceSelection+MeetingBar`
-//  bridges the two. That keeps every rule here (the migration, the
-//  last-source-standing invariant, availability filtering, dedup precedence)
-//  testable with no host at all.
+//  Pure model of which calendar sources are connected and the rules that keep the
+//  set coherent. `CalendarSourceSelection+Punctual` bridges it to the app layer.
 //
 
 import Foundation
 
-/// Hostless mirror of the app layer's `EventStoreProvider`. Kept separate so
-/// this file has no AppKit/Defaults dependency; see `DiagnosticsProvider` for
-/// the same pattern.
+/// Host-independent mirror of the app layer's `EventStoreProvider`.
 public enum CalendarSourceKind: String, Codable, Hashable, Sendable, CaseIterable {
     case macOSEventKit = "MacOS Calendar App"
     case googleCalendar = "Google Calendar API"
 
-    /// Display order wherever sources are listed. macOS Calendar leads because
-    /// it needs no setup and is right for anyone without a specific reason.
+    /// Display order wherever sources are listed.
     public static let displayOrder: [CalendarSourceKind] = [.macOSEventKit, .googleCalendar]
 
-    /// Which copy of a duplicated meeting survives — LOWER WINS. Google leads
-    /// here and only here: when the same invite arrives from both sources, the
-    /// direct Google copy carries real attendee response status and Google's own
-    /// conferencing data, where EventKit's mirrored copy routinely flattens
-    /// attendee status and leaves the conference link recoverable only by
-    /// scraping the notes. Display order and precedence are answering different
-    /// questions, so they are allowed to disagree.
+    /// Which copy of a duplicated meeting survives; lower wins.
+    ///
+    /// Google wins (unlike display order) because its copy carries attendee status and
+    /// conferencing data that EventKit's mirror lacks.
     public var deduplicationPriority: Int {
         switch self {
         case .googleCalendar: return 0
@@ -45,10 +27,7 @@ public enum CalendarSourceKind: String, Codable, Hashable, Sendable, CaseIterabl
         }
     }
 
-    /// Localization key naming this source where there is room to be precise —
-    /// the source toggles, onboarding. "Google Calendar API" earns its keep
-    /// there: the whole point of that screen is distinguishing a direct API
-    /// connection from the same account arriving via macOS Calendar.
+    /// Localization key for the full source name, used by the source toggles and onboarding.
     public var titleKey: String {
         switch self {
         case .macOSEventKit: return "onboarding_apple_calendar_title"
@@ -56,13 +35,7 @@ public enum CalendarSourceKind: String, Codable, Hashable, Sendable, CaseIterabl
         }
     }
 
-    /// Short name for labelling something that already has a subject — an
-    /// account heading, principally.
-    ///
-    /// Separate from `titleKey` because the same words do not work in both
-    /// places: "peter@example.com · Google Calendar API" labels an account with
-    /// the name of a protocol, which is developer language in the one spot the
-    /// user is trying to answer "whose calendars are these".
+    /// Localization key for the short source name, used beside an account heading.
     public var shortTitleKey: String {
         switch self {
         case .macOSEventKit: return "calendar_source_short_macos"
@@ -70,10 +43,7 @@ public enum CalendarSourceKind: String, Codable, Hashable, Sendable, CaseIterabl
         }
     }
 
-    /// Only EventKit can create, edit or delete events and reminders; the Google
-    /// provider is read-only in this app. Anything offering a write action has to
-    /// gate on an ENABLED EventKit rather than on "the active provider", which is
-    /// the concept multi-source removes.
+    /// Whether this source can create, edit or delete events and reminders. Google is read-only.
     public var supportsWrites: Bool {
         switch self {
         case .macOSEventKit: return true
@@ -84,10 +54,8 @@ public enum CalendarSourceKind: String, Codable, Hashable, Sendable, CaseIterabl
 
 /// The set of connected calendar sources, plus the rules that keep it coherent.
 ///
-/// Always non-empty: every operation that would empty it is refused instead.
-/// A zero-source install fetches nothing and renders an empty dropdown that
-/// looks broken rather than configured, and there is already a per-calendar
-/// tick-box for "show me nothing from here".
+/// Always non-empty: an operation that would empty it is refused, and an empty
+/// initializer input falls back to macOS Calendar.
 public struct CalendarSourceSelection: Equatable, Sendable {
     /// Never empty, and always in `CalendarSourceKind.displayOrder`.
     public private(set) var enabled: [CalendarSourceKind]
@@ -101,23 +69,19 @@ public struct CalendarSourceSelection: Equatable, Sendable {
         enabled.contains(kind)
     }
 
-    /// The source that handles writes, or nil when none is connected. Event
-    /// creation/editing and reminders hang off this.
+    /// The connected source that handles writes, or nil when none can.
     public var writeSource: CalendarSourceKind? {
         enabled.first(where: \.supportsWrites)
     }
 
-    /// Enabling an already-enabled source is a no-op, so callers can drive this
-    /// straight from a toggle without checking first.
+    /// Returns the selection with `kind` added; a no-op when already enabled.
     public func enabling(_ kind: CalendarSourceKind) -> CalendarSourceSelection {
         guard !isEnabled(kind) else { return self }
         return CalendarSourceSelection(enabled: enabled + [kind])
     }
 
-    /// Disabling the LAST enabled source is refused and returns `self`
-    /// unchanged — see the type's note on why zero sources is not a state worth
-    /// modelling. Callers should use `canDisable(_:)` to grey out the control
-    /// rather than letting the click silently do nothing.
+    /// Returns the selection with `kind` removed; returns `self` unchanged for the last source.
+    /// Use `canDisable(_:)` to disable the control instead.
     public func disabling(_ kind: CalendarSourceKind) -> CalendarSourceSelection {
         guard canDisable(kind) else { return self }
         return CalendarSourceSelection(enabled: enabled.filter { $0 != kind })
@@ -131,28 +95,26 @@ public struct CalendarSourceSelection: Equatable, Sendable {
         shouldEnable ? enabling(kind) : disabling(kind)
     }
 
-    /// Drops sources this build cannot actually use — Google without OAuth
-    /// credentials compiled in, principally. Applied on read rather than on
-    /// write so that a user who supplies credentials later gets their previous
-    /// selection back instead of a silently erased one.
+    /// Drops sources this build cannot use, falling back to macOS Calendar if none remain.
     ///
-    /// If filtering would empty the set, macOS Calendar is restored: it is
-    /// always available, and an install that can reach no source at all is worse
-    /// than one quietly returned to the default.
+    /// Apply on read, not write, so the stored selection survives until the source becomes available.
     public func availableOnly(_ isAvailable: (CalendarSourceKind) -> Bool) -> CalendarSourceSelection {
         let surviving = enabled.filter(isAvailable)
         return CalendarSourceSelection(enabled: surviving.isEmpty ? [.macOSEventKit] : surviving)
     }
 
-    /// One-time migration off the single `eventStoreProvider` key. The provider
-    /// an existing install was using becomes its one enabled source, so updating
-    /// changes nothing until the user opts into a second one.
+    /// Calendar IDs ticked across the connected sources, in display order.
+    /// Use this rather than the flat `selectedCalendarIDs` key, which mirrors only the primary source.
+    public func selectedCalendarIDs(byProviderKey: [String: [String]]) -> [String] {
+        enabled.flatMap { byProviderKey[$0.rawValue] ?? [] }
+    }
+
+    /// Selection for an install migrating from the single `eventStoreProvider` key.
     public static func migrating(fromSingleProvider provider: CalendarSourceKind) -> CalendarSourceSelection {
         CalendarSourceSelection(enabled: [provider])
     }
 
-    /// Deduplicated and sorted into display order, so persisted values can never
-    /// drift into a different order than the UI renders.
+    /// Deduplicates and sorts into display order.
     private static func normalize(_ kinds: [CalendarSourceKind]) -> [CalendarSourceKind] {
         CalendarSourceKind.displayOrder.filter(kinds.contains)
     }

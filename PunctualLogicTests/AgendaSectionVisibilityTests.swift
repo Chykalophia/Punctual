@@ -1,9 +1,8 @@
 //
 //  AgendaSectionVisibilityTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for "hide empty days" (MeetingBarNG): which day sections the
-//  agenda draws, and the one it must never hide.
+//  Tests for which agenda day sections are drawn when empty days are hidden.
 //
 
 import XCTest
@@ -28,7 +27,6 @@ final class AgendaSectionVisibilityTests: XCTestCase {
     // MARK: - The setting off: nothing changes
 
     func testEmptyLookAheadDayStillShowsWhenTheSettingIsOff() {
-        // The shipping behaviour. An upgrade must not silently drop a section.
         XCTAssertTrue(shows(count: 0, hidesEmpty: false))
     }
 
@@ -50,8 +48,6 @@ final class AgendaSectionVisibilityTests: XCTestCase {
     // MARK: - Today is never hidden
 
     func testTodayShowsEvenWhenEmptyAndHidingIsOn() {
-        // An agenda with no headings at all reads as a broken panel, not a free
-        // day — and "nothing today" is the most useful thing it can say.
         XCTAssertTrue(shows(count: 0, hidesEmpty: true, anchor: true))
     }
 
@@ -62,16 +58,12 @@ final class AgendaSectionVisibilityTests: XCTestCase {
     // MARK: - The period wins over everything
 
     func testDayOutsideTheLookAheadPeriodIsNeverShown() {
-        // A day the user did not ask for is not "empty" — it is out of scope, and
-        // that is decided before the empty question.
         XCTAssertFalse(shows(count: 5, included: false, hidesEmpty: false))
         XCTAssertFalse(shows(count: 5, included: false, hidesEmpty: true))
         XCTAssertFalse(shows(count: 0, included: false, hidesEmpty: true))
     }
 
     func testAnchorDayStillObeysThePeriod() {
-        // Belt and braces: "today is never hidden" must not outrank a period that
-        // excludes it, or a caller could draw a section it never asked for.
         XCTAssertFalse(shows(count: 0, included: false, hidesEmpty: true, anchor: true))
     }
 }

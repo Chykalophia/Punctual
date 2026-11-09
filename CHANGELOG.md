@@ -4,6 +4,13 @@ Punctual (formerly MeetingBarNG) is built on [MeetingBar](https://github.com/lei
 by Andrii Leitsius and the MeetingBar contributors. This file lists Punctual's own releases.
 Versions 0.2.0 and 0.3.0 shipped under the name MeetingBarNG.
 
+## 1.1.2 (2026-11-09)
+
+* **The menu bar shows your next meeting again** when you have both macOS Calendar and
+  Google connected but picked calendars only from Google. Punctual decided no calendar was
+  selected and showed just its icon, even though the panel listed your day. It now counts
+  the calendars you picked on every connected source.
+
 ## 1.1.1 (2026-11-08)
 
 * **macOS 27: clicks on the menu bar icon should register again.** macOS 27 changed how a

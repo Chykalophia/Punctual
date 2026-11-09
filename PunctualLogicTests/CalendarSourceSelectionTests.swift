@@ -1,8 +1,8 @@
 //
 //  CalendarSourceSelectionTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for multi-source calendar connection (MeetingBarNG).
+//  Tests for multi-source calendar connection.
 //
 
 import XCTest
@@ -26,6 +26,36 @@ final class CalendarSourceSelectionTests: XCTestCase {
         let selection = CalendarSourceSelection(enabled: [.macOSEventKit, .googleCalendar])
         XCTAssertTrue(selection.canDisable(.macOSEventKit))
         XCTAssertEqual(selection.disabling(.macOSEventKit).enabled, [.googleCalendar])
+    }
+
+    // MARK: - Selected calendars across sources
+
+    func test_selectedCalendarIDs_unionsEveryConnectedSource_inDisplayOrder() {
+        let selection = CalendarSourceSelection(enabled: [.googleCalendar, .macOSEventKit])
+        let ids = selection.selectedCalendarIDs(byProviderKey: [
+            CalendarSourceKind.googleCalendar.rawValue: ["g1"],
+            CalendarSourceKind.macOSEventKit.rawValue: ["m1", "m2"]
+        ])
+        XCTAssertEqual(ids, ["m1", "m2", "g1"])
+    }
+
+    func test_selectedCalendarIDs_primaryEmpty_otherSourceTicked_isNotEmpty() {
+        let selection = CalendarSourceSelection(enabled: [.macOSEventKit, .googleCalendar])
+        let ids = selection.selectedCalendarIDs(byProviderKey: [
+            CalendarSourceKind.macOSEventKit.rawValue: [],
+            CalendarSourceKind.googleCalendar.rawValue: ["g1"]
+        ])
+        XCTAssertEqual(ids, ["g1"])
+    }
+
+    func test_selectedCalendarIDs_ignoresDisconnectedSourcesAndMissingKeys() {
+        let selection = CalendarSourceSelection(enabled: [.macOSEventKit])
+        XCTAssertEqual(
+            selection.selectedCalendarIDs(byProviderKey: [
+                CalendarSourceKind.googleCalendar.rawValue: ["g1"]
+            ]),
+            []
+        )
     }
 
     // MARK: - Normalization
@@ -70,16 +100,14 @@ final class CalendarSourceSelectionTests: XCTestCase {
     }
 
     func test_filteringEverythingAwayRestoresMacOSCalendar() {
-        // A build with no Google credentials, on an install that had selected
-        // Google only. Reaching no source at all is worse than the default.
+        // A build with no Google credentials, on an install that selected Google only.
         let selection = CalendarSourceSelection(enabled: [.googleCalendar])
             .availableOnly { _ in false }
         XCTAssertEqual(selection.enabled, [.macOSEventKit])
     }
 
     func test_filteringIsNotPersistedBackIntoTheSelection() {
-        // The stored selection keeps Google, so supplying credentials later
-        // restores the user's choice instead of silently having erased it.
+        // The stored selection keeps Google so credentials added later restore it.
         let stored = CalendarSourceSelection(enabled: [.macOSEventKit, .googleCalendar])
         _ = stored.availableOnly { $0 != .googleCalendar }
         XCTAssertTrue(stored.isEnabled(.googleCalendar))
@@ -106,8 +134,7 @@ final class CalendarSourceSelectionTests: XCTestCase {
     }
 
     func test_googleOnlyHasNoWriteSource() {
-        // The Google provider is read-only here, so a Google-only install must
-        // hide event creation/editing rather than offer an action that fails.
+        // The Google provider is read-only, so a Google-only install cannot write.
         let selection = CalendarSourceSelection(enabled: [.googleCalendar])
         XCTAssertNil(selection.writeSource)
     }
@@ -122,9 +149,7 @@ final class CalendarSourceSelectionTests: XCTestCase {
     }
 
     func test_displayOrderAndDedupPrecedenceAreAllowedToDisagree() {
-        // Guards the intent: macOS Calendar is listed first but loses the
-        // duplicate tie-break. Someone "fixing" one to match the other would
-        // silently change which copy of every shared meeting the user sees.
+        // Listed first, yet loses the duplicate tie-break; the two orders differ on purpose.
         XCTAssertEqual(CalendarSourceKind.displayOrder.first, .macOSEventKit)
         XCTAssertEqual(
             CalendarSourceKind.allCases.min(by: { $0.deduplicationPriority < $1.deduplicationPriority }),

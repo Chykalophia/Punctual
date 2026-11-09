@@ -1,19 +1,12 @@
 //
 //  CameraPreviewController.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Host AVFoundation service backing the pre-call "mirror check" preview: a live
-//  self-view camera feed plus a normalized microphone input-level meter, so the
-//  user can check their appearance and audio before joining a meeting. This is a
-//  raw preview ONLY — no recording, no saving, no transcription/AI of any kind.
+//  AVFoundation service for the pre-call preview: a live camera feed and a microphone
+//  level meter. Preview only; nothing is recorded. Camera and microphone access are
+//  requested only when the preview opens, never at launch.
 //
-//  Opt-in like RemindersStore: camera and microphone access are requested ONLY
-//  when the preview is opened (`startPreview()`), never at launch, and each is
-//  requested independently so the preview works camera-only or mic-only. The
-//  session is torn down and the devices released on `stop()` / `deinit` so the
-//  camera indicator light turns off when the window closes.
-//
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -21,9 +14,7 @@ import AVFoundation
 import CoreMedia
 import Foundation
 
-/// Per-device authorization state, surfaced to the view so it can show a live
-/// preview, a "request in progress" placeholder, or a denied message + a
-/// System Settings affordance.
+/// Per-device authorization state shown by the preview view.
 enum CameraPreviewAccess: Equatable, Sendable {
     case notDetermined
     case authorized
@@ -41,20 +32,16 @@ enum CameraPreviewAccess: Equatable, Sendable {
     }
 }
 
-/// Flat, Sendable descriptor for a capture device, so device lists can be built
-/// on the session queue and published to the main actor without passing a
-/// non-Sendable `AVCaptureDevice` across the boundary.
+/// Sendable descriptor for a capture device, so device lists can cross from the
+/// session queue to the main actor.
 struct CameraDeviceOption: Identifiable, Hashable, Sendable {
     let id: String
     let name: String
 }
 
-/// Owns the `AVCaptureSession` for the preview window. `@MainActor` for its
-/// published UI state; all session mutation happens on a private serial queue
-/// (off the main thread so `startRunning()` never hangs the UI), hopping back to
-/// the main actor only to publish state. Capture members are `nonisolated(unsafe)`
-/// because they are only ever touched from that serial queue (and, for `session`,
-/// the final `deinit` release).
+/// Owns the preview window's `AVCaptureSession`. UI state is main-actor; session
+/// mutation runs on a private serial queue so `startRunning()` never blocks the UI.
+/// Capture members are `nonisolated(unsafe)` because only that queue touches them.
 @MainActor
 final class CameraPreviewController: NSObject, ObservableObject,
     AVCaptureAudioDataOutputSampleBufferDelegate {
@@ -64,8 +51,7 @@ final class CameraPreviewController: NSObject, ObservableObject,
 
     @Published private(set) var cameraAccess: CameraPreviewAccess = .notDetermined
     @Published private(set) var micAccess: CameraPreviewAccess = .notDetermined
-    /// Normalized 0…1 microphone level for the meter. 0 while metering is
-    /// unavailable (mic denied, or no audio flowing yet).
+    /// Normalized 0…1 microphone level; 0 while metering is unavailable.
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var videoDevices: [CameraDeviceOption] = []
     @Published private(set) var audioDevices: [CameraDeviceOption] = []
@@ -89,9 +75,7 @@ final class CameraPreviewController: NSObject, ObservableObject,
 
     // MARK: - Lifecycle
 
-    /// Entry point when the preview opens: request access (opt-in prompt), then
-    /// enumerate devices, build inputs, and start the session on the session
-    /// queue. Safe to call once per window presentation.
+    /// Requests access, then enumerates devices and starts the session on the session queue.
     func startPreview() async {
         let access = await requestAccess()
         let videoID = selectedVideoDeviceID
@@ -106,8 +90,7 @@ final class CameraPreviewController: NSObject, ObservableObject,
         }
     }
 
-    /// Stops the session and releases the camera + microphone. Called from the
-    /// view's `onDisappear` when the window closes so the camera light turns off.
+    /// Stops the session and releases the camera and microphone, turning off the camera light.
     func stop() {
         micLevel = 0
         isRunning = false
@@ -130,8 +113,7 @@ final class CameraPreviewController: NSObject, ObservableObject,
         }
     }
 
-    /// Safety net: guarantee the hardware is released even if `stop()` was never
-    /// reached (e.g. the hosting view was torn down without `onDisappear`).
+    /// Releases the hardware if `stop()` was never reached.
     deinit {
         session.stopRunning()
     }
@@ -167,9 +149,8 @@ final class CameraPreviewController: NSObject, ObservableObject,
 
     // MARK: - Access (opt-in)
 
-    /// Requests camera and microphone access independently and republishes the
-    /// resulting authorization states. This is the ONLY place the system
-    /// permission prompts are triggered — never at launch.
+    /// Requests camera and microphone access independently and publishes the results.
+    /// The only place these permission prompts are triggered.
     @discardableResult
     func requestAccess() async -> (camera: Bool, mic: Bool) {
         let camera = await Self.requestAccess(for: .video)
@@ -241,9 +222,8 @@ final class CameraPreviewController: NSObject, ObservableObject,
         }
     }
 
-    /// Rebuilds the managed inputs/outputs inside a single begin/commit so the
-    /// session never observes a half-configured graph. Removing the video input
-    /// releases the camera; a fresh input is added for the chosen device.
+    /// Rebuilds inputs and outputs inside one begin/commit, so the session never sees a
+    /// half-configured graph.
     nonisolated private func configureSession(
         video: AVCaptureDevice?,
         audio: AVCaptureDevice?
@@ -288,9 +268,8 @@ final class CameraPreviewController: NSObject, ObservableObject,
             }
         }
 
-        // Audio level metering: attach the data output only when a mic input is
-        // present. Its sample-buffer delivery is what keeps the channel's
-        // averagePowerLevel updated; the buffers themselves are never stored.
+        // The audio output is attached only with a mic input; its delivery keeps
+        // `averagePowerLevel` updated. Buffers are never stored.
         if audioInput != nil {
             if !session.outputs.contains(audioOutput), session.canAddOutput(audioOutput) {
                 session.addOutput(audioOutput)
@@ -314,8 +293,7 @@ final class CameraPreviewController: NSObject, ObservableObject,
             position: .unspecified
         )
         var devices = discovery.devices
-        // Macs without a built-in camera surface their attached webcam as the
-        // default device; include it so external-only setups still get a preview.
+        // Include the default device so external-only webcam setups get a preview.
         if let fallback = AVCaptureDevice.default(for: .video),
             !devices.contains(where: { $0.uniqueID == fallback.uniqueID }) {
             devices.insert(fallback, at: 0)
@@ -346,9 +324,7 @@ final class CameraPreviewController: NSObject, ObservableObject,
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        // Read the channel's average power (dBFS) directly off the connection and
-        // normalize to 0…1 with the pure MicLevel helper. The buffer is not read
-        // or retained.
+        // Average power (dBFS) is read off the connection; the buffer is not read or retained.
         let decibels = connection.audioChannels.first?.averagePowerLevel ?? -160
         let level = MicLevel.normalized(decibels: decibels)
         Task { @MainActor in

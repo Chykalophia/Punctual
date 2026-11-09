@@ -1,6 +1,6 @@
 //
 //  URLHandlerTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import XCTest

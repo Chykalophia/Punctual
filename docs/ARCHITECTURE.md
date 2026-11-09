@@ -416,6 +416,60 @@ The policy itself takes the snapshot and never imports `Defaults`. This is what 
 
 ---
 
+## Design decisions
+
+The reasoning behind choices that would otherwise look arbitrary. Code comments only flag the constraint; the explanation lives here.
+
+### Menu bar
+
+- **The app has its own redraw clock.** `StatusBarTickPolicy` arms a one-shot timer for the next minute boundary or the next event transition (start, end, Join chip due, countdown due). Without it, redraws only happened on a settings change or the 180-second calendar poll, so the menu bar could lag a meeting by minutes. The dropdown's `panelClock` follows the same policy so both surfaces agree.
+- **The Join chip is not a control.** A status item is one `NSStatusBarButton`. The chip is a capsule drawn into the title plus a hit rect tested in the click handler, and both come from one geometry function so the target cannot drift from what is drawn.
+- **Meeting progress is an overlay**, not a redraw of the item, because redrawing would mean reimplementing AppKit's title rendering. The bar style is the one exception: it takes the image slot.
+- **Emphasis is separate from `titleStyle`.** Bolding the imminent meeting applies only to normal titles, so declined and pending meetings stay dimmed.
+- **"Is any calendar selected"** is the union across connected sources (`CalendarSourceSelection.selectedCalendarIDs(byProviderKey:)`). The flat `selectedCalendarIDs` key mirrors only the primary source and must not be used for this.
+
+### Dropdown panel
+
+- **One grid.** `DropdownMetrics` defines a single column grid for every row type. Density changes vertical rhythm and type size only, never panel width, in three tuned steps rather than a slider.
+- **The Join pill is an overlay**, so rows reserve only the 16pt glyph, and the end time stacks under the start time instead of widening the time column.
+- **Cards for widgets, flat lists for lists.** The timeline, month grid and meeting card get a plain-fill card; lists stay flat. Cards never use `glassEffect`, because stacked translucency adds haze.
+- **Highlights are neutral fills**, not accent bars, and the panel rim uses `separatorColor`.
+- **The backdrop is the `.menu` material with a scrim** (0.32 opacity, opaque under Reduce Transparency). Behind-window vibrancy takes its lightness from the desktop; the scrim stops a pale wallpaper washing out text whose colours follow the appearance.
+- **Today's section is never hidden**, so the panel never shows an agenda without headings.
+- **Theming is limited to appearance and accent**, so a theme cannot reopen the contrast decisions in `DROPDOWN-MODERNIZATION.md` §1.
+
+### Calendars and sources
+
+- **Several sources at once.** macOS Calendar and Google can both be connected. `eventStoreProvider` now names only the write-capable source; calendar selection is stored per provider; one source failing is reported without blanking the others. Onboarding uses `selectSoleProvider` because a fresh install already has macOS Calendar connected.
+- **Why a direct Google provider exists.** The EventKit copy of a Google account drops conference entry points, per-attendee response status and the full description.
+- **Deduplication.** Only EventKit fills in `externalIdentifier`, so cross-source matching falls back to a composite key (title, start minute, all-day) that is deliberately loose: case, accents, whitespace, seconds and end time are ignored, on the rule that rows that look identical are duplicates. When the same meeting comes from both sources, the Google copy wins because it carries real attendee status and conferencing data.
+
+### Google sign-in
+
+- **Shipped client and bring-your-own client.** PKCE makes a shipped client ID safe to embed; extracting it costs quota and consent-screen identity, not anyone's calendar access. A user's own client moves calls onto their quota and consent screen, and is the only way to use Google in builds that ship no client.
+- **The completion page is served locally.** AppAuth's success page is a fixed string, so the app serves its own page from the loopback listener (works offline, no remote server). AppAuth still runs the whole OAuth exchange.
+
+### Notifications
+
+- **Only the start reminder can be overridden per event.** End reminder, fullscreen alert, auto-join and the start script stay global: one meeting auto-joining unexpectedly is worse than a missing reminder.
+
+### Preferences
+
+- **Where a setting goes.** Which meetings appear: Filters. How one surface draws them: that surface's pane. Actions: Joining or Alerts. App-wide: General.
+- **Reset never touches user data or bookkeeping keys** (calendar selection, migration flags). Indexing `selectedCalendarIDs` once made "Reset all" clear the calendar selection.
+- **The language picker was removed** (16 languages offered against one maintained catalog). `preferredLanguage` is still applied at launch; restoring the picker is blocked on `AppLanguage.ukrainian` mapping to `ua` while the bundle is `uk.lproj`.
+- **The window frame is saved on every move and resize**, with observers registered before the restore, because `setFrameAutosaveName` never persisted it.
+
+### Updates
+
+- **Sparkle's trust model.** Sparkle accepts an update if the EdDSA signature or the Developer ID team matches. Every release is signed both ways, and the appcast feed itself must be EdDSA-signed.
+
+### DEBUG tooling
+
+- `DebugHarness` and `DropdownInspectorWindow` sit entirely inside `#if DEBUG`. Their deep links are matched ahead of `URLHandler`, and no DEBUG-only type reaches `AppRoute` or `AppEnvironment`.
+
+---
+
 ## High-risk files
 
 Touching these requires extra care, tests around behavior, and a focused PR:

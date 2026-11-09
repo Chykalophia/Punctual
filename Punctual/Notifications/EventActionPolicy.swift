@@ -8,19 +8,14 @@ import Foundation
 /// Configures the time window and link requirement for a per-event action
 /// (fullscreen notification, auto-join, on-start script).
 struct EventActionConfig {
-    /// Upper bound of the firing window in seconds before `event.startDate`.
-    /// Read from the user-configured Defaults key for the action.
+    /// Upper bound of the firing window, in seconds before `event.startDate`.
     let actionTime: TimeInterval
 
-    /// `true` if the action may still fire in the first 15 seconds after the
-    /// event has started (fullscreen, auto-join). `false` if the action only
-    /// runs strictly before the event starts (on-start script).
+    /// Whether the action may still fire in the first 15 seconds after the start (fullscreen, auto-join).
     let allowsRecentlyStarted: Bool
 
-    /// `true` if the side-effect should be skipped when the event has no
-    /// meeting link, while still updating the processed-events list to
-    /// dedup retries. Used by auto-join; fullscreen eligibility is handled by
-    /// `FullscreenNotificationEligibilityPolicy`.
+    /// Whether to skip the side effect, while still recording the event as processed, when it has
+    /// no meeting link. Used by auto-join; fullscreen uses `FullscreenNotificationEligibilityPolicy`.
     let requiresMeetingLink: Bool
 }
 

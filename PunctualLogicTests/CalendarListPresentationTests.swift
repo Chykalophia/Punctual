@@ -1,12 +1,8 @@
 //
 //  CalendarListPresentationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  The Calendars pane's list is the one place a user answers "which calendars do
-//  my meetings come from?", and the shipping app answered it with a flat list
-//  that could show "Family" twice with nothing to tell the two apart. These tests
-//  pin the fix: group by account, and show the account email under a name that
-//  appears more than once.
+//  Tests for the Calendars pane list: grouping by account and duplicate names.
 //
 
 import XCTest
@@ -52,7 +48,6 @@ final class CalendarListPresentationTests: XCTestCase {
     // MARK: - Duplicate names
 
     func testDuplicateNamesGainTheAccountEmail() {
-        // The live bug: two calendars both called "Family", one in each account.
         let groups = CalendarListPresentation.groups(for: [
             item("1", "Family", source: "iCloud", email: "me@icloud.com"),
             item("2", "Family", source: "Google", email: "me@gmail.com"),
@@ -78,7 +73,6 @@ final class CalendarListPresentationTests: XCTestCase {
     }
 
     func testDuplicateNameWithNoEmailHasNoSubtitle() {
-        // Nothing is invented: an account with no address gets no fake one.
         let groups = CalendarListPresentation.groups(for: [
             item("1", "Family", source: "iCloud"),
             item("2", "Family", source: "Google")
@@ -126,8 +120,6 @@ final class CalendarListPresentationTests: XCTestCase {
     }
 
     func testSearchKeepsTheDisambiguatorItWouldOtherwiseHide() {
-        // Narrowing to one "Family" must not drop the email: the user is
-        // searching precisely because the two names collide.
         let groups = CalendarListPresentation.groups(
             for: [
                 item("1", "Family", source: "iCloud", email: "me@icloud.com"),
@@ -158,12 +150,7 @@ final class CalendarListPresentationTests: XCTestCase {
     }
 
     // MARK: - Telling the two sources apart
-    //
-    // THE REGRESSION THIS BLOCK EXISTS FOR. With both sources connected the
-    // settings list showed the usual calendars with no way to tell which came
-    // from the Mac and which from the direct Google connection — and macOS
-    // reports a Google account as a source literally NAMED "Google", so the
-    // account name alone could not answer it.
+    // macOS names a Google account's source "Google", so the account name alone is ambiguous.
 
     func test_sameAccountNameFromBothSourcesStaysTwoGroups() {
         let groups = CalendarListPresentation.groups(for: [
@@ -192,19 +179,13 @@ final class CalendarListPresentationTests: XCTestCase {
                 provider: .googleCalendar)
         ])
 
-        // The SHORT names: an account heading already has a subject, so the
-        // precise "Google Calendar API" from the source toggles would be
-        // labelling an account with the name of a protocol.
+        // Short source names, not the "Google Calendar API" label used by the source toggles.
         XCTAssertEqual(
             groups.map(\.providerTitleKey),
             ["calendar_source_short_macos", "calendar_source_short_google"]
         )
     }
 
-    /// Each source's accounts stay contiguous, in the canonical source order —
-    /// "everything my Mac syncs", then "everything Google sends". Interleaving
-    /// them alphabetically would put the answer to "where is this from" in a
-    /// different place for every row.
     func test_accountsAreGroupedBySourceInDisplayOrder() {
         let groups = CalendarListPresentation.groups(for: [
             CalendarPickerItem(
@@ -225,8 +206,6 @@ final class CalendarListPresentationTests: XCTestCase {
         XCTAssertEqual(groups.map(\.account), ["mmm-Exchange", "zzz-iCloud", "aaa@example.com"])
     }
 
-    /// A calendar named the same on both sources still gets its address shown,
-    /// because ambiguity is counted across the whole list.
     func test_duplicateNameAcrossSourcesKeepsTheDisambiguator() {
         let groups = CalendarListPresentation.groups(for: [
             CalendarPickerItem(

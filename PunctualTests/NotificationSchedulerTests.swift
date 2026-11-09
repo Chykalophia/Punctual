@@ -1,6 +1,6 @@
 //
 //  NotificationSchedulerTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import Defaults

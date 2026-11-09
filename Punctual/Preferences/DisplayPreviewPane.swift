@@ -1,28 +1,21 @@
 //
 //  DisplayPreviewPane.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The sticky "live preview" pane on the Dropdown preferences tab (Phase 3 of
-//  the Preferences overhaul). Mounts the REAL `DropdownPanelView` against a
-//  fixture `StatusBarMenuState` — not a hand-copied mock — so the preview and
-//  the live dropdown can never drift apart.
+//  The live preview column of the Dropdown pane: a menu bar strip rendered by
+//  `StatusBarPresenter.composedPresentation`, and the real `DropdownPanelView`
+//  mounted against fixture state.
 //
-//  The menu-bar strip still uses `StatusBarPresenter.composedPresentation`,
-//  the same path the real status item uses.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
 import Defaults
 import SwiftUI
 
-/// A live preview of the menu bar + dropdown that re-renders as the Display
-/// settings change. The dropdown preview IS the real `DropdownPanelView`
-/// (Phase 3), so any style change costs one implementation and the preview
-/// cannot drift.
+/// Live preview of the menu bar item and dropdown that re-renders as settings change.
 struct DisplayPreviewPane: View {
-    // Menu-bar composition + token styles — read so the strip re-renders.
+    // Menu bar composition and block styles.
     @Default(.menuBarTokens) private var menuBarTokens
     @Default(.menuBarCountdownStyle) private var menuBarCountdownStyle
     @Default(.menuBarDateStyle) private var menuBarDateStyle
@@ -31,21 +24,14 @@ struct DisplayPreviewPane: View {
     @Default(.menuBarWorldClockLabel) private var menuBarWorldClockLabel
     @Default(.timeFormat) private var timeFormat
 
-    // Classic status-bar keys — so the strip stays live even when the composer
-    // is off (it then mirrors these via `derivedComposition`).
+    // Legacy status bar keys, used by `derivedComposition` when no blocks are stored.
     @Default(.eventTitleIconFormat) private var eventTitleIconFormat
     @Default(.eventTitleFormat) private var eventTitleFormat
     @Default(.eventTimeFormat) private var eventTimeFormat
     @Default(.statusbarEventTitleLength) private var statusbarEventTitleLength
 
-    // Dropdown settings that affect what the preview shows — read here so the
-    // body re-evaluates when they change, which re-runs PreviewFixtures.makeState.
-    //
-    // EVERY setting the panel reads has to appear in this list. A missing one
-    // does not fail loudly; it just leaves the preview stale until some OTHER
-    // observed value changes and drags a rebuild along with it. That is exactly
-    // how adding Month Calendar appeared to do nothing until an unrelated module
-    // was toggled off and on again.
+    // Observed only to trigger re-render. Every setting the panel reads must be listed here,
+    // or the preview silently goes stale until an unrelated value changes.
     @Default(.hideFinishedEventsInMenu) private var hideFinishedEventsInMenu
     @Default(.showRemindersInMenu) private var showRemindersInMenu
     @Default(.showGreetingInMenu) private var showGreetingInMenu
@@ -108,8 +94,7 @@ struct DisplayPreviewPane: View {
 
     // MARK: - Menu-bar strip
 
-    /// A thin rounded strip evoking the menu bar, with the composed presentation
-    /// pinned to the trailing edge (where menu-bar items live).
+    /// A rounded strip standing in for the menu bar, with the item pinned to the trailing edge.
     private var menuBarStrip: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 12)
@@ -161,9 +146,7 @@ struct DisplayPreviewPane: View {
         }
     }
 
-    /// The composed presentation for a representative sample event. Forces the
-    /// `nextEvent` mode (calendars selected, threshold off) so the strip always
-    /// shows a meaningful preview regardless of the user's actual calendar state.
+    /// The menu bar presentation for a sample event, independent of the user's calendar state.
     private var menuBarPresentation: StatusBarPresentation {
         let now = Date()
         var calendar = Calendar.current
@@ -184,8 +167,8 @@ struct DisplayPreviewPane: View {
         )
     }
 
-    /// The user's saved token composition (parsed + de-duped), mirroring
-    /// `MenuBarComposition.currentIfEnabled` but reading through the observed key.
+    /// The stored blocks, parsed and de-duplicated; mirrors `MenuBarComposition.currentIfEnabled`
+    /// but reads the observed key.
     private var previewComposition: MenuBarComposition {
         var seen = Set<MenuBarTokenKind>()
         let tokens = menuBarTokens
@@ -194,9 +177,8 @@ struct DisplayPreviewPane: View {
         return tokens.isEmpty ? derivedComposition : MenuBarComposition(tokens: tokens)
     }
 
-    /// Composition derived from the classic status-bar toggles, used when the
-    /// composer is off — mirrors `MenuBarComposition.derivedFromLegacy` but
-    /// reads the observed keys so the strip re-renders when toggles change.
+    /// Composition derived from the legacy keys, used when no blocks are stored; mirrors
+    /// `MenuBarComposition.derivedFromLegacy` but reads the observed keys.
     private var derivedComposition: MenuBarComposition {
         var tokens: [MenuBarTokenKind] = []
         if eventTitleIconFormat != .none { tokens.append(.icon) }
@@ -237,10 +219,7 @@ struct DisplayPreviewPane: View {
 
     // MARK: - Dropdown preview (the REAL panel)
 
-    /// Mounts the actual `DropdownPanelView` against a fixture state. All
-    /// no-op handlers — the preview is display-only, not interactive. The
-    /// `@Default` wrappers above already observe the module toggles, so
-    /// SwiftUI re-evaluates the body when any of them change.
+    /// The real `DropdownPanelView` on fixture state, with no-op handlers and hit testing off.
     private var dropdownPreview: some View {
         let state = PreviewFixtures.makeState(
             includeFinished: !hideFinishedEventsInMenu,

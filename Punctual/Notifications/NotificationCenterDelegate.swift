@@ -5,11 +5,7 @@
 
 import UserNotifications
 
-/// Handles `UNUserNotificationCenter` delegate callbacks and translates them
-/// into app-level response actions.
-///
-/// This class owns the UN delegate role so `AppDelegate` only needs to wire it
-/// up and does not implement `UNUserNotificationCenterDelegate` itself.
+/// Owns the `UNUserNotificationCenterDelegate` role and translates callbacks into app response actions.
 @MainActor
 final class NotificationCenterDelegate: NSObject, @preconcurrency UNUserNotificationCenterDelegate {
     private let actionHandler: (NotificationResponseAction) -> Void

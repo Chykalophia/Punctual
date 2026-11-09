@@ -28,7 +28,7 @@ final class TimelineLogicTests: XCTestCase {
     }
 
     func testRowPacking_withOverlap_spreadsAcrossRows() {
-        // 0‒50 overlaps 30‒60  → should allocate two rows
+        // 0-50 overlaps 30-60, so two rows.
         let calc = DayTimelineLayoutCalculator()
         let rows = calc.rows(for: [seg(0, 50), seg(30, 60), seg(70, 90)])
         XCTAssertEqual(rows.count, 2)          // two visual lanes
@@ -82,8 +82,7 @@ final class TimelineLogicTests: XCTestCase {
 
     // MARK: - Hour labels -----------------------------------------------------
 
-    /// The panel width where the bug showed: nine hours at ~37pt apart with
-    /// "12 PM" ~34pt wide, so labels overlapped ("4 PM5 PM").
+    /// Narrow enough that nine hours of 12-hour labels would overlap without thinning.
     private static let panelTrackWidth: CGFloat = 336
 
     func testHourLabels_neverOverlapAtPanelWidth() {
@@ -109,7 +108,6 @@ final class TimelineLogicTests: XCTestCase {
         }
     }
 
-    /// Thinning must not empty the axis: a reader needs at least the ends.
     func testHourLabels_keepSomeLabelsAtPanelWidth() {
         for format in [TimeFormat.am_pm, .military] {
             let calc = DayTimelineLayoutCalculator()
@@ -118,8 +116,6 @@ final class TimelineLogicTests: XCTestCase {
         }
     }
 
-    /// Narrow labels are cheaper, so a 24-hour axis keeps at least as many as a
-    /// 12-hour one — the thinning is driven by measured width, not a fixed step.
     func testHourLabels_militaryKeepsAtLeastAsManyAs12Hour() {
         let calc = DayTimelineLayoutCalculator()
         let military = calc.labelledTicks(width: Self.panelTrackWidth, timeFormat: .military)
@@ -127,8 +123,6 @@ final class TimelineLogicTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(military.count, amPm.count)
     }
 
-    /// Every label stays inside the view, including the clamped edge ones — the
-    /// original "4 P" clipping this logic grew out of.
     func testHourLabels_stayInsideTheView() {
         let calc = DayTimelineLayoutCalculator()
         let width = Self.panelTrackWidth
@@ -145,7 +139,6 @@ final class TimelineLogicTests: XCTestCase {
         }
     }
 
-    /// A width too small for even one label must not divide by a negative range.
     func testHourLabels_degenerateWidthDoesNotEscapeTheView() {
         let calc = DayTimelineLayoutCalculator()
         let width: CGFloat = 10

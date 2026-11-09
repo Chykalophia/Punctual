@@ -1,21 +1,13 @@
 //
 //  DateMarkers.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  User-defined markers for important days — a birthday, an anniversary, a
-//  deadline — drawn on the month grids alongside the event dots.
+//  User-defined markers for important days drawn on the month grids: the model,
+//  its storage encoding, and the day-matching rule.
 //
-//  Hostless: the model, its storage encoding, and the "does this marker fall on
-//  this day" rule. No AppKit, no Defaults, no EventKit.
+//  Markers store month/day/year components, not a `Date`, so they never shift across time zones.
 //
-//  A marker stores month/day/year COMPONENTS rather than a `Date`. A birthday is
-//  a calendar day, not an instant: stored as a `Date` at local midnight it lands
-//  on the wrong day the moment the machine changes time zone, and "26 Dec" in
-//  Sydney is "25 Dec" in Chicago. Components sidestep that entirely, and they
-//  make an annually-repeating marker the natural case rather than a recurrence
-//  rule bolted on afterwards.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
@@ -24,11 +16,9 @@ import Foundation
 public struct DateMarker: Equatable, Sendable {
     /// 1–12.
     public let month: Int
-    /// 1–31. Not validated against the month: 29 February is legitimate and
-    /// simply matches nothing in a common year, which is the correct behaviour
-    /// for a marker rather than an error to surface.
+    /// 1 to 31, not validated against the month (29 February matches nothing in a common year).
     public let day: Int
-    /// `nil` means every year — the birthday case.
+    /// `nil` means every year.
     public let year: Int?
     public let label: String
 
@@ -42,16 +32,10 @@ public struct DateMarker: Equatable, Sendable {
     public var repeatsAnnually: Bool { year == nil }
 }
 
-/// Storage encoding for `Defaults`.
+/// String encoding of markers for `Defaults`, one string per marker.
 ///
-/// A compact string per marker rather than a `Codable` blob, matching how
-/// `dropdownDensity` and `menuBarTokens` are stored: the hostless module cannot
-/// import Defaults, and a plist a human can read is worth more than a nested
-/// archive when something goes wrong.
-///
-/// Format: `YYYY-MM-DD|label`, with `----` for a repeating year, mirroring how
-/// iCalendar writes a floating date. The label may contain anything except a
-/// newline; a `|` inside it is safe because only the FIRST separator is split on.
+/// Format: `YYYY-MM-DD|label`, with `----` as the year of a repeating marker.
+/// The label may contain `|`; only the first separator is split on.
 public enum DateMarkerCodec {
     private static let separator: Character = "|"
     private static let repeatingYear = "----"
@@ -63,7 +47,6 @@ public enum DateMarkerCodec {
     }
 
     public static func decode(_ raw: String) -> DateMarker? {
-        // Split once: a label containing "|" must survive a round trip.
         guard let separatorIndex = raw.firstIndex(of: separator) else { return nil }
         let datePart = String(raw[raw.startIndex ..< separatorIndex])
         let label = String(raw[raw.index(after: separatorIndex)...])
@@ -79,17 +62,13 @@ public enum DateMarkerCodec {
 
         let yearField = fields[0 ..< (fields.count - 2)].joined(separator: "-")
         let year = yearField == repeatingYear ? nil : Int(yearField)
-        // A year field that is neither the repeating sentinel nor a number is
-        // corrupt — reject rather than silently promoting it to "every year".
+        // Reject a corrupt year rather than treating it as repeating.
         if year == nil, yearField != repeatingYear { return nil }
 
         return DateMarker(month: month, day: day, year: year, label: label)
     }
 
-    /// Decodes a stored list, dropping entries that do not parse.
-    ///
-    /// Silently, and deliberately: a hand-edited plist or a value from a future
-    /// build should cost the user that one marker, not the whole list.
+    /// Decodes a stored list, silently dropping entries that do not parse.
     public static func decodeAll(_ raws: [String]) -> [DateMarker] {
         raws.compactMap(decode)
     }
@@ -102,10 +81,7 @@ public enum DateMarkerCodec {
 public enum DateMarkerPolicy {
     /// The markers falling on `date`, in the order they were stored.
     ///
-    /// Dated markers are matched on all three components; repeating ones ignore
-    /// the year. Comparison is on the calendar's own components, so a marker is
-    /// on the day the user's calendar says it is, whatever the time of day the
-    /// caller passes in.
+    /// Dated markers match on year, month and day in `calendar`; repeating ones ignore the year.
     public static func markers(
         on date: Date,
         from markers: [DateMarker],
@@ -123,8 +99,7 @@ public enum DateMarkerPolicy {
         }
     }
 
-    /// Whether `date` carries any marker. The grid asks this per cell, so it
-    /// avoids building an array it would immediately discard.
+    /// Whether `date` carries any marker.
     public static func hasMarker(
         on date: Date,
         from markers: [DateMarker],

@@ -13,9 +13,7 @@ import Foundation
 
 struct Bookmark: Codable, Defaults.Serializable, Hashable {
     var name: String
-    /// Provider string ID (= MeetingServices.rawValue for built-in providers).
-    /// Backward-compatible: the old Bookmark.service (MeetingServices) encoded
-    /// its rawValue as the JSON string, so existing stored bookmarks decode fine.
+    /// Provider string ID (`MeetingServices.rawValue` for built-in providers); matches the JSON of older stored bookmarks.
     var service: String
     var url: URL
 }
@@ -87,12 +85,10 @@ func hexStringToUIColor(hex: String) -> NSColor {
     font: NSFont = NSFont.systemFont(ofSize: 14),
     maxWidth: CGFloat = 300.0
 ) -> NSView {
-    // Create views
     let paddingView = NSView()
     let textView = NSTextView()
     paddingView.addSubview(textView)
 
-    // Text styling
     let paragraphStyle = NSMutableParagraphStyle()
     paragraphStyle.lineBreakMode = NSLineBreakMode.byWordWrapping
     textView.textStorage?.setAttributedString(
@@ -108,12 +104,10 @@ func hexStringToUIColor(hex: String) -> NSColor {
     textView.backgroundColor = .clear
     textView.textColor = .textColor
 
-    // Adjust frame layout for padding
     if let textContainer = textView.textContainer {
         textView.layoutManager?.ensureLayout(for: textContainer)
         if let frame = textView.layoutManager?.usedRect(for: textContainer) {
-            // There's 10pt of padding seemingly built into the left side,
-            // no such thing on the right so we go 20pt to match the left side
+            // The text view has about 10pt of built-in left padding; pad the right to match.
             textView.frame = NSRect(x: 10.0, y: 0.0, width: frame.width, height: frame.height)
             paddingView.frame = NSRect(
                 x: 0.0, y: 0.0, width: frame.width + 20, height: frame.height)

@@ -1,25 +1,20 @@
 //
-//  PanelTheme+MeetingBar.swift
-//  MeetingBarNG
+//  PanelTheme+Punctual.swift
+//  Punctual
 //
-//  Adapter turning the hostless `PanelTheme` choices into the AppKit and SwiftUI
-//  values that actually paint. Kept out of the hostless module, which cannot
-//  import AppKit or SwiftUI.
+//  Maps the hostless `PanelTheme` choices to AppKit and SwiftUI values.
 //
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
 import SwiftUI
 
 extension PanelAppearance {
-    /// The AppKit appearance to pin the panel window to, or `nil` to leave it
-    /// following the system.
+    /// The AppKit appearance to pin the panel window to, or `nil` to follow the system.
     ///
-    /// Set on the WINDOW rather than via SwiftUI's `preferredColorScheme`: the
-    /// panel's backdrop is an AppKit vibrancy view composited by the window
-    /// server, and a SwiftUI-level colour scheme would restyle the content while
-    /// leaving the material behind it in the system appearance.
+    /// Applied to the window, not via `preferredColorScheme`, so the AppKit
+    /// vibrancy backdrop changes appearance along with the SwiftUI content.
     var nsAppearance: NSAppearance? {
         switch PanelThemePolicy.forcedAppearance(self) {
         case nil: return nil
@@ -40,10 +35,6 @@ extension PanelAppearance {
 
 extension PanelAccent {
     /// The colour to tint the panel with, or `nil` to inherit the system accent.
-    ///
-    /// Mapped to the system colours rather than literal RGB so each one keeps its
-    /// own light/dark variants and its Increase Contrast treatment — a hardcoded
-    /// hex would look right in exactly one appearance.
     var tint: Color? {
         switch self {
         case .system: return nil

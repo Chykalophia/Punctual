@@ -1,6 +1,6 @@
 //
 //  WindowCoordinatorTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import XCTest

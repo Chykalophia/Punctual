@@ -1,5 +1,5 @@
 //
-//  EventFiltering+MeetingBar.swift
+//  EventFiltering+Punctual.swift
 //  MeetingBar
 //
 

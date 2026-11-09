@@ -1,8 +1,8 @@
 //
 //  DaySummaryPolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the day-summary greeting policy (MeetingBarNG).
+//  Tests for the day-summary greeting policy.
 //
 
 import XCTest

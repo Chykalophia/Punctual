@@ -1,5 +1,5 @@
 //
-//  MBEvent+MeetingBar.swift
+//  MBEvent+Punctual.swift
 //  MeetingBar
 //
 //  Adapter layer: Defaults-reading helpers for the data-only MBEvent type.
@@ -58,13 +58,9 @@ public extension Array where Element == MBEvent {
 // MARK: - Meeting identifier
 
 extension MBEvent {
-    /// The meeting's human-usable identifier — the number for a phone bridge, or
-    /// the room code to paste into an already-signed-in client.
+    /// The meeting's human-usable identifier, such as a dial-in number or room code.
     ///
-    /// `nil` for most services, and that is correct rather than a gap: only some
-    /// providers put a usable id in the URL at all. Callers should hide the
-    /// affordance rather than showing a disabled one. Extraction itself is the
-    /// hostless, unit-tested `MeetingIdentifierPolicy`.
+    /// `nil` for services whose URL carries no usable id; hide the affordance in that case.
     var meetingIdentifier: MeetingIdentifier? {
         guard let meetingLink else { return nil }
         return MeetingIdentifierPolicy.identifier(from: meetingLink)

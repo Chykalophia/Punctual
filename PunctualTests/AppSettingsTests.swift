@@ -1,10 +1,8 @@
 //
 //  AppSettingsTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  Verifies that AppSettings.current correctly maps Defaults keys to
-//  AppSettings fields. Each test writes a non-default value to a key and
-//  asserts the snapshot reflects it.
+//  Tests that `AppSettings.current` maps each Defaults key to its snapshot field.
 //
 
 import Defaults
@@ -281,8 +279,7 @@ final class AppSettingsTests: BaseTestCase {
 
         let refreshed = Defaults[.dismissedEvents].first
         XCTAssertEqual(refreshed?.id, "evt")
-        // Original dismissal modified-date is preserved, not overwritten by the
-        // current (changed) event's modified-date.
+        // The dismissal keeps its original modified date.
         XCTAssertEqual(refreshed?.lastModifiedDate, dismissedAt)
         // End date is refreshed from the current event.
         XCTAssertEqual(refreshed?.eventEndDate, currentEvent.endDate)

@@ -15,9 +15,7 @@ enum EventNotificationIdentifiers {
 }
 
 /// App-level meaning of a user interaction with an event notification.
-///
-/// The system notification delegate parses framework values into this type,
-/// then AppModel owns the resulting workflow.
+/// Parsed from framework values by the notification delegate; AppModel handles the workflow.
 enum NotificationResponseAction: Equatable {
     case join(eventID: String)
     case dismiss(eventID: String)

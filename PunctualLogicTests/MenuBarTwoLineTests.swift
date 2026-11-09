@@ -1,16 +1,10 @@
 //
 //  MenuBarTwoLineTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for "One line / Two lines" on the Menu Bar pane.
+//  Tests for "One line / Two lines" on the Menu Bar pane.
 //
-//  This is the capability the deleted `eventTimeFormat` picker's
-//  `.show_under_title` value carried. It was read only by the classic
-//  status-bar path, so it did nothing at all once a user composed their menu
-//  bar; it is now a control of its own, implemented in the composed renderer,
-//  and a one-time migration carries the setting over rather than dropping it.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import XCTest

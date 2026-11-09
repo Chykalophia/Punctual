@@ -1,12 +1,8 @@
 //
 //  SettingsIndexTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the Preferences settings index (Phase 2 of the
-//  Preferences UX overhaul). The index backs BOTH settings search and per-pane
-//  reset, so these tests are the guard against a setting becoming unfindable or
-//  unresettable when it moves between panes: every indexed label must resolve to
-//  a real English key, read from `en.lproj` on disk.
+//  Tests for the Preferences settings index behind search and per-pane reset.
 //
 
 import XCTest
@@ -14,9 +10,8 @@ import XCTest
 @testable import PunctualLogic
 
 final class SettingsIndexTests: XCTestCase {
-    /// The English catalog, parsed from the repo (not a bundle): these tests run
-    /// under `swift test` with no host app, so there is no bundle to read.
-    /// NOTE: those directory names contain real trailing spaces.
+    /// The English catalog, parsed from the repo because `swift test` has no host bundle.
+    /// Those directory names contain real trailing spaces.
     private static let englishCatalog: [String: String] = {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // PunctualLogicTests
@@ -105,8 +100,7 @@ final class SettingsIndexTests: XCTestCase {
     }
 
     func testEachPaneResetsOnlyItsOwnKeys() {
-        // A key may only belong to one pane: two panes resetting the same key
-        // is the "one thought, two places" failure this IA exists to remove.
+        // A key may belong to only one pane.
         var owner: [String: PreferencesTab] = [:]
         for tab in PreferencesTab.allCases {
             for key in SettingsIndex.defaultsKeys(in: tab) {
@@ -136,9 +130,8 @@ final class SettingsIndexTests: XCTestCase {
     }
 
     func testSynonymsFindSettingsWhoseLabelNeverSaysTheWord() {
-        // "dot" is genuinely ambiguous — the calendar colour marker AND the
-        // menu-bar title's dot mode. Both must be reachable from the one word;
-        // adding "calendar" disambiguates to the marker.
+        // "dot" matches both the calendar colour marker and the menu-bar title's dot mode;
+        // adding "calendar" narrows it to the marker.
         let dotHits = SettingsIndex.search("dot", localized: localized).map(\.id)
         XCTAssertTrue(dotHits.contains("dropdown.row_calendar_colour"))
         XCTAssertTrue(dotHits.contains("menubar.title"))
@@ -146,7 +139,7 @@ final class SettingsIndexTests: XCTestCase {
             SettingsIndex.search("calendar dot", localized: localized).first?.id,
             "dropdown.row_calendar_colour"
         )
-        // Nothing in Preferences says "am/pm" — the time format does.
+        // Nothing in Preferences says "am/pm"; it should still find the time format.
         XCTAssertEqual(
             SettingsIndex.search("am pm", localized: localized).first?.id,
             "general.time_format"

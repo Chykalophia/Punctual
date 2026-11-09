@@ -1,19 +1,11 @@
 //
 //  DropdownMetrics.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The dropdown panel's ONE layout grid, and the pure agenda-row solver built on
-//  it. Hostless (MeetingBarLogic): no AppKit, no SwiftUI, no Defaults — just
-//  numbers, so every combination can be unit-tested.
+//  The dropdown panel's layout grid and the pure agenda-row solver built on it.
+//  Hostless (PunctualLogic): no AppKit, SwiftUI or Defaults, so it is unit-testable.
 //
-//  Why this exists: the 330pt panel used to carry four unrelated left grids —
-//  a 66pt time column on event rows, an 18pt symbol column on action rows, a
-//  32pt indent on the detail disclosure and a 16pt indent on section headers —
-//  each written as a literal at its own call site. Nothing tied them together,
-//  so "move the calendar marker all the way to the left" had no grid to be left
-//  OF, and any change to one column silently misaligned the other three.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import CoreGraphics
@@ -21,10 +13,8 @@ import Foundation
 
 // MARK: - Agenda row vocabulary
 
-/// The calendar-colour marker on an agenda row.
-///
-/// `.none` is the off state of `showEventCalendarColor`; the panel used to draw
-/// the dot unconditionally, so that preference did nothing.
+/// The calendar-colour marker on an agenda row. `.none` is the off state of
+/// `showEventCalendarColor`.
 public enum AgendaMarker: String, Codable, CaseIterable, Sendable {
     case none
     case dot
@@ -34,7 +24,7 @@ public enum AgendaMarker: String, Codable, CaseIterable, Sendable {
 public enum AgendaMarkerPosition: String, Codable, CaseIterable, Sendable {
     /// Outside the row's padding, flush with the panel edge.
     case farLeft
-    /// The shipping position: in the gutter between the time and the title.
+    /// In the gutter between the time and the title.
     case betweenTimeAndTitle
 }
 
@@ -50,21 +40,12 @@ public enum AgendaTimeColumn: String, Codable, CaseIterable, Sendable {
 
 /// How tightly the dropdown packs its rows.
 ///
-/// Deliberately three named steps rather than a free number: the values below are
-/// tuned together (row height, type size and the time column have to move as a
-/// set, or the columns stop lining up), and a slider would let a user land on a
-/// combination nobody ever looked at.
-///
-/// Panel WIDTH is deliberately NOT part of this. Density changes vertical rhythm
-/// and type size only, so the panel keeps one width across all three and the
-/// window never resizes underneath the user.
+/// Three fixed steps rather than a free value, because each step's metrics are tuned
+/// as a set. Density never changes the panel width.
 public enum DropdownDensity: String, Codable, CaseIterable, Sendable {
-    /// Fits roughly two more rows per screen. Reads closer to a spreadsheet, and
-    /// the hover target for a row's trailing action gets tight.
     case compact
-    /// The shipping rhythm, matched to macOS's own menu rows.
+    /// Matches macOS menu row rhythm.
     case standard
-    /// Easiest to parse per row; costs about two rows to the fold on a busy day.
     case roomy
 
     public var metrics: DropdownMetrics {
@@ -78,10 +59,7 @@ public enum DropdownDensity: String, Codable, CaseIterable, Sendable {
 
 // MARK: - Metrics
 
-/// Every fixed dimension in the dropdown panel, in one place.
-///
-/// `.standard` reproduces the shipping panel exactly — this type is a
-/// consolidation of existing literals, not a restyle.
+/// Every fixed dimension in the dropdown panel, in points.
 public struct DropdownMetrics: Equatable, Sendable {
     /// The panel's fixed width (`MeetingSummaryView.preferredWidth`).
     public var panelWidth: CGFloat
@@ -99,38 +77,23 @@ public struct DropdownMetrics: Equatable, Sendable {
     public var markerBarHeight: CGFloat
     /// Slot reserved for a meeting-service icon on an agenda row.
     public var serviceIconWidth: CGFloat
-    /// Slot reserved for the leading SF Symbol on an action row. 16 at
-    /// standard, from the mockup's `.arow .ic`.
+    /// Slot reserved for the leading SF Symbol on an action row.
     public var actionSymbolWidth: CGFloat
-    /// Width of the hover-revealed Join pill. NOT the space a row reserves for it
-    /// — see `trailingGlyphWidth`. The pill is drawn as an overlay so it costs the
-    /// title nothing while hidden.
+    /// Width of the hover-revealed Join pill. The pill is an overlay, so rows reserve
+    /// only `trailingGlyphWidth` for it.
     public var trailingAffordanceWidth: CGFloat
     /// Slot reserved for the detail disclosure chevron.
     public var disclosureWidth: CGFloat
-    /// Type size for a row's primary text (event title, action label). Lives here
-    /// rather than at the call site so density moves size and spacing together —
-    /// changing one without the other is what makes a list look wrong.
+    /// Type size for a row's primary text (event title, action label).
     public var rowFontSize: CGFloat
     /// Type size for supporting text on a row (the time column, metadata).
     public var secondaryFontSize: CGFloat
     /// Inset between a card's edge and its content.
-    ///
-    /// A card is a bounded surface, so its padding is what makes it feel tight or
-    /// airy — leaving it fixed meant Small and Large moved every row but left the
-    /// cards identical, which read as a bug rather than a density.
     public var cardHorizontalPadding: CGFloat
     public var cardVerticalPadding: CGFloat
-    /// Card corner radius. Grows with the padding: a large inset inside a tight
-    /// radius looks like a mistake, and the two have to move together to keep the
-    /// corner's optical weight constant.
+    /// Card corner radius; scales with the card padding.
     public var cardCornerRadius: CGFloat
-    /// Gap BETWEEN stacked cards.
-    ///
-    /// Separate from `cardVerticalPadding`, which is the gap inside one. Density
-    /// moved the inside and left the gaps between them fixed, so Large packed
-    /// airy cards as tightly as Small did — the rhythm the eye actually reads
-    /// when scanning the panel is the one that did not change.
+    /// Gap between stacked cards (`cardVerticalPadding` is the inset inside one).
     public var cardSpacing: CGFloat
 
     public init(
@@ -197,9 +160,8 @@ public struct DropdownMetrics: Equatable, Sendable {
         cardSpacing: 3
     )
 
-    /// Tighter vertical rhythm and a step down in type. The time column narrows
-    /// with the font — it is sized to fit "12:00 PM", so it has to shrink in step
-    /// or every row carries dead space.
+    /// Tighter vertical rhythm and a step down in type. The time column is sized
+    /// to fit "12:00 PM" at this font.
     public static let compact = DropdownMetrics(
         panelWidth: 360,
         rowOuterPadding: 8,
@@ -222,8 +184,7 @@ public struct DropdownMetrics: Equatable, Sendable {
         cardSpacing: 1.5
     )
 
-    /// More air per row. Marker and column widths grow with the type so the
-    /// leading grid stays proportional rather than looking stranded.
+    /// More space per row; marker and column widths scale with the larger type.
     public static let roomy = DropdownMetrics(
         panelWidth: 360,
         rowOuterPadding: 8,
@@ -246,36 +207,28 @@ public struct DropdownMetrics: Equatable, Sendable {
         cardSpacing: 5
     )
 
-    /// Distance from the panel's leading edge to a row's content box. Section
-    /// headers use the same number, which is what makes headers and rows line up.
+    /// Distance from the panel's leading edge to a row's content box.
     public var rowLeadingInset: CGFloat { rowOuterPadding + rowInnerPadding }
 
-    /// Alias that names the intent at header call sites.
+    /// Leading inset for section headers; equal to `rowLeadingInset` so headers align with rows.
     public var sectionHeaderInset: CGFloat { rowLeadingInset }
 
-    /// Indent of the inline detail disclosure, derived from the grid rather than
-    /// written as a literal.
+    /// Indent of the inline detail disclosure.
     public var detailIndent: CGFloat { rowLeadingInset + columnSpacing * 2 }
 
     /// Width available to a row's content, between the two row insets.
     public var rowContentWidth: CGFloat { panelWidth - rowLeadingInset * 2 }
 
-    /// Space a row actually reserves at its trailing edge for the meeting glyph.
+    /// Space a row reserves at its trailing edge for the resting meeting glyph.
     ///
-    /// Rows used to reserve the full `trailingAffordanceWidth` — the width of the
-    /// Join PILL, which only exists on hover. That cost every linked event ~32pt
-    /// of title for a control that was not on screen, and it showed: titles
-    /// truncated with visibly empty space to their right. The pill now draws as a
-    /// trailing overlay, so only the resting glyph is paid for.
-    ///
-    /// Density-independent: the glyph is a fixed 10pt SF Symbol at every size.
+    /// Density-independent, because the glyph is a fixed 10pt SF Symbol. The hover
+    /// Join pill is an overlay and reserves nothing.
     public var trailingGlyphWidth: CGFloat { 16 }
 
     /// Width of the time column in a given mode.
     ///
-    /// `.startAndEnd` deliberately keeps the SAME width and stacks the two times
-    /// instead of widening: on a 298pt content box a single-line
-    /// "10:00 AM – 10:30 AM" costs ~125pt and leaves the title unreadable.
+    /// `.startAndEnd` keeps the same width and stacks the two times, since a
+    /// single-line range would leave too little room for the title.
     public func timeColumnWidth(for column: AgendaTimeColumn) -> CGFloat {
         switch column {
         case .hidden: 0
@@ -286,10 +239,9 @@ public struct DropdownMetrics: Equatable, Sendable {
 
 // MARK: - Agenda row layout
 
-/// The solved geometry of one agenda row, in coordinates measured from the row's
-/// **content box** leading edge (i.e. inside `PanelRow`'s padding). A negative
-/// value therefore means "outside the padding", which is the only way a marker
-/// can genuinely reach the panel edge.
+/// The solved geometry of one agenda row, measured from the leading edge of the
+/// row's content box (inside `PanelRow`'s padding). Negative values lie outside
+/// the padding, which is how a far-left marker reaches the panel edge.
 public struct AgendaRowLayout: Equatable, Sendable {
     public struct MarkerFrame: Equatable, Sendable {
         public var x: CGFloat
@@ -310,8 +262,7 @@ public struct AgendaRowLayout: Equatable, Sendable {
     public let timeColumnWidth: CGFloat
     /// `nil` when no marker is drawn.
     public let markerFrame: MarkerFrame?
-    /// `nil` when `showMeetingServiceIcon` is off — the slot is not reserved,
-    /// so turning the setting off gives the width back to the title.
+    /// `nil` when `showMeetingServiceIcon` is off; no slot is reserved then.
     public let serviceIconOrigin: CGFloat?
     public let titleOrigin: CGFloat
     public let titleWidth: CGFloat
@@ -355,16 +306,13 @@ public struct AgendaRowLayout: Equatable, Sendable {
             }
         }
 
-        // The service icon takes the slot immediately before the title, so the
-        // title gives up exactly one icon width plus one gutter — and gets both
-        // back when the setting is off.
         var serviceIconOrigin: CGFloat?
         if showsServiceIcon {
             serviceIconOrigin = titleOrigin
             titleOrigin += metrics.serviceIconWidth + metrics.columnSpacing
         }
 
-        // The resting glyph, not the hover pill — see `trailingGlyphWidth`.
+        // Reserves the resting glyph, not the wider hover pill; see `trailingGlyphWidth`.
         let trailing = metrics.trailingGlyphWidth
             + metrics.columnSpacing
             + metrics.disclosureWidth

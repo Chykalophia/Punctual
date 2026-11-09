@@ -11,9 +11,7 @@ import SwiftUI
 struct WelcomeScreen: View {
     @ObservedObject var router: OnboardingRouter
 
-    /// macOS Calendar is the default: it needs no setup and works for everyone,
-    /// so it is the right answer for anyone without a specific reason to choose
-    /// otherwise.
+    /// The default source: macOS Calendar needs no setup.
     @State private var selectedProvider: EventStoreProvider = .macOSEventKit
 
     private var sources: [CalendarSourcePresentation] { CalendarSourcePresentation.all }
@@ -36,10 +34,8 @@ struct WelcomeScreen: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
-            // A source picker only when there is genuinely a choice. A build
-            // without Google OAuth credentials cannot offer that provider, and a
-            // one-option picker is a decision the user cannot make — so it goes
-            // straight through to granting access, exactly as before.
+            // Show the source picker only when there is a choice; a build without Google OAuth
+            // credentials goes straight to granting access.
             if sources.count > 1 {
                 Picker("onboarding_source_picker_label".loco(), selection: $selectedProvider) {
                     ForEach(sources) { source in

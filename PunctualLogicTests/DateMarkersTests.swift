@@ -1,9 +1,8 @@
 //
 //  DateMarkersTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for date markers (MeetingBarNG): the storage round trip, what
-//  a corrupt entry costs, and which days a marker actually falls on.
+//  Tests for date markers: storage round trip, corrupt entries and matching.
 //
 
 import XCTest
@@ -70,8 +69,6 @@ final class DateMarkersTests: XCTestCase {
     }
 
     func testAnUnparseableYearIsRejectedRatherThanTreatedAsRepeating() {
-        // Silently promoting a corrupt year to "every year" would put a one-off
-        // deadline on the grid forever.
         XCTAssertNil(DateMarkerCodec.decode("20x6-01-05|Launch"))
     }
 
@@ -120,8 +117,7 @@ final class DateMarkersTests: XCTestCase {
     }
 
     func testFebruary29MatchesOnlyInALeapYear() {
-        // Stored happily, matches nothing in a common year — the right behaviour
-        // for a marker, rather than an error at entry.
+        // Feb 29 is stored without error and simply matches nothing in a common year.
         let markers = [DateMarker(month: 2, day: 29, label: "Leap day")]
         XCTAssertFalse(
             DateMarkerPolicy.markers(on: date(2028, 2, 29), from: markers, calendar: calendar()).isEmpty
@@ -132,8 +128,7 @@ final class DateMarkersTests: XCTestCase {
     }
 
     func testMatchingIsByCalendarDayNotInstant() {
-        // The whole reason components are stored instead of a Date: the same
-        // marker must land on 25 December in every time zone.
+        // Stored as components, so the marker lands on 25 December in every time zone.
         let markers = [DateMarker(month: 12, day: 25, label: "Christmas")]
         for zone in ["UTC", "Australia/Sydney", "America/Chicago", "Pacific/Kiritimati"] {
             let calendar = calendar(timeZone: zone)

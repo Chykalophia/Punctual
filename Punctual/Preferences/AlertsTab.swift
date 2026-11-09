@@ -1,41 +1,16 @@
 //
 //  AlertsTab.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  When MeetingBarNG interrupts you.
+//  The Alerts pane: notifications before a meeting starts and ends, auto-join,
+//  and AppleScript hooks around meetings.
 //
-//  Assembled from NotificationsTab.swift, the four notification pickers that
-//  used to live in `UI/Views/Shared.swift`, and the AppleScript half of the
-//  deleted Advanced tab, originally:
+//  Derived from MeetingBar's notification and advanced preferences, originally:
 //    Created by Andrii Leitsius on 13.01.2021.
 //    Copyright © 2021 Andrii Leitsius. All rights reserved.
 //    Licensed under the Apache License, Version 2.0.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026 — the
-//  Preferences UX overhaul, Phase 2:
-//
-//    • every timing picker is LABELLED "How early". Four of them were
-//      `.labelsHidden()`, three of them read "when event starts", and
-//      indentation was the only cue about which toggle each belonged to.
-//    • all sections get headers. Three of the four `Section`s were bare, so two
-//      toggles floated as orphans. The word "Alerts" is retired as a section
-//      name — it collided with macOS's own "Alerts" notification STYLE, named in
-//      a tip inside that very section — and survives only as the pane name.
-//    • one disclosure rule: dependent controls and their captions are both
-//      always visible, and the dependent CONTROL is disabled. Previously the
-//      pickers stayed visible-but-greyed while their captions vanished.
-//    • the two dead-end notification advisories become one row carrying a real
-//      **button**. What state to show is decided by the hostless
-//      `NotificationDeliveryPolicy`, and the calm state says nothing at all.
-//    • both AppleScript hooks move into a "Run a script around meetings"
-//      disclosure with DISTINCT button labels — there used to be two buttons
-//      both labelled "Edit script", editing two different files, told apart
-//      only by their position — plus a warning for the state the scheduler
-//      silently ignores: a hook switched on with no script file saved.
-//    • the blanket "These settings are intended for advanced users" banner is
-//      deleted (§3.8). It was stamped across a whole tab, including ordinary
-//      wishes like hiding a meeting by name; warning-as-wallpaper stops meaning
-//      anything.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
@@ -84,8 +59,6 @@ private struct BeforeMeetingStartsSection: View {
             .disabled(!fullscreenNotification)
             .preferenceIndent()
 
-            // Always visible, per the one disclosure rule: the caption explains
-            // the control above it whether or not that control is live.
             Text("preferences_alerts_fullscreen_without_link_help".loco())
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -133,7 +106,6 @@ private struct JoinForMeSection: View {
             HowEarlyPicker(selection: $automaticEventJoinTime)
                 .disabled(!automaticEventJoin)
 
-            // Dead-end advice ("…chosen under Meetings") becomes a jump.
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("preferences_alerts_auto_join_help".loco())
                     .font(.caption)
@@ -206,9 +178,7 @@ private struct MeetingScriptsSection: View {
 
             Spacer()
 
-            // Both buttons stay live even with the hook off: they act on the
-            // script FILE, and saving one is exactly how you clear the warning
-            // below before switching the hook on.
+            // Not disabled with the hook off: they act on the script file, which must exist before enabling.
             Button("preferences_alerts_script_test".loco()) {
                 runAppleScriptForNextEvent(events: calendarSync.events)
             }
@@ -242,9 +212,7 @@ private struct MeetingScriptsSection: View {
         scriptLinkOnlyHelp
     }
 
-    /// The scheduler needs `run…Script && …ScriptLocation != nil`, but the
-    /// toggle could be flipped without ever saving a file — so it read ON and
-    /// did nothing, with no feedback anywhere.
+    /// Warning for a hook that is on with no saved script; the scheduler skips it.
     private var scriptMissingWarning: some View {
         PreferenceCallout(
             systemImage: "exclamationmark.triangle.fill",
@@ -253,8 +221,7 @@ private struct MeetingScriptsSection: View {
         .preferenceIndent()
     }
 
-    /// True of BOTH hooks, so it is attached to each of them and indented.
-    /// Unindented once at the bottom, it was ambiguous which row it qualified.
+    /// Caption shown, indented, under each hook.
     private var scriptLinkOnlyHelp: some View {
         Text("preferences_alerts_script_link_only_help".loco())
             .font(.caption)
@@ -266,8 +233,7 @@ private struct MeetingScriptsSection: View {
 
 // MARK: - Shared rows
 
-/// The timing picker that four rows share. It has a visible label now: "How
-/// early".
+/// The labelled "How early" timing picker shared by the alert rows.
 private struct HowEarlyPicker: View {
     @Binding var selection: TimeBeforeEvent
 
@@ -283,9 +249,7 @@ private struct HowEarlyPicker: View {
     }
 }
 
-/// What macOS is actually doing with MeetingBarNG's notifications — with the
-/// button that fixes it, rather than a sentence telling you to go and find
-/// System Settings yourself. Silent when notifications arrive and stay.
+/// The app's notification delivery state with a button to fix it; renders nothing when delivery is fine.
 private struct NotificationDeliveryRow: View {
     private let monitor = NotificationSettingsMonitor.shared
 
@@ -321,8 +285,7 @@ private struct NotificationDeliveryRow: View {
             }
         }
         .task { await monitor.refresh() }
-        // macOS can change the alert style while Preferences is open, so re-read
-        // whenever the app comes back to the front.
+        // Re-read on activation: the user may have changed it in System Settings.
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
@@ -363,8 +326,7 @@ struct EditScriptModal: View {
             Spacer()
         }.padding()
             .frame(width: 500, height: 500)
-            // Seeded here, not in the Defaults key: the stored default must not
-            // bake in a localized string chosen at static-init time.
+            // Seeded here, not as the Defaults default, to avoid a localized string fixed at static init.
             .onAppear {
                 self.editedScript = self.script.isEmpty
                     ? "preferences_alerts_script_placeholder".loco()

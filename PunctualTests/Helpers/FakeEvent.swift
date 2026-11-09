@@ -8,7 +8,7 @@
 import Foundation
 @testable import Punctual
 
-// Helper to construct a minimal MBEvent – adjust to your real initializer
+/// Builds a minimal `MBEvent` for tests.
 func makeFakeEvent(
     id: String,
     start: Date,

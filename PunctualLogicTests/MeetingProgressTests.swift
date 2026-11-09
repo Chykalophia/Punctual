@@ -1,6 +1,6 @@
 //
 //  MeetingProgressTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -36,8 +36,7 @@ final class MeetingProgressTests: XCTestCase {
         XCTAssertNil(presentation(startsIn: -3600, lasting: 1800))
     }
 
-    /// The end instant is past, not running — a meeting that just ended must not
-    /// leave a full indicator sitting in the menu bar.
+    /// The end instant counts as past, not running.
     func testNothingIsDrawnAtTheExactEndInstant() {
         XCTAssertNil(presentation(startsIn: -1800, lasting: 1800))
     }
@@ -54,7 +53,6 @@ final class MeetingProgressTests: XCTestCase {
         XCTAssertEqual(presentation(startsIn: window / 2)?.fraction ?? -1, 0.5, accuracy: 0.0001)
     }
 
-    /// The property the whole design rests on: full means now.
     func testTheIndicatorIsExactlyFullAtTheStartInstant() {
         let result = presentation(startsIn: 0)
         XCTAssertEqual(result?.fraction ?? -1, 0, accuracy: 0.0001)
@@ -89,8 +87,6 @@ final class MeetingProgressTests: XCTestCase {
         )
     }
 
-    /// Calendars really do produce zero-length events; dividing by that duration
-    /// would be a crash rather than a cosmetic bug.
     func testZeroLengthMeetingIsCompleteRatherThanDividedByZero() {
         let start = now
         let result = MeetingProgressPolicy.presentation(
@@ -141,7 +137,6 @@ final class MeetingProgressTests: XCTestCase {
         }
     }
 
-    /// Only the bar costs menu-bar width; the other three are overlays.
     func testOnlyTheBarOccupiesTheImageSlot() {
         for style in MeetingProgressStyle.allCases {
             XCTAssertEqual(style.occupiesImageSlot, style == .bar, "\(style)")

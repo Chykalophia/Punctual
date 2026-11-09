@@ -10,9 +10,8 @@ import AppKit
 import Defaults
 import Foundation
 
-// `MeetingServices` enum lives in `MeetingLinkDetector.swift` so it can be
-// reached from the hostless logic target. This file only carries the
-// production-side extensions (icons, localisation, opening, create-meeting).
+// `MeetingServices` lives in `MeetingLinkDetector.swift` for the hostless logic target;
+// this file holds the app-side extensions (icons, localization, opening, create-meeting).
 
 extension MeetingServices {
     var localizedValue: String {
@@ -58,8 +57,7 @@ func createMeeting() {
 
     if service == .url {
         var url: String = Defaults[.createMeetingServiceUrl]
-        // Validate with `URL(string:)` itself (not the more lenient `NSURL`),
-        // so we never force-unwrap a value the modern parser rejects.
+        // Validated with `URL(string:)` rather than the more lenient `NSURL`.
         if !url.isEmpty, let meetingURL = URL(string: url) {
             openMeetingURL(nil, meetingURL, browser)
         } else {

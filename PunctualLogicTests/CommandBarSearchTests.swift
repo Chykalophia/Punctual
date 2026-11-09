@@ -1,8 +1,8 @@
 //
 //  CommandBarSearchTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for Command Bar ranking + agenda assembly (MeetingBarNG).
+//  Tests for Command Bar ranking and agenda assembly.
 //
 
 import XCTest

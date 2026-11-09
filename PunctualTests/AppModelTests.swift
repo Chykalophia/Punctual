@@ -1,6 +1,6 @@
 //
 //  AppModelTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import XCTest
@@ -86,8 +86,7 @@ final class AppModelTests: BaseTestCase {
         XCTAssertTrue(harness.model.state.providerChangeInProgress)
         await harness.flushAsyncActions()
 
-        // Connecting Google ADDS it. `activeProvider` names the write-capable
-        // source, which is still macOS Calendar — it was never disconnected.
+        // `activeProvider` stays the write-capable source, macOS Calendar.
         XCTAssertEqual(
             harness.model.state.connectedProviders, [.macOSEventKit, .googleCalendar])
         XCTAssertEqual(harness.model.state.activeProvider, .macOSEventKit)
@@ -109,8 +108,7 @@ final class AppModelTests: BaseTestCase {
         XCTAssertEqual(
             harness.model.state.connectedProviders, [.macOSEventKit, .googleCalendar])
         XCTAssertEqual(harness.model.state.activeProvider, .macOSEventKit)
-        // The merged list is adopted wholesale; it already spans every
-        // connected source.
+        // The merged list already spans every connected source.
         XCTAssertEqual(harness.model.state.calendars, [googleCalendar])
         XCTAssertFalse(harness.model.state.providerChangeInProgress)
     }

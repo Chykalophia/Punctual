@@ -1,15 +1,13 @@
 //
 //  CommandBarAgenda.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless plain-text agenda builder for the Command Bar's "Copy today's
-//  agenda" action. Deterministic assembly from preformatted entries (the app
-//  passes locale-formatted time strings), mirroring DiagnosticsReport.text.
+//  Hostless plain-text builder for the Command Bar's "Copy today's agenda" action.
 //
 
 import Foundation
 
-/// One agenda line. `timeRange` is preformatted app-side (e.g. "9:00 – 9:30").
+/// One agenda line. `timeRange` is preformatted by the app.
 struct CommandBarAgendaEntry: Equatable {
     let title: String
     let timeRange: String
@@ -17,9 +15,8 @@ struct CommandBarAgendaEntry: Equatable {
 }
 
 enum CommandBarAgenda {
-    /// Builds the copyable agenda: a header line, then one bullet per entry.
-    /// All-day entries omit the time. `emptyPlaceholder` renders when there are
-    /// no entries (both header and placeholder are already localized).
+    /// Builds the agenda: a header line, then one bullet per entry, all-day entries without a time.
+    /// `emptyPlaceholder` is used when there are no entries. Both strings arrive localized.
     static func text(
         for entries: [CommandBarAgendaEntry],
         header: String,

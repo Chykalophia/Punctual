@@ -1,8 +1,8 @@
 //
 //  MenuBarCountdownLeadTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for how early the Countdown block starts counting.
+//  Tests for how early the Countdown block starts counting.
 //
 
 import XCTest
@@ -40,7 +40,6 @@ final class MenuBarCountdownLeadTests: XCTestCase {
     }
 
     func testHiddenBeyondTheLead() {
-        // The case this setting was added for: a 3h40m-away evening block.
         XCTAssertFalse(shows(startsIn: 3 * 3600 + 40 * 60, lead: 60))
     }
 
@@ -165,17 +164,14 @@ final class MenuBarCountdownLeadTests: XCTestCase {
     func testTheCountdownReturnsInsideTheWindow() {
         let presentation = present(startsIn: 30 * 60, lead: 60)
         XCTAssertTrue(presentation.title.hasPrefix("Journalling"))
-        // Matched as a shape, not a number: the presenter counts from a minute
-        // BEFORE now so a countdown rounds up rather than down (30 minutes away
-        // reads "31m"), and pinning the digits here would be asserting that
-        // unrelated behaviour rather than this setting's.
+        // Matched as a shape: the presenter rounds up (30 minutes away reads "31m"),
+        // which is not this setting's behaviour.
         XCTAssertNotNil(
             presentation.title.range(of: #"\d+m$"#, options: .regularExpression),
             "expected a countdown on the end of \(presentation.title)"
         )
     }
 
-    /// A suppressed countdown must not leave a stack with an empty second row.
     func testTwoLineLayoutCollapsesWhenOnlyTheCountdownWasUnderneath() {
         let presentation = present(startsIn: 3 * 3600 + 40 * 60, lead: 60, twoLines: true)
         XCTAssertEqual(presentation.layout, .inline(showTime: false))

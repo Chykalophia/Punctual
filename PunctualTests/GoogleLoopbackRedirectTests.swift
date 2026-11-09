@@ -1,13 +1,9 @@
 //
 //  GoogleLoopbackRedirectTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  The Google OAuth redirect moved from a reversed-domain custom scheme to a
-//  loopback HTTP listener, which is new code on the critical path of signing in.
-//  The OAuth round trip itself needs a browser and a real Google account, so
-//  what is testable here is the half that runs before it: the listener binds,
-//  hands back a usable `http://127.0.0.1:<port>/` redirect URI, and tears down
-//  cleanly. A listener that fails to start means sign-in cannot begin at all.
+//  Tests for the loopback HTTP listener that receives the Google OAuth redirect: it binds,
+//  returns a usable `http://127.0.0.1:<port>/` redirect URI, and tears down cleanly.
 //
 
 import AppAuth
@@ -47,16 +43,12 @@ final class GoogleLoopbackRedirectTests: XCTestCase {
         XCTAssertGreaterThan(port, 0)
     }
 
-    /// The port is assigned at bind time, so the redirect URI cannot be built
-    /// before the listener starts. This is why `signIn` starts it first.
     func test_eachListenerGetsItsOwnPort() throws {
         let first = try startListener()
         let second = try startListener()
         XCTAssertNotEqual(first.port, second.port)
     }
 
-    /// Cancelling must free the port — otherwise a cancelled sign-in would leak
-    /// a listening socket for the lifetime of the app.
     func test_cancellingReleasesTheListener() throws {
         let handler = OIDRedirectHTTPHandler(successURL: nil)
         var error: NSError?
@@ -64,15 +56,11 @@ final class GoogleLoopbackRedirectTests: XCTestCase {
         XCTAssertNil(error)
 
         handler.cancelHTTPListener()
-        // Cancelling twice must not trap; `signIn`'s `defer` can run after the
-        // listener already stopped itself on receiving a response.
+        // Cancelling twice must not trap; `signIn`'s `defer` can run after the listener stopped itself.
         handler.cancelHTTPListener()
     }
 
-    /// A redirect URI Google will accept for a Desktop-app client. Registering
-    /// one is not required — loopback ports are matched dynamically — but the
-    /// host has to be the loopback literal, not `localhost`, which can resolve
-    /// to IPv6 or be hijacked by a hosts-file entry.
+    /// Must be the loopback literal: `localhost` can resolve to IPv6 or be redirected by a hosts entry.
     func test_redirectURIUsesTheLoopbackLiteralNotLocalhost() throws {
         let url = try startListener()
         XCTAssertFalse(url.absoluteString.contains("localhost"))

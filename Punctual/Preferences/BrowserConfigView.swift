@@ -110,13 +110,12 @@ struct BrowserConfigView: View {
         return pencilImage!
     }
 
-    // allow to change the order of bookmarks
     private func addSystemBrowser() {
         addInstalledBrowser()
     }
 
     /**
-     * allows to remove the bookmark
+     * removes the browser from the browsers configuration.
      */
     func removeBrowser(_ browser: Browser) {
         browserConfigs.removeAll { $0.name == browser.name }

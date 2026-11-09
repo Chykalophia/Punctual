@@ -1,14 +1,9 @@
 //
 //  CalendarGridViewModel.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  App-target view model for the calendar window. Owns the visible range (a
-//  month or a single week, per `CalendarGridMode`), the rendered week grid (via
-//  the hostless MonthGridLayout), and the events for that range bucketed by
-//  start-of-day. It loads its OWN window of events on demand through an injected
-//  fetch closure (resolved by AppDelegate from the calendar repository) — it
-//  never touches the main today/tomorrow sync. The SwiftUI view stays
-//  presentation-only.
+//  View model for the calendar window: the visible month or week, its grid, and that range's
+//  events bucketed by day, fetched through an injected closure independent of the main sync.
 //
 
 import Defaults
@@ -21,12 +16,11 @@ enum CalendarGridMode: String, CaseIterable, Sendable {
     case week
 }
 
-/// Closures the calendar window needs from the app, injected by AppDelegate so
-/// the view model stays decoupled from AppModel / CalendarSync / the coordinator.
+/// App closures the calendar window needs, injected by AppDelegate.
 struct CalendarWindowHandlers {
     /// Fetches events for `[from, to)` across the user's selected calendars.
     var fetchEvents: @MainActor (_ from: Date, _ to: Date) async throws -> [MBEvent]
-    /// Joins the meeting for the given event id (forwards to `.joinMeeting`).
+    /// Joins the meeting for the given event id.
     var join: @MainActor (_ eventID: String) -> Void
 }
 
@@ -64,9 +58,7 @@ final class CalendarGridViewModel: ObservableObject {
         reload()
     }
 
-    /// A locale-aware calendar so the grid honors the user's chosen language
-    /// (which drives `firstWeekday` and the localized weekday/month symbols).
-    /// Applies the user's first-weekday override when set (0 = follow locale).
+    /// The current calendar with the app's locale and the user's first-weekday override (0 follows the locale).
     static func defaultCalendar() -> Calendar {
         var calendar = Calendar.current
         calendar.locale = I18N.instance.locale
@@ -79,9 +71,7 @@ final class CalendarGridViewModel: ObservableObject {
 
     // MARK: - Mode
 
-    /// Switches the fold and persists the choice. The selected day is never lost:
-    /// it stays selected and it anchors the newly visible range, so the user
-    /// lands on the week (or month) that contains it.
+    /// Switches and persists the mode, anchoring the new range on the selected day.
     func setMode(_ newMode: CalendarGridMode) {
         guard newMode != mode else { return }
         mode = newMode
@@ -133,12 +123,7 @@ final class CalendarGridViewModel: ObservableObject {
         goTo(now)
     }
 
-    /// Jumps the grid to `date` and selects that day.
-    ///
-    /// Both anchors are moved, not just the one the current mode reads: switching
-    /// month/week after a jump should land where the user jumped TO, not back
-    /// where the other mode was left. `goToToday()` is this with `now`, kept as
-    /// its own entry point because the Today button is a distinct affordance.
+    /// Jumps the grid to `date` and selects that day. Moves both the month and week anchors.
     func goTo(_ date: Date) {
         visibleMonth = MonthGridLayout.startOfMonth(for: date, calendar: calendar)
         visibleWeekStart = MonthGridLayout.firstVisibleDayOfWeek(
@@ -155,9 +140,6 @@ final class CalendarGridViewModel: ObservableObject {
     }
 
     /// The first and last day currently drawn, padding cells included.
-    ///
-    /// Read off `weeks` rather than recomputed, so it cannot disagree with what
-    /// is actually on screen.
     var visibleRange: (start: Date, end: Date)? {
         guard let first = weeks.first?.first?.date,
               let last = weeks.last?.last?.date else { return nil }
@@ -165,10 +147,7 @@ final class CalendarGridViewModel: ObservableObject {
     }
 
     /// Moves the keyboard selection, paging the grid when it walks off the edge.
-    ///
-    /// With nothing selected yet, the first arrow press starts from the anchor of
-    /// whatever is on screen rather than from an arbitrary date — pressing Down
-    /// on a freshly-opened window should land somewhere the user can see.
+    /// With nothing selected, starts from the visible range's anchor.
     func moveSelection(byDays days: Int) {
         guard let visibleRange else { return }
         let anchor = selectedDay ?? (mode == .month ? visibleMonth : visibleWeekStart)
@@ -179,8 +158,6 @@ final class CalendarGridViewModel: ObservableObject {
             calendar: calendar
         )
         if result.requiresPaging {
-            // goTo re-anchors BOTH modes and reloads, which is exactly what
-            // stepping past the edge needs.
             goTo(result.selectedDay)
         } else {
             selectedDay = result.selectedDay
@@ -205,9 +182,7 @@ final class CalendarGridViewModel: ObservableObject {
 
     // MARK: - Loading
 
-    /// Rebuilds the grid for the visible range and (re)loads its events: the
-    /// whole month grid (leading/trailing padding days included) in month mode,
-    /// the single visible week in week mode.
+    /// Rebuilds the grid for the visible range and reloads its events.
     private func reload() {
         let first: Date
         let lastVisible: Date
@@ -233,8 +208,7 @@ final class CalendarGridViewModel: ObservableObject {
                 containing: visibleWeekStart, calendar: calendar
             )
         }
-        // Fetch is a half-open range, so extend to the start of the day *after*
-        // the last visible day to include all-day and late events on that day.
+        // The fetch range is half-open, so end at the start of the day after the last visible day.
         let upperBound = calendar.date(byAdding: .day, value: 1, to: lastVisible) ?? lastVisible
 
         loadTask?.cancel()
@@ -256,9 +230,8 @@ final class CalendarGridViewModel: ObservableObject {
         }
     }
 
-    /// Buckets events by the start-of-day of their `startDate` (v1: a multi-day
-    /// event lands only on its start day). Each bucket is sorted all-day-first,
-    /// then by start time.
+    /// Buckets events by their start day (a multi-day event lands only on its first day),
+    /// each bucket sorted all-day first, then by start time.
     private func bucket(_ events: [MBEvent]) -> [Date: [MBEvent]] {
         var result: [Date: [MBEvent]] = [:]
         for event in events {

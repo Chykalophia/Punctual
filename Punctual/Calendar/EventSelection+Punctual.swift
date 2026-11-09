@@ -1,5 +1,5 @@
 //
-//  EventSelection+MeetingBar.swift
+//  EventSelection+Punctual.swift
 //  MeetingBar
 //
 
@@ -87,15 +87,10 @@ private extension NonAlldayEventsAppereance {
 }
 
 extension OngoingEventVisibility {
-    /// How long after a meeting starts it stops being the "current" meeting,
-    /// or nil when the answer does not depend on elapsed time.
+    /// Seconds after a meeting starts that it stops being the current meeting,
+    /// or nil when the handover is driven by the next meeting's start.
     ///
-    /// Kept next to the selection logic it mirrors: `StatusBarTickPolicy` uses
-    /// it to schedule a redraw at exactly that instant, and a value that
-    /// disagreed with `EventSelection.nextEvent` would redraw at the wrong
-    /// moment. `.hideImmediateAfter` returns 0 (the transition is the start
-    /// itself) and `.showTenMinBeforeNext` returns nil, since its handover is
-    /// driven by the *next* meeting's start, which is already a transition.
+    /// Must agree with `EventSelection.nextEvent`; `StatusBarTickPolicy` schedules redraws from it.
     var gracePeriod: TimeInterval? {
         switch self {
         case .hideImmediateAfter: return 0

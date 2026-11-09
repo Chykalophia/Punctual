@@ -2,9 +2,7 @@
 //  SoftwareUpdateConfigurationTests.swift
 //  Punctual
 //
-//  Pins the Sparkle configuration that decides whether an update can be found,
-//  trusted and installed. Reads the BUILT app's Info.plist (the test host) and
-//  the entitlement files every signing path uses.
+//  Pins the Sparkle configuration in the built app's Info.plist and the entitlement files.
 //
 //  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
@@ -18,9 +16,6 @@ final class SoftwareUpdateConfigurationTests: XCTestCase {
         Bundle.main.object(forInfoDictionaryKey: key)
     }
 
-    /// The feed every shipped build checks. HTTPS only, and the "latest
-    /// release" alias, so each published release's own appcast.xml is the one
-    /// served. A local test build may override it; a shipped one must not.
     func testFeedIsTheLatestGitHubReleaseOverHTTPS() {
         XCTAssertEqual(
             info("SUFeedURL") as? String,
@@ -28,29 +23,18 @@ final class SoftwareUpdateConfigurationTests: XCTestCase {
         )
     }
 
-    /// Every update must carry an EdDSA signature that verifies against this
-    /// key. A missing or malformed key would make Sparkle refuse all updates,
-    /// or (worse, in older Sparkle) fall back to weaker checks.
     func testPublicKeyIsAValidEd25519Key() throws {
         let base64 = try XCTUnwrap(info("SUPublicEDKey") as? String)
         let raw = try XCTUnwrap(Data(base64Encoded: base64), "SUPublicEDKey is not base64")
         XCTAssertEqual(raw.count, 32, "an Ed25519 public key is 32 bytes")
     }
 
-    /// The app is sandboxed, so Sparkle can only install through its installer
-    /// launcher service.
     func testSandboxInstallerServiceIsEnabled() {
         XCTAssertEqual(info("SUEnableInstallerLauncherService") as? Bool, true)
     }
 
-    /// The installer service is reachable only with these mach-lookup
-    /// exceptions. Every entitlements file a build can be signed with must have
-    /// them, or updates fail only in that kind of build.
-    ///
-    /// Xcode expands `$(PRODUCT_BUNDLE_IDENTIFIER)` in the files it signs with;
-    /// LocalSigning is applied by plain `codesign` (make sign-local), which does
-    /// not, so it must spell the ids out. Each file is checked for what its
-    /// signer will actually produce.
+    /// Xcode expands `$(PRODUCT_BUNDLE_IDENTIFIER)` in the files it signs with; LocalSigning is
+    /// signed by plain `codesign`, which does not, so it must spell the ids out.
     func testEveryEntitlementsFileAllowsSparklesInstaller() throws {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // PunctualTests
@@ -73,17 +57,14 @@ final class SoftwareUpdateConfigurationTests: XCTestCase {
         }
     }
 
-    /// Integrity settings: the feed itself must be EdDSA-signed, and the
-    /// download is verified before Sparkle even mounts it.
     func testFeedMustBeSignedAndUpdatesVerifiedBeforeExtraction() {
         XCTAssertEqual(info("SURequireSignedFeed") as? Bool, true)
         XCTAssertEqual(info("SUVerifyUpdateBeforeExtraction") as? Bool, true)
     }
 }
 
-/// Sparkle's delegate methods are optional Objective-C requirements: a
-/// misspelled one compiles and is then silently never called. Pin each one by
-/// the exact selector Sparkle 2.10 sends.
+/// A misspelled optional Objective-C delegate method compiles and is never called, so each
+/// is pinned by the exact selector Sparkle sends.
 @MainActor
 final class SoftwareUpdaterDelegateTests: XCTestCase {
     func testEveryDelegateMethodAnswersSparklesExactSelector() {
@@ -104,15 +85,13 @@ final class SoftwareUpdaterDelegateTests: XCTestCase {
         }
     }
 
-    /// The four cases of who shows a scheduled update.
     func testScheduledUpdateIsNeverPulledInFrontButIsNeverLost() {
         // In focus already: Sparkle's window is fine.
         XCTAssertTrue(UpdateReminderPolicy.sparkleShowsScheduledUpdate(immediateFocus: true, notificationsAuthorized: true))
         XCTAssertTrue(UpdateReminderPolicy.sparkleShowsScheduledUpdate(immediateFocus: true, notificationsAuthorized: false))
         // In the background with notifications: a notification, no window.
         XCTAssertFalse(UpdateReminderPolicy.sparkleShowsScheduledUpdate(immediateFocus: false, notificationsAuthorized: true))
-        // In the background WITHOUT notifications: Sparkle's (non-activating)
-        // window, or the user would never hear about the update.
+        // In the background without notifications: Sparkle's non-activating window.
         XCTAssertTrue(UpdateReminderPolicy.sparkleShowsScheduledUpdate(immediateFocus: false, notificationsAuthorized: false))
     }
 }

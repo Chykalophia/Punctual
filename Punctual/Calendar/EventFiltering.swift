@@ -1,5 +1,5 @@
 //
-//  EventFilterPolicy.swift
+//  EventFiltering.swift
 //  MeetingBar
 //
 
@@ -43,10 +43,7 @@ struct EventFilterEvent: Equatable {
 
 enum EventFiltering {
     /// Whether any of the user's title patterns hides a meeting with this title.
-    ///
-    /// Extracted so the Filters pane's "Try a title" tester runs the SAME code
-    /// as the filter itself — a tester that re-implements the rule is a tester
-    /// that can disagree with reality.
+    /// Invalid patterns are skipped. Shared by the filter and the Filters pane's title tester.
     static func titleIsFilteredOut(_ title: String, patterns: [String]) -> Bool {
         for pattern in patterns {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }

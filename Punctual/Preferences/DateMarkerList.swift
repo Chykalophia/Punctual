@@ -1,24 +1,18 @@
 //
 //  DateMarkerList.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The editor for user-marked important days — birthdays, anniversaries,
-//  deadlines — shown on both month grids.
+//  Editor for user-marked days (birthdays, anniversaries, deadlines) shown on
+//  the month grids: an inline list with add and delete, and an add sheet.
 //
-//  Shaped after `TextPatternList`: an inline list with add and delete, and a
-//  sheet for entry. No edit action, unlike patterns — a marker is a date and a
-//  short label, so correcting one is faster to delete and re-add than to open a
-//  second sheet for.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import SwiftUI
 
 /// A list of stored date markers with add / delete.
 struct DateMarkerList: View {
-    /// The raw stored strings. Encoding stays at this boundary so the view above
-    /// never has to know the storage format.
+    /// The raw stored marker strings; decoding happens inside this view.
     @Binding var rawMarkers: [String]
 
     @State private var isAdding = false
@@ -32,8 +26,7 @@ struct DateMarkerList: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            // Indexed so two markers with the same label and date stay separately
-            // deletable rather than collapsing to one row.
+            // Identified by offset: identical markers must stay separate rows.
             ForEach(Array(markers.enumerated()), id: \.offset) { index, marker in
                 HStack(spacing: 8) {
                     Text(displayDate(marker))
@@ -72,10 +65,9 @@ struct DateMarkerList: View {
         }
     }
 
-    /// Deletes by position in the DECODED list, mapped back through the encoding.
-    /// Deleting by raw index would be wrong the moment an unparseable entry sits
-    /// earlier in the stored list — the decoded list has dropped it, so the
-    /// indices no longer line up.
+    /// Deletes the marker at `index` in the decoded list.
+    ///
+    /// Not a raw index: unparseable stored entries are dropped from the decoded list, so indices differ.
     private func remove(at index: Int) {
         let decoded = markers
         guard decoded.indices.contains(index) else { return }
@@ -97,8 +89,7 @@ struct DateMarkerList: View {
         }
         let formatter = DateFormatter()
         formatter.locale = I18N.instance.locale
-        // A repeating marker has no year to show, and printing the placeholder
-        // one would be a lie.
+        // Repeating markers omit the year; theirs is only a placeholder.
         formatter.setLocalizedDateFormatFromTemplate(marker.repeatsAnnually ? "MMMd" : "yMMMd")
         return formatter.string(from: date)
     }
@@ -131,8 +122,6 @@ struct DateMarkerEditor: View {
                 prompt: Text("preferences_date_markers_label_placeholder".loco())
             )
 
-            // Defaulted ON: birthdays and anniversaries are the common case, and
-            // a one-off deadline is the deliberate exception.
             Toggle("preferences_date_markers_repeats_toggle".loco(), isOn: $repeatsAnnually)
 
             HStack {

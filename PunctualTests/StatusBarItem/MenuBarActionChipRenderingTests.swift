@@ -1,14 +1,9 @@
 //
 //  MenuBarActionChipRenderingTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  The half of the Join chip the hostless tests cannot reach.
-//
-//  `MenuBarActionChipGeometry` is pure arithmetic over widths a test hands it;
-//  what it cannot check is that the widths the RENDERER measures off a real
-//  `NSStatusBarButton` are the right ones. That is where this feature can fail
-//  silently: a chip drawn from a mis-measured trailing run still draws, it just
-//  draws in the wrong place, over a click target that no longer matches it.
+//  Checks the Join chip widths the renderer measures off a real `NSStatusBarButton`, which the
+//  hostless geometry tests cannot reach.
 //
 
 import Cocoa
@@ -72,8 +67,7 @@ final class MenuBarActionChipRenderingTests: BaseTestCase {
             "chip \(chip) escaped the item \(button.bounds)"
         )
         XCTAssertGreaterThan(chip.width, 0)
-        // "Join" is a short word; the capsule around it must not swallow the
-        // whole item, which is what a mis-measured run would produce.
+        // The capsule must not cover the whole item, as a mis-measured run would.
         XCTAssertLessThan(
             chip.width,
             button.bounds.width,
@@ -108,8 +102,6 @@ final class MenuBarActionChipRenderingTests: BaseTestCase {
         XCTAssertNil(chipOverlay(controller)?.chipRect)
     }
 
-    /// The click target has to be torn down with the chip, or a stale rect keeps
-    /// swallowing clicks that should open the dropdown long after the meeting.
     func testChipIsClearedOnTheNextRenderWithoutOne() {
         let controller = makeController()
         defer { controller.removeFromStatusBar() }
@@ -122,9 +114,6 @@ final class MenuBarActionChipRenderingTests: BaseTestCase {
         XCTAssertNil(chipOverlay(controller)?.chipRect)
     }
 
-    /// Defensive: the renderer only draws a chip when the string really does end
-    /// with the label. A presentation whose title lost it must not put a live
-    /// click target over whatever happens to be at the end instead.
     func testNoChipWhenTheLabelIsNotTheTrailingRun() {
         let controller = makeController()
         defer { controller.removeFromStatusBar() }

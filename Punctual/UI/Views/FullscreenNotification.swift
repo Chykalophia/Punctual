@@ -43,8 +43,7 @@ struct FullscreenNotification: View {
                     Text(getEventDateString(event))
                 }.padding(15)
 
-                // display location of the event, very useful if you
-                // have a lot of meetings in a building with a lot of meeting rooms
+                // Event location, useful for telling meeting rooms apart.
                 if let location = event.location {
                     VStack(spacing: 10) {
                         Text(location)

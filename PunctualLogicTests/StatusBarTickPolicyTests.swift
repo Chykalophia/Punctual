@@ -1,6 +1,6 @@
 //
 //  StatusBarTickPolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -14,7 +14,7 @@ final class StatusBarTickPolicyTests: XCTestCase {
         return calendar
     }()
 
-    /// 2026-07-21 13:31:54 UTC — the moment of the live report, to the second.
+    /// 2026-07-21 13:31:54 UTC.
     private var now: Date {
         calendar.date(from: DateComponents(year: 2026, month: 7, day: 21, hour: 13, minute: 31, second: 54))!
     }
@@ -32,8 +32,6 @@ final class StatusBarTickPolicyTests: XCTestCase {
         )
     }
 
-    /// Exactly on the boundary, the *next* one is a full minute away — not now,
-    /// which would spin the timer.
     func testOnTheBoundaryTheNextOneIsAMinuteLater() {
         XCTAssertEqual(
             StatusBarTickPolicy.nextMinuteBoundary(after: at(13, 32), calendar: calendar),
@@ -50,9 +48,7 @@ final class StatusBarTickPolicyTests: XCTestCase {
 
     // MARK: - Transitions
 
-    /// The reported failure: the stand-up starts at 13:30 and, with the grace
-    /// period at ten minutes, stops being the current meeting at 13:40. Both
-    /// are real redraw points; nothing about the calendar changes at either.
+    /// Stand-up at 13:30 with a ten-minute grace period, so 13:40 is also a redraw point.
     func testTransitionsCoverStartGraceAndEnd() {
         let transitions = StatusBarTickPolicy.transitionDates(
             eventStart: at(13, 30),
@@ -79,8 +75,6 @@ final class StatusBarTickPolicyTests: XCTestCase {
         )
     }
 
-    /// A transition inside the next minute wins over the minute boundary, so
-    /// the redraw lands exactly when the meeting state changes.
     func testAnImminentTransitionBeatsTheMinuteBoundary() {
         XCTAssertEqual(
             StatusBarTickPolicy.nextFireDate(now: at(13, 31, 54), transitions: [at(13, 31, 58)], calendar: calendar),
@@ -97,8 +91,6 @@ final class StatusBarTickPolicyTests: XCTestCase {
         XCTAssertEqual(fire, at(13, 32))
     }
 
-    /// A transition an hour out must not defer the redraw an hour — the
-    /// countdown still has to advance every minute in the meantime.
     func testDistantTransitionDoesNotDelayTheMinuteTick() {
         XCTAssertEqual(
             StatusBarTickPolicy.nextFireDate(now: now, transitions: [at(14, 30)], calendar: calendar),
@@ -126,9 +118,6 @@ final class StatusBarTickPolicyTests: XCTestCase {
         )
     }
 
-    /// With "hide finished meetings" on, a row also disappears some minutes
-    /// after it ends — a third transition per row, and one the list would
-    /// otherwise notice up to a minute late.
     func testAgendaTransitionsIncludeTheHideFinishedExpiry() {
         let transitions = StatusBarTickPolicy.transitionDates(
             boundaries: [.init(start: at(13, 30), end: at(13, 45))],
@@ -151,8 +140,6 @@ final class StatusBarTickPolicyTests: XCTestCase {
         )
     }
 
-    /// The point of feeding a whole day in: a row further down the list flips to
-    /// "running" before the next minute boundary, and the redraw lands on it.
     func testTheEarliestAgendaBoundaryDrivesTheNextFire() {
         let transitions = StatusBarTickPolicy.transitionDates(
             boundaries: [
@@ -172,8 +159,6 @@ final class StatusBarTickPolicyTests: XCTestCase {
         XCTAssertEqual(StatusBarTickPolicy.delay(now: now, until: at(13, 32)), 6, accuracy: 0.001)
     }
 
-    /// Never zero or negative: that would spin, and firing a hair early would
-    /// redraw the stale state and then wait a full minute to correct it.
     func testDelayHasAPositiveFloor() {
         XCTAssertEqual(StatusBarTickPolicy.delay(now: now, until: now), 0.5, accuracy: 0.001)
         XCTAssertEqual(

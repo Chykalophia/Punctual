@@ -1,6 +1,6 @@
 //
 //  HelpersTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 //  Created by Andrii Leitsius on 10.04.2022.
 //  Copyright © 2022 Andrii Leitsius. All rights reserved.
@@ -323,8 +323,7 @@ final class MeetingOpenerTests: BaseTestCase {
             withLink: false,
             attendees: attendees
         )
-        // emailAttendees opens an NSSharingService, but we can at least verify it does not crash
-        // with a mix of nil and non-nil emails. (Real sending is not testable headlessly.)
+        // Sending is not testable headlessly; this checks a mix of nil and non-nil emails does not crash.
         MeetingOpener.emailAttendees(for: event)
     }
 }

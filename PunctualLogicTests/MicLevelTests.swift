@@ -1,10 +1,8 @@
 //
 //  MicLevelTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Covers the pure dBFS → 0…1 normalization that drives the pre-call preview's
-//  mic-level meter: endpoints, the linear-in-dB midpoint, out-of-range clamping,
-//  non-finite guards, and a custom floor.
+//  Tests for the dBFS to 0...1 normalization behind the mic-level meter.
 //
 
 import XCTest

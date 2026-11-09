@@ -1,6 +1,6 @@
 //
 //  ChangelogTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 //  The typed release-notes model and the sub-1.0 version-reset migration.
 //
@@ -12,25 +12,23 @@ import XCTest
 final class ChangelogTests: XCTestCase {
     func testEveryReleaseSurfacesForAFreshInstallNewestFirst() {
         let unseen = ReleaseNotes.releases(newerThan: "0.0.0")
-        XCTAssertEqual(unseen.map(\.version), ["1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"])
+        XCTAssertEqual(unseen.map(\.version), ["1.1.2", "1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"])
     }
 
     func testOnlyTheNewerReleaseSurfacesAfterAcknowledgingAnOlderOne() {
-        XCTAssertEqual(ReleaseNotes.releases(newerThan: "1.1.0").map(\.version), ["1.1.1"])
+        XCTAssertEqual(ReleaseNotes.releases(newerThan: "1.1.1").map(\.version), ["1.1.2"])
     }
 
     func testNothingSurfacesOnceTheLatestIsAcknowledged() {
-        XCTAssertTrue(ReleaseNotes.releases(newerThan: "1.1.1").isEmpty)
+        XCTAssertTrue(ReleaseNotes.releases(newerThan: "1.1.2").isEmpty)
         // And the acknowledged releases move under "earlier releases".
         XCTAssertEqual(
-            ReleaseNotes.releases(upToAndIncluding: "1.1.1").map(\.version),
-            ["1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"]
+            ReleaseNotes.releases(upToAndIncluding: "1.1.2").map(\.version),
+            ["1.1.2", "1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"]
         )
     }
 
     func testTheNewestReleaseNoteMatchesTheShippingVersion() {
-        // A release without its own What's New entry would show users the
-        // previous version's notes as if they were new.
         let shipping = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         XCTAssertEqual(ReleaseNotes.all.first?.version, shipping)
     }

@@ -2,9 +2,7 @@
 //  PermissionReporter.swift
 //  MeetingBar
 //
-//  Populates `PermissionSnapshot` (defined in `DiagnosticsReport.swift`) from
-//  the real EventKit / UserNotifications APIs. Lives in the host target so
-//  the hostless logic package can still depend on the snapshot type.
+//  Populates `PermissionSnapshot` from the EventKit and UserNotifications APIs.
 //
 
 import EventKit
@@ -30,11 +28,8 @@ enum PermissionReporter {
         )
     }
 
-    /// Current EventKit calendar authorization, mapped onto the hostless
-    /// `PermissionSnapshot.CalendarAccess` enum. Exposed so launch-time
-    /// (`AppDelegate.setup`) and preferences (`CalendarsTab`) code can gate a
-    /// permission request on `.notDetermined` without importing EventKit or
-    /// re-implementing the macOS 14 authorization-enum split.
+    /// Current EventKit calendar authorization as a `PermissionSnapshot.CalendarAccess`, so callers
+    /// can gate on `.notDetermined` without importing EventKit or handling the macOS 14 enum split.
     static func calendarAuthorizationStatus() -> PermissionSnapshot.CalendarAccess {
         if #available(macOS 14, *) {
             switch EKEventStore.authorizationStatus(for: .event) {

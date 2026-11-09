@@ -1,20 +1,17 @@
 //
 //  DropdownComposition.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless model for the composable menu dropdown (MeetingBarNG). Pure value
-//  types + resolution math only — no AppKit/Defaults/EventKit. Mirrors the
-//  `MenuBarComposition` / `MenuBarTokenKind` convention used for the menu-bar
-//  title composer: the raw string list is the source of truth, and unknown /
-//  renamed entries degrade gracefully so a downgrade or a hand-edited Defaults
-//  value can never crash or drop the dropdown.
+//  Hostless model for the composable dropdown: module order, enabled set, and
+//  separator placement. Unknown stored raw values are ignored, never fatal.
 //
 
 import Foundation
 
-/// A reorderable, toggleable section of the menu dropdown. The Preferences
-/// footer is intentionally NOT a module — it stays pinned as the last block so
-/// the user can never lock themselves out of Settings/Quit.
+/// A reorderable, toggleable section of the dropdown.
+///
+/// The Preferences footer is deliberately not a module: it is always pinned last
+/// so Settings and Quit stay reachable.
 enum DropdownModule: String, CaseIterable, Codable, Hashable {
     /// The day-summary greeting header at the very top of the dropdown.
     case greeting
@@ -28,25 +25,12 @@ enum DropdownModule: String, CaseIterable, Codable, Hashable {
     case join
     /// The saved bookmarks section.
     case bookmarks
-    // NOTE: `upNext` used to live here — a "Next · <meeting> — in 24m" card with
-    // a progress bar. It described the SAME event as `meeting` and had its own
-    // toggle and its own place in the order, so both could show at once and
-    // usually did. The bar is now a display option on the meeting card. A stored
-    // order still containing "upNext" is dropped by `resolve`, which ignores raw
-    // strings it does not recognise.
 
-    /// A compact month grid. Off by default: it is the tallest thing that can go
-    /// in the panel (~200pt), so it earns its place only for people who want the
-    /// dropdown to be a day dashboard rather than a what's-next glance.
+    /// A compact month grid (about 200pt tall). Off by default.
     case calendar
 
-    /// Whether this module is a list of plain VERBS rather than content.
-    ///
-    /// Drives where the panel draws a rule. A rule between two content modules
-    /// (greeting, timeline, agenda…) just adds noise — they are already separated
-    /// by their own cards and headers. A rule ABOVE the action list earns its
-    /// place: it marks the boundary between "what is happening" and "what you can
-    /// do about it", which is the one break the eye actually needs.
+    /// Whether this module is a list of actions rather than content. The panel
+    /// draws a rule only above action lists, never between content modules.
     var isActionList: Bool {
         switch self {
         case .join, .bookmarks: true
@@ -58,9 +42,7 @@ enum DropdownModule: String, CaseIterable, Codable, Hashable {
 enum DropdownSeparatorPolicy {
     /// Indices in `modules` that should be preceded by a rule.
     ///
-    /// One rule above a RUN of action lists, not one per module: join followed by
-    /// bookmarks is a single group of verbs and reads as one block. Never at index
-    /// 0 — a rule against the panel's top edge separates nothing.
+    /// One rule above each run of consecutive action lists; never at index 0.
     static func separatorIndices(for modules: [DropdownModule]) -> Set<Int> {
         var indices: Set<Int> = []
         for (index, module) in modules.enumerated() where module.isActionList && index > 0 {
@@ -71,36 +53,28 @@ enum DropdownSeparatorPolicy {
     }
 }
 
-/// An ordered list of dropdown modules. `standard` is the canonical order that
-/// reproduces the classic dropdown layout, so a fresh install (or an empty
-/// stored order) renders exactly as before.
+/// An ordered list of dropdown modules.
 struct DropdownComposition: Equatable {
     var modules: [DropdownModule]
 
-    /// THIS EXACT ORDER reproduces the current dropdown layout
-    /// (greeting → timeline → meeting → calendar → agenda → join → bookmarks).
+    /// The default order, used for a fresh install or an empty stored order.
     ///
-    /// `calendar` has to appear here even though it ships DISABLED: `resolve`
-    /// only back-fills modules it finds in this list, so a module absent from it
-    /// could never surface for a user whose stored order predates it. Position is
-    /// its home when switched on — above the agenda, so the month sits with the
-    /// other widgets rather than stranded under the bookmarks.
+    /// Every module must appear here, including ones disabled by default:
+    /// `resolve` back-fills missing modules only from this list.
     static let standard = DropdownComposition(
         modules: [.greeting, .timeline, .meeting, .calendar, .agenda, .join, .bookmarks]
     )
 }
 
-/// Pure, deterministic resolution of the stored order + per-module enabled set
-/// into the concrete list of modules to render, in order.
+/// Resolves the stored order and per-module enabled set into the modules to render.
 enum DropdownCompositionPolicy {
     /// Resolves the visible, ordered modules from a stored raw order and the set
     /// of enabled module raw values.
     ///
     /// 1. Parse `rawOrder` into `DropdownModule`, dropping unknowns and de-duping
     ///    (first occurrence wins).
-    /// 2. Append any module absent from `rawOrder`, in `standard` order — so a
-    ///    module added in a future build surfaces even for users whose stored
-    ///    order predates it.
+    /// 2. Append any module absent from `rawOrder`, in `standard` order, so
+    ///    newly added modules surface for users with an older stored order.
     /// 3. Keep only modules whose `rawValue` is in `enabled`.
     static func resolve(order rawOrder: [String], enabled: Set<String>) -> [DropdownModule] {
         var seen = Set<DropdownModule>()
@@ -121,13 +95,9 @@ enum DropdownCompositionPolicy {
     }
 
     // swiftlint:disable function_parameter_count
-    /// The raw values of the dropdown modules whose per-module toggle is on — the
-    /// `enabled` set fed to `resolve(order:enabled:)`. Shared by the status-bar
-    /// controller (which builds the real NSMenu) and the Display-tab live preview
-    /// so the preview can never drift from what the menu actually renders.
-    /// `greeting`/`timeline` reuse the existing preferences; the rest use the
-    /// MeetingBarNG per-module toggles. One boolean per module keeps call sites
-    /// self-documenting.
+    /// The raw values of the modules whose toggle is on: the `enabled` set for
+    /// `resolve(order:enabled:)`. Shared by the dropdown and the Display-tab
+    /// preview so the two cannot drift.
     static func enabledRawValues(
         greeting: Bool,
         timeline: Bool,

@@ -7,34 +7,9 @@
 //
 //  Licensed under the Apache License, Version 2.0.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026: the StoreKit
-//  patronage / Patreon / Buy Me A Coffee monetization was removed from the About
-//  card and the card re-branded; Preferences UX overhaul Phase 0 gave "Copy
-//  diagnostics" a visible confirmation. Phase 2 makes this pane the app itself
-//  and nothing else:
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
-//    • the About card MOVED to the About & Support sidebar footer. Opening
-//      Preferences must not show credits before a setting — and the card needed
-//      three modifiers to fight the grouped form it was sitting in.
-//    • `LaunchAtLoginANDPreferredLanguagePicker` is dissolved (its name literally
-//      contained "AND"): the login toggle is rendered here directly.
-//    • the LANGUAGE PICKER is DELETED. It offered 16 languages against one
-//      maintained catalog (en 659 lines, de 391, ja 410); `ukrainian` mapped to
-//      "ua" while the shipped bundle is `uk.lproj`, so choosing it silently did
-//      nothing; and seven shipped bundles (bg, hu, ko, ta, pt, zh-Hans, enm) had
-//      no entry at all. The app follows macOS instead. This is the one deletion
-//      in the overhaul that removes a real — if already broken — capability, so
-//      it is flagged rather than buried: the `preferredLanguage` Defaults key is
-//      RETAINED and still applied at launch (`I18N.changeLanguage(to:)`, driven
-//      from `StatusBarItemController`), so restoring the control means putting a
-//      picker back, not rebuilding a feature. Do that when the catalogs are
-//      maintained and `AppLanguage.ukrainian` names the bundle that exists.
-//    • the ten shortcut rows lose their trailing colons and their engineer names
-//      ("Open command bar:" → "Open the search bar"), and are sorted into four
-//      labelled groups, because a flat list of ten hotkeys is a list nobody
-//      reads.
-//    • Troubleshooting held a "Use the classic macOS menu instead" switch until
-//      that menu was deleted (`9c178efd`). Only "Reset all settings" remains.
+//  The General pane: app-wide settings, keyboard shortcuts and troubleshooting.
 //
 
 import SwiftUI
@@ -50,9 +25,7 @@ struct GeneralTab: View {
     var body: some View {
         PreferencesGroupedForm {
             Section {
-                // The one setting in the app that turns on a network request.
-                // Its help text names what leaves the Mac rather than describing
-                // the benefit — someone who cares needs the fact, not the pitch.
+                // Enables a network request; the help text states what data leaves the Mac.
                 Toggle(
                     preferenceLabel("preferences_general_location_autocomplete_toggle"),
                     isOn: $locationAutocompleteEnabled
@@ -89,9 +62,7 @@ struct GeneralTab: View {
 
 // MARK: - Keyboard shortcuts
 
-/// Ten hotkeys in four groups named for what the user is trying to do, with a
-/// description on every row whose label cannot carry the whole answer ("Open the
-/// calendar window" — *MeetingBarNG's own month view, not Apple's Calendar app*).
+/// Global keyboard shortcuts, grouped by task, with a description where the label is ambiguous.
 struct ShortcutsSection: View {
     var body: some View {
         Section(header: Text("preferences_general_shortcuts_title".loco())) {
@@ -188,8 +159,7 @@ private struct ShortcutRow<Recorder: View>: View {
 
 // MARK: - Troubleshooting
 
-/// The two ways out. Hidden by scope, not by rarity: both are things you reach
-/// for when something has gone wrong, and neither is a display preference.
+/// Recovery actions, such as resetting all settings.
 private struct TroubleshootingSection: View {
     var body: some View {
         Section {

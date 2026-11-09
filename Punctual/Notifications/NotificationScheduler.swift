@@ -7,8 +7,7 @@ import Defaults
 import Foundation
 import UserNotifications
 
-/// Abstraction over `UNUserNotificationCenter` so the scheduler is testable
-/// without involving the real notification center singleton.
+/// Abstraction over `UNUserNotificationCenter` so the scheduler is testable.
 protocol NotificationRequestSink: AnyObject, Sendable {
     func pendingRequests() async -> [UNNotificationRequest]
     func add(_ request: UNNotificationRequest) async throws
@@ -33,16 +32,9 @@ extension UNUserNotificationCenter: NotificationRequestSink {
     }
 }
 
-/// Reconciles the desired notification plan (from `NotificationPlanningPolicy`)
-/// with the system's pending notification queue:
-///
-/// * pending notifications with our `mb-plan-` prefix that are no longer in
-///   the plan are removed,
-/// * plans that are not yet pending are scheduled.
-///
-/// Identifiers belonging to other subsystems — in particular the snooze flow,
-/// which still posts to the legacy `notificationIDs.event_starts` identifier —
-/// are not touched, so the two paths can coexist.
+/// Reconciles the `NotificationPlanner` plan with the system's pending queue: removes pending
+/// `mb-plan-` requests no longer planned and schedules missing ones. Other identifiers, such
+/// as the snooze notification, are left alone.
 @MainActor
 final class NotificationScheduler {
     nonisolated static let identifierPrefix = "mb-plan-"
@@ -50,9 +42,7 @@ final class NotificationScheduler {
     private let sink: NotificationRequestSink
     private let runner: NotificationActionRunner
 
-    /// Delayed `Task`s for in-app actions (fullscreen / autoJoin / scriptOnStart),
-    /// keyed by notification identifier. Reconciled on every refresh — stale
-    /// tasks are cancelled, missing ones are scheduled.
+    /// Delayed tasks for in-app actions (fullscreen, auto-join, script), keyed by notification identifier.
     private var actionTasks: [String: Task<Void, Never>] = [:]
     private var isStopped = false
 
@@ -147,8 +137,7 @@ final class NotificationScheduler {
 
     // MARK: - In-app action scheduling
 
-    /// Fire any due in-app actions immediately, then reconcile delayed-`Task`s
-    /// against the desired action plan. Stale tasks are cancelled.
+    /// Fires due in-app actions immediately, then reconciles delayed tasks against the plan.
     private func reconcileActions(
         events: [MBEvent],
         plans: [PlannedNotification],
@@ -186,9 +175,7 @@ final class NotificationScheduler {
 }
 
 extension NotificationPlanningEvent {
-    /// - Parameter overrides: per-event reminder overrides, passed in rather than
-    ///   read from Defaults here so the adapter stays testable and the whole list
-    ///   is read once per planning pass instead of once per event.
+    /// - Parameter overrides: Per-event reminder overrides, read once per planning pass by the caller.
     init(event: MBEvent, overrides: [EventReminderOverride] = []) {
         self.init(
             id: event.id,
@@ -206,7 +193,6 @@ extension NotificationPlanningEvent {
 // MARK: - Notification content building
 
 /// Builds `UNNotificationRequest` objects from a planned notification.
-/// Internal to the scheduler — not a public API.
 private enum NotificationContent {
     static func request(
         for plan: PlannedNotification,
@@ -261,7 +247,7 @@ private enum NotificationContent {
 }
 
 extension NotificationPlanningSettings {
-    /// Snapshot of the per-action settings the scheduler currently owns.
+    /// Snapshot of the per-action settings the scheduler owns.
     @MainActor
     static var currentForScheduler: NotificationPlanningSettings {
         let notif = AppSettings.current.notifications

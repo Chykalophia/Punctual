@@ -1,30 +1,19 @@
 //
 //  MeetingIdentifier.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless extraction of a meeting's human-usable identifier from its URL —
-//  the number you read out on a phone bridge, or the room code you paste into a
-//  client that is already signed in. "Copy meeting link" hands over a whole URL,
-//  which is the wrong thing when someone asks "what's the meeting ID?".
+//  Extracts a meeting's human-usable identifier (meeting number or room code) from
+//  its URL. Pure URL parsing with no AppKit or Defaults.
 //
-//  Pure value types and URL parsing — no AppKit, no Defaults — so every
-//  provider's rule is a unit test rather than something discovered in a meeting.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
-/// A meeting's identifier, in the form the service itself uses.
-///
-/// Deliberately NOT reformatted. Zoom shows `123 4567 8901` in its own UI, but
-/// the useful thing to put on the clipboard is what its join field accepts, and
-/// that is the bare digits. Google Meet's canonical form genuinely contains the
-/// hyphens, so those stay.
+/// A meeting's identifier in the form the service's join field accepts: bare digits
+/// for Zoom, hyphenated code for Google Meet.
 public struct MeetingIdentifier: Equatable, Sendable {
-    /// What kind of thing this is, so the UI can label it honestly. Calling a
-    /// named Jitsi room a "meeting ID" would be wrong, and a menu item that lies
-    /// about what it copies is worse than no menu item.
+    /// Whether this is a per-meeting ID or a named room, so the UI can label it accurately.
     public enum Kind: Equatable, Sendable {
         /// A number or code issued per meeting — dial-in-able or paste-able.
         case meetingID
@@ -42,31 +31,17 @@ public struct MeetingIdentifier: Equatable, Sendable {
 }
 
 public enum MeetingIdentifierPolicy {
-    /// The identifier for a meeting URL, or `nil` when the service has none that
-    /// a person could use.
-    ///
-    /// `nil` is the common, correct answer and callers must handle it. Microsoft
-    /// Teams is the clearest case: its URLs carry
-    /// `19:meeting_<base64>@thread.v2`, which is a routing thread id, not the
-    /// conference ID a dial-in prompt asks for — that lives only in the invite
-    /// body. Emitting the thread id under a "Copy meeting ID" label would be
-    /// confidently wrong, so Teams returns nothing.
-    ///
-    /// Matching is on the URL's host and path alone, deliberately: a link found
-    /// in free-text notes may never have been classified, and it would be useless
-    /// to require a detected service before offering its id.
-    ///
+    /// The identifier for a meeting URL, or `nil` when the service has none a person
+    /// could use. Teams returns `nil`: its URL carries a routing thread ID, not the dial-in
+    /// conference ID. Matches on host and path only, so unclassified links work too.
     /// - Parameter url: the detected meeting URL.
     public static func identifier(from url: URL) -> MeetingIdentifier? {
         guard let host = url.host?.lowercased() else { return nil }
 
-        // Path components minus the leading "/", lowercased comparisons happen at
-        // the use site so room names keep the case their owner chose.
+        // Case is preserved so room names keep their owner's casing.
         let parts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
         guard !parts.isEmpty else { return nil }
 
-        // Dispatch by host family rather than one long chain, so each grammar is
-        // testable on its own and the entry point stays readable.
         switch family(of: host) {
         case .zoom: return zoomIdentifier(parts)
         case .googleMeet: return googleMeetIdentifier(parts)
@@ -130,9 +105,8 @@ public enum MeetingIdentifierPolicy {
         return MeetingIdentifier(value: code, kind: .meetingID)
     }
 
-    /// Personal rooms are `/meet/<name>`. Scheduled Webex meetings hide the number
-    /// behind `j.php?MTID=`, which is an opaque token rather than the meeting
-    /// number, so only the personal room is extractable.
+    /// Personal rooms (`/meet/<name>`) only; scheduled meetings carry an opaque
+    /// `j.php?MTID=` token rather than the meeting number.
     private static func webexIdentifier(_ parts: [String]) -> MeetingIdentifier? {
         guard let index = parts.firstIndex(of: "meet"), index + 1 < parts.count else { return nil }
         return MeetingIdentifier(value: parts[index + 1], kind: .room)

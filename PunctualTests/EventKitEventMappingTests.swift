@@ -1,11 +1,9 @@
 //
 //  EventKitEventMappingTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  Contract tests for mbEvent(from:calendar:customRegexes:) id semantics.
-//  EventKit shares calendarItemIdentifier across all occurrences of a
-//  recurring event, so the mapped MBEvent.id must be occurrence-unique or
-//  the downstream id-keyed dedup drops every occurrence but the first.
+//  Contract tests for `mbEvent(from:calendar:customRegexes:)`: `MBEvent.id` must be unique per
+//  occurrence, since EventKit shares `calendarItemIdentifier` across a recurring series.
 //
 
 import EventKit

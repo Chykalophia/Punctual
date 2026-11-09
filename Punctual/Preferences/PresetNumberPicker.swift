@@ -1,30 +1,20 @@
 //
 //  PresetNumberPicker.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  A reusable "preset chips + Custom" control for numeric preferences, built for
-//  Phase 3 of the Preferences overhaul. Replaces the bare ↕ Steppers the user
-//  found confusing: common values are one-tap segments, and picking "Custom"
-//  reveals the familiar stepper for an arbitrary value. Used by the menu-bar
-//  look-ahead threshold and by the menu-bar / dropdown title-length settings.
+//  A "preset segments + Custom" control for numeric preferences.
 //
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
-//  macOS 12-safe (segmented picker + Stepper are both 10.15+).
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import SwiftUI
 
-/// A segmented control of preset numbers plus a "Custom" segment. Selecting a
-/// preset writes it straight to `value`; selecting "Custom" reveals the existing
-/// stepper so the user can dial in any value in `range`.
+/// A segmented control of preset numbers plus a "Custom" segment that reveals a stepper.
 ///
-/// The control is presentation-only: it reads and writes a single `Int` binding
-/// and never changes what the underlying setting does. Presets outside `range`
-/// are filtered out, so one call site can pass a shared preset list even when
-/// its bound setting has a narrower limit.
+/// Selecting a preset writes it to `value`; "Custom" allows any value in `range`.
+/// Presets outside `range` are dropped.
 struct PresetNumberPicker: View {
-    /// Sentinel tag for the "Custom" segment. `Int.min` can never collide with a
-    /// real preference value.
+    /// Tag for the "Custom" segment; `Int.min` never collides with a real value.
     private static let customTag = Int.min
 
     /// Preset values already filtered to `range`.
@@ -38,10 +28,8 @@ struct PresetNumberPicker: View {
     private let example: String?
     private let isEnabled: Bool
 
-    /// Whether the "Custom" segment is active (the stepper is revealed). Seeded
-    /// once from whether the initial value matches a preset, then sticky: dialing
-    /// the stepper to a value that happens to equal a preset does not collapse
-    /// the control back to that segment.
+    /// Whether "Custom" is active. Seeded from the initial value, then sticky: stepping
+    /// onto a preset value does not switch back to that segment.
     @State private var isCustom: Bool
 
     init(
@@ -68,8 +56,7 @@ struct PresetNumberPicker: View {
         self._isCustom = State(initialValue: !available.contains(value.wrappedValue))
     }
 
-    /// Maps the segmented selection to/from the value binding: presets write
-    /// through; the sentinel flips into Custom mode without touching `value`.
+    /// Presets write through to `value`; the Custom tag enters Custom mode without changing `value`.
     private var selection: Binding<Int> {
         Binding(
             get: { isCustom ? Self.customTag : value },

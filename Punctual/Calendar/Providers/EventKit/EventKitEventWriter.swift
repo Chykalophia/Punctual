@@ -1,27 +1,18 @@
 //
 //  EventKitEventWriter.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  EventKit WRITE surface for calendar events (Dot parity: in-app create / edit /
-//  delete). Targets `EKEventStore.shared` — the app's static, full-access
-//  calendar store — so no new permission or entitlement is needed. Mirrors
-//  `RemindersStore`'s Sendable-wrapper + os.Logger error-handling shape.
+//  Creates, updates and deletes calendar events through `EKEventStore.shared`
+//  from a validated `EventDraft`.
 //
-//  Turns a validated, host-free `EventDraft` into an `EKEvent`
-//  (`EKEvent(eventStore:)`), sets the standard fields, and
-//  `save(_:span:commit:)`s. Edit re-fetches the item by identifier, mutates, and
-//  saves; delete re-fetches and `remove`s. Recurring edits/deletes use the
-//  `.thisEvent` span for v1 (a single occurrence — series editing is future work).
-//
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import EventKit
 import Foundation
 
 extension EventEditSpan {
-    /// The EventKit span for this edit scope. `.thisAndFuture` maps to
-    /// `.futureEvents` (this occurrence and every later one in the series).
+    /// The EventKit span for this edit scope.
     var ekSpan: EKSpan {
         self == .thisAndFuture ? .futureEvents : .thisEvent
     }
@@ -41,20 +32,14 @@ enum EventKitWriteError: LocalizedError {
     }
 }
 
-/// Stateless writer over `EKEventStore.shared`. `async` methods are non-isolated,
-/// so the EventKit `save`/`remove` work runs off the main actor; the mutated
-/// `EKEvent` never crosses a suspension point (it is created/fetched and saved
-/// within one method body), which keeps it clear of the Sendable boundary.
+/// Stateless writer over `EKEventStore.shared`. Async methods run off the main actor.
+///
+/// Each `EKEvent` is fetched, mutated and saved within one method body so it never
+/// crosses a suspension point (it is not Sendable).
 struct EventKitEventWriter: Sendable {
-    /// Shared instance so the editor's create/update/delete handlers all target
-    /// the same static store. Mirrors `EKEventStore.shared` / `RemindersStore.shared`.
     static let shared = EventKitEventWriter()
 
-    /// Calendars the user can actually write to, mapped to `MBCalendar` for the
-    /// editor's calendar picker (title + color + id). `MBCalendar` carries no
-    /// writable flag, so it is filtered here from the `EKCalendar`'s
-    /// `allowsContentModifications`. Cheap enough to read synchronously when the
-    /// editor opens.
+    /// Calendars that allow content modifications, for the editor's calendar picker.
     @MainActor
     func writableCalendars() -> [MBCalendar] {
         EKEventStore.shared.calendars(for: .event)
@@ -94,10 +79,10 @@ struct EventKitEventWriter: Sendable {
         return event.eventIdentifier
     }
 
-    /// Re-fetches the event by identifier, applies `draft`, and saves. The
-    /// identifier is the raw `calendarItemIdentifier` carried on `MBEvent`
-    /// (`scriptIdentifier`), so both lookup APIs are tried. `span` scopes a
-    /// recurring edit to the single occurrence or this-and-future occurrences.
+    /// Re-fetches the event by identifier, applies `draft`, and saves.
+    /// - Parameters:
+    ///   - id: An event identifier or `calendarItemIdentifier` (`MBEvent.scriptIdentifier`).
+    ///   - span: Scope of a recurring edit.
     func update(id: String, draft: EventDraft, span: EventEditSpan = .thisEvent) async throws {
         let store = EKEventStore.shared
         guard let event = Self.lookupEvent(id: id, in: store) else {
@@ -123,8 +108,7 @@ struct EventKitEventWriter: Sendable {
         }
     }
 
-    /// Re-fetches the event by identifier and removes it. `span` scopes a
-    /// recurring delete to the single occurrence or this-and-future occurrences.
+    /// Re-fetches the event by identifier and removes it; `span` scopes a recurring delete.
     func delete(id: String, span: EventEditSpan = .thisEvent) async throws {
         let store = EKEventStore.shared
         guard let event = Self.lookupEvent(id: id, in: store) else {
@@ -146,9 +130,7 @@ struct EventKitEventWriter: Sendable {
 
     // MARK: - Helpers
 
-    /// `MBEvent` stores the raw `calendarItemIdentifier` as `scriptIdentifier`;
-    /// try the event-identifier lookup first, then fall back to the calendar-item
-    /// identifier so either flavor resolves.
+    /// Resolves an event identifier, falling back to a `calendarItemIdentifier` lookup.
     private static func lookupEvent(id: String, in store: EKEventStore) -> EKEvent? {
         if let event = store.event(withIdentifier: id) {
             return event

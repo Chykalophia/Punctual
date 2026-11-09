@@ -5,11 +5,7 @@
 //  Created by Andrii Leitsius on 22.03.2021.
 //  Copyright © 2021 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  bold, modern redesign of the "What's New" surface — a hero header, per-version
-//  cards driven by the ReleaseNotes model, an "Earlier releases" disclosure, an
-//  empty "all caught up" state, and an Onboarding-style prominent footer button.
-//  Replaces the hardcoded SidebarListStyle List and the in-content Close button.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -20,7 +16,7 @@ struct ChangelogView: View {
     @Default(.lastRevisedVersionInChangelog) private var lastRevisedVersionInChangelog
     @Default(.appVersion) private var appVersion
 
-    /// Releases unseen since the last acknowledgement — the headline content.
+    /// Releases unseen since the last acknowledgement.
     private var newReleases: [ReleaseNote] {
         ReleaseNotes.releases(newerThan: lastRevisedVersionInChangelog)
     }
@@ -39,10 +35,7 @@ struct ChangelogView: View {
             footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The window itself is clear (WindowStylePolicy); the content paints an
-        // opaque rounded background and a hairline border so the borderless
-        // window reads as a distinct surface and AppKit can derive its shadow —
-        // matching the Onboarding chrome.
+        // The window is clear; this opaque background and border let AppKit draw its shadow.
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
@@ -145,9 +138,7 @@ struct ChangelogView: View {
         .padding(.vertical, 14)
     }
 
-    /// Closing the window is what acknowledges the changelog: AppDelegate's
-    /// window-close handler matches on WindowTitles.changelog and records the
-    /// current app version as last-seen.
+    /// Closing the window acknowledges the changelog: WindowCoordinator's close handler records the version as seen.
     private func close() {
         NSApplication.shared.keyWindow?.close()
     }

@@ -5,9 +5,7 @@
 //  Created by Andrii Leitsius on 12.06.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Modified for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026:
-//  register the camera/mic pre-call preview ("mirror check") shortcut name and
-//  the multi-zone world-clock panel shortcut name.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import KeyboardShortcuts

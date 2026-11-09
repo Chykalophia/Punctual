@@ -1,50 +1,33 @@
 //
 //  MenuBarJoinAction.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The menu bar's own call to action: a "Join" chip that appears on the status
-//  item shortly before a meeting starts and joins it when clicked.
+//  Hostless policy and geometry for the menu bar's "Join" chip: whether it shows
+//  and where it sits. The drawn capsule and the click hit-test share one rect.
 //
-//  Two decisions live here, both pure so they are testable without a menu bar:
-//  WHETHER the chip shows (`MenuBarJoinActionPolicy`) and WHERE it sits
-//  (`MenuBarActionChipGeometry`). The second matters more than it looks: the
-//  status item is a single `NSStatusBarButton` whose click normally opens the
-//  dropdown, so the chip is not a real control — it is a drawn capsule plus a
-//  rectangle the click handler tests against. Draw it in one place and hit-test
-//  it in another and they drift, which means a chip you can see but not press.
-//  One function returns the rect, and both callers use it.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
 /// The user's answers on the Menu Bar pane, snapshotted for the policy.
 struct MenuBarJoinActionSettings: Equatable {
-    /// "Show a Join button in the menu bar". ON by default — the whole point of
-    /// a meeting app's menu bar item is that the meeting is one click away.
+    /// "Show a Join button in the menu bar".
     var isEnabled: Bool
-    /// How long before the start the chip appears. `0` means "only once the
-    /// meeting is actually running".
+    /// Minutes before the start that the chip appears; `0` means only while running.
     var leadMinutes: Int
     /// The chip's text, localized by the caller (`"Join"`).
     var label: String
 
-    /// The "no chip at all" snapshot, so callers that predate the feature — and
-    /// the memberwise default on `MenuBarComposedSettings` — stay source-compatible.
+    /// Settings that never show a chip; the default for `MenuBarComposedSettings`.
     static let disabled = MenuBarJoinActionSettings(isEnabled: false, leadMinutes: 0, label: "")
 }
 
 enum MenuBarJoinActionPolicy {
     /// The chip's text, or `""` when the menu bar should not show one.
     ///
-    /// Three things have to hold at once: the user asked for it, the meeting is
-    /// close enough (or running), and there is somewhere to actually go. That
-    /// last one is why `hasMeetingLink` exists rather than the policy assuming
-    /// every event is joinable — a lunch block with no conferencing link would
-    /// otherwise get a Join chip that opens nothing. It is the same condition the
-    /// dropdown's row affordance uses, so the two surfaces offer Join on exactly
-    /// the same set of meetings.
+    /// Shown only when enabled, the event has a meeting link, the label is
+    /// non-empty, and the meeting is imminent per `EventActionProminence`.
     static func label(
         event: StatusBarEventPresentationInput,
         settings: MenuBarJoinActionSettings,
@@ -55,10 +38,6 @@ enum MenuBarJoinActionPolicy {
         let trimmed = settings.label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
-        // Shares `EventActionProminence` with the menu bar's bold emphasis and
-        // the dropdown's Join pill: "close enough to act on" is one rule in this
-        // app, evaluated here with the chip's own lead time. A meeting that has
-        // already ended is not imminent, so the chip clears itself.
         guard EventActionProminence.isImminent(
             start: event.startDate,
             end: event.endDate,
@@ -69,16 +48,10 @@ enum MenuBarJoinActionPolicy {
         return trimmed
     }
 
-    /// The instant the chip becomes due for `eventStart`, for the redraw clock.
+    /// The instant the chip becomes due for `eventStart`, used to schedule an
+    /// exact redraw for meetings that do not start on a whole minute.
     ///
-    /// The status bar already re-renders on every minute boundary, which would
-    /// show the chip within 60 seconds of its time by itself. This exists for the
-    /// meetings that do not start on a whole minute: a 10:00:30 start with a
-    /// two-minute lead is due at 09:58:30, and rounding that up to 09:59:00 would
-    /// quietly shorten the lead the user asked for.
-    ///
-    /// Returns `nil` when the feature is off, so a disabled chip never adds a
-    /// wake-up to the timer.
+    /// - Returns: `nil` when the chip is disabled.
     static func appearanceDate(
         eventStart: Date,
         settings: MenuBarJoinActionSettings
@@ -88,9 +61,7 @@ enum MenuBarJoinActionPolicy {
     }
 }
 
-/// Everything the chip's geometry depends on, measured off the button by the
-/// renderer. Grouped into one value so the pure function's signature stays
-/// readable and so a test can state a whole layout in one literal.
+/// The status-item measurements the chip's geometry depends on.
 struct MenuBarActionChipMetrics: Equatable {
     /// The status item's bounds, in its own (non-flipped, y-up) coordinates.
     var buttonBounds: CGRect
@@ -98,10 +69,10 @@ struct MenuBarActionChipMetrics: Equatable {
     var imageWidth: CGFloat
     /// Whether that icon draws after the text (the user put the icon block last).
     var imageIsTrailing: Bool
-    /// The widest rendered line — what the item was actually sized to.
+    /// The widest rendered line, which the item is sized to.
     var titleWidth: CGFloat
-    /// Width of the line the chip sits on. Equal to `titleWidth` on one line;
-    /// on two it is the detail line, which is usually the narrower of the pair.
+    /// Width of the line the chip sits on: `titleWidth` on one line, the lower
+    /// (detail) line on two.
     var lineWidth: CGFloat
     /// Rendered width of the chip's own text.
     var labelWidth: CGFloat
@@ -112,38 +83,27 @@ struct MenuBarActionChipMetrics: Equatable {
 /// Where the Join chip sits inside the status item, in the button's own
 /// (non-flipped, y-up) coordinates.
 ///
-/// The chip is always the LAST run of the last line, which is what makes this
-/// tractable — but "last" is not the same as "hard against the item's right
-/// edge". The status item centres its title, and on the two-line layout each
-/// line is centred independently, so a short detail line under a long meeting
-/// name ends well short of the item's edge. The chip therefore anchors to the
-/// end of ITS OWN line, which collapses to the item's trailing content edge on
-/// one line without needing a special case.
+/// The chip is the last run of the last line and anchors to the end of that
+/// line, not the item's edge: each line is centred independently.
 enum MenuBarActionChipGeometry {
     /// Breathing room drawn around the label run, per side.
     static let horizontalPadding: CGFloat = 4
-    /// Keeps the capsule off the very top and bottom of the menu bar, where it
-    /// would read as clipped rather than as a control.
+    /// Gap kept between the capsule and the top and bottom of the menu bar.
     static let verticalInset: CGFloat = 2
     /// Fraction of the item's height the capsule takes on the two-line layout.
     static let stackedHeightFraction: CGFloat = 0.46
-    /// The gap `NSButton` leaves between its image and its title. AppKit does
-    /// not publish it; a point or two of error here moves the chip by half that,
-    /// which is why nothing downstream depends on it being exact.
+    /// Approximate gap `NSButton` leaves between image and title (unpublished by AppKit).
     static let imageTitleSpacing: CGFloat = 2
-    /// Used when the derived inset comes out implausible — see `edgeInset`.
+    /// Used when the derived inset is implausible; see `edgeInset`.
     static let fallbackEdgeInset: CGFloat = 4
     /// Widest inset `edgeInset` will believe.
     static let maximumEdgeInset: CGFloat = 12
 
     /// The padding `NSStatusBarButton` puts either side of its content.
     ///
-    /// Derived rather than hardcoded: the item is `variableLength`, so it is its
-    /// content plus a symmetric inset AppKit owns and does not publish. Halving
-    /// the difference recovers it, and keeps working if AppKit ever changes it.
-    /// A nonsense answer — negative, or wider than any plausible inset, which is
-    /// what a mis-measured content width produces — falls back to a fixed value,
-    /// so the chip lands a couple of points off rather than off the item.
+    /// Derived as half the difference between button and content width, since
+    /// AppKit does not publish it. Values outside `0...maximumEdgeInset` fall back
+    /// to `fallbackEdgeInset`.
     static func edgeInset(buttonWidth: CGFloat, contentWidth: CGFloat) -> CGFloat {
         let derived = (buttonWidth - contentWidth) / 2
         guard derived >= 0, derived <= maximumEdgeInset else { return fallbackEdgeInset }
@@ -161,13 +121,11 @@ enum MenuBarActionChipGeometry {
             contentWidth: metrics.titleWidth + imageSlot
         )
 
-        // The box the title is centred in: the item minus its edge insets, minus
-        // whichever side the icon took.
+        // The box the title is centred in.
         let titleMinX = bounds.minX + inset + (metrics.imageIsTrailing ? 0 : imageSlot)
         let titleMaxX = bounds.maxX - inset - (metrics.imageIsTrailing ? imageSlot : 0)
         guard titleMaxX > titleMinX else { return nil }
 
-        // Where this line ends, and so where its trailing run ends.
         let lineMaxX = (titleMinX + titleMaxX) / 2 + metrics.lineWidth / 2
         let maxX = min(lineMaxX + horizontalPadding, bounds.maxX)
         let minX = lineMaxX - metrics.labelWidth - horizontalPadding
@@ -185,11 +143,8 @@ enum MenuBarActionChipGeometry {
         return CGRect(x: minX, y: minY, width: maxX - minX, height: height)
     }
 
-    /// The click target for a drawn chip.
-    ///
-    /// Horizontally identical — what you see is what you press — but full-height,
-    /// because on the two-line layout the drawn capsule is only about six points
-    /// tall, and nothing else in that column wants a different click.
+    /// The click target for a drawn chip: the chip's horizontal span at the full
+    /// button height, since the stacked capsule is only a few points tall.
     static func hitRect(chip: CGRect, buttonBounds: CGRect) -> CGRect {
         CGRect(x: chip.minX, y: buttonBounds.minY, width: chip.width, height: buttonBounds.height)
     }

@@ -1,13 +1,9 @@
 //
 //  CalendarGridView.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Calendar surface for the calendar window (Dot parity). Presentation only: a
-//  header with ‹ ›, Today and a Month/Week fold picker, a localized weekday row,
-//  a 7-column grid of day cells (each showing a day number plus up to three
-//  calendar-color event dots, with weekends optionally dimmed), and a list of
-//  the selected day's events with a Join affordance. All state and event loading
-//  live in CalendarGridViewModel.
+//  Calendar window surface: header with navigation, Today and a Month/Week picker, weekday row,
+//  day grid with event dots, and the selected day's event list. State lives in CalendarGridViewModel.
 //
 
 import Defaults
@@ -28,9 +24,7 @@ struct CalendarGridView: View {
     @State private var isShowingJump = false
     @State private var jumpTarget = Date()
 
-    /// Jump-to-date, in a popover rather than an always-visible field: browsing
-    /// by stepping is the common path, and a date field parked in the header
-    /// would cost width the title needs on every day the user never jumps.
+    /// Jump-to-date popover.
     private var jumpPopover: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("calendar_grid_jump_title".loco())
@@ -74,12 +68,7 @@ struct CalendarGridView: View {
             minHeight: CalendarWindowPresentationPolicy.minimumSize.height
         )
         .background(Color(nsColor: .windowBackgroundColor))
-        // The window had no keyboard travel at all — the grid was mouse-only
-        // while the dropdown panel and command bar were both fully walkable.
-        //
-        // `.onMoveCommand` rather than `.onKeyPress`: the command bar already
-        // uses it, and matching one keyboard idiom across the app is worth more
-        // than the newer API's extra reach here, where only arrows matter.
+        // Arrow-key day/week navigation via `.onMoveCommand`, matching the command bar.
         .focusable()
         .focusEffectDisabled()
         .onMoveCommand { direction in
@@ -106,9 +95,7 @@ struct CalendarGridView: View {
             modePicker
 
             Button {
-                // Seed the picker from where the user is looking, not from the
-                // stale value of the last jump — otherwise reopening it after
-                // paging around shows a date that is nowhere on screen.
+                // Seed from the visible selection, not the last jump target.
                 jumpTarget = viewModel.selectedDay ?? viewModel.visibleMonth
                 isShowingJump = true
             } label: {
@@ -153,7 +140,7 @@ struct CalendarGridView: View {
         .padding(.vertical, 12)
     }
 
-    /// Month ⇄ week fold. `.segmented` is available on the macOS 12 floor.
+    /// Month/week picker.
     private var modePicker: some View {
         Picker("calendar_grid_mode_label".loco(), selection: modeBinding) {
             Text("calendar_grid_mode_month".loco()).tag(CalendarGridMode.month)
@@ -296,15 +283,12 @@ struct CalendarGridView: View {
         return viewModel.calendar.isDate(day.date, inSameDayAs: selectedDay)
     }
 
-    /// Weekend days are drawn in a lighter foreground when the preference is on.
-    /// `Calendar.isDateInWeekend` follows the locale (not always Sat/Sun).
+    /// Whether `day` is a weekend (per the calendar's locale) and the dim-weekends preference is on.
     private func isDimmedWeekend(_ day: MonthGridDay) -> Bool {
         dimWeekends && viewModel.calendar.isDateInWeekend(day.date)
     }
 
-    /// Decoded per render rather than cached: the list is a handful of entries,
-    /// and caching it would need invalidation on every Defaults write for no
-    /// measurable gain.
+    /// Labels of the user's date markers on `day`.
     private func markerLabels(for day: MonthGridDay) -> [String] {
         guard !storedDateMarkers.isEmpty else { return [] }
         return DateMarkerPolicy.markers(
@@ -321,8 +305,7 @@ struct CalendarGridView: View {
         return Array(symbols[firstIndex...] + symbols[..<firstIndex])
     }
 
-    /// "February 2026" in month mode; the visible week's date span in week mode
-    /// (e.g. "Jul 12 – 18, 2026"), collapsed and ordered by the user's locale.
+    /// "February 2026" in month mode; the visible week's localized date span in week mode.
     private var rangeTitle: String {
         switch viewModel.mode {
         case .month:
@@ -332,9 +315,7 @@ struct CalendarGridView: View {
             formatter.setLocalizedDateFormatFromTemplate("yMMMM")
             return formatter.string(from: viewModel.visibleMonth)
         case .week:
-            // DateIntervalFormatter localizes the whole span (and collapses the
-            // repeated month/year itself), so no hand-rolled range string.
-            // https://developer.apple.com/documentation/foundation/dateintervalformatter
+            // DateIntervalFormatter localizes and collapses the span.
             let formatter = DateIntervalFormatter()
             formatter.calendar = viewModel.calendar
             formatter.locale = I18N.instance.locale
@@ -392,14 +373,10 @@ private struct DayCell: View {
     let events: [MBEvent]
     let maxDots: Int
     let isSelected: Bool
-    /// Weekend day with the dim-weekends preference on. Only the day number is
-    /// muted — the today ring and the selection fill stay at full strength.
+    /// Weekend day with the dim-weekends preference on; only the day number is muted.
     let isDimmedWeekend: Bool
-    /// Labels of any user markers on this day.
-    ///
-    /// Shown as weight plus a background tint rather than an accent NUMBER, which
-    /// is how the compact grid does it: here the accent number already means
-    /// "today", and a second meaning for the same treatment would be ambiguous.
+    /// Labels of any user markers on this day, shown as weight plus a background tint
+    /// because the accent-coloured number already means "today".
     let markerLabels: [String]
 
     var body: some View {
@@ -437,14 +414,12 @@ private struct DayCell: View {
     private var isMarked: Bool { !markerLabels.isEmpty }
 
     private var cellFill: Color {
-        // Selection wins: it is the state the user is actively driving, and two
-        // accent washes stacked would just read as a brighter selection.
+        // Selection takes precedence over the marker tint.
         if isSelected { return Color.accentColor.opacity(0.12) }
         return isMarked ? Color.accentColor.opacity(0.07) : .clear
     }
 
-    /// VoiceOver gets the labels outright — a tooltip needs a pointer, and
-    /// neither the tint nor the weight conveys anything without sight.
+    /// Includes marker labels, which the tint and weight do not convey to VoiceOver.
     private var accessibilityLabel: String {
         guard isMarked else { return dayNumber }
         return "\(dayNumber), \(markerLabels.joined(separator: ", "))"
@@ -521,7 +496,7 @@ private struct CalendarEventRow: View {
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        // Double-click the row to join (single click is reserved for selection).
+        // Double-click joins; single click is reserved for selection.
         .onTapGesture(count: 2) { onJoin?() }
     }
 }

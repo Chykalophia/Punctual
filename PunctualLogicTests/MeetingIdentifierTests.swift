@@ -1,10 +1,8 @@
 //
 //  MeetingIdentifierTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for meeting-ID extraction (MeetingBarNG): which URLs yield a
-//  usable identifier, which correctly yield nothing, and which must NOT yield a
-//  confidently-wrong one.
+//  Tests for meeting-ID extraction from join URLs.
 //
 
 import XCTest
@@ -29,8 +27,7 @@ final class MeetingIdentifierTests: XCTestCase {
     }
 
     func testZoomIDSurvivesAQueryPassword() {
-        // The password belongs to the link, not the id — copying it into a
-        // dial-in prompt would be wrong.
+        // The password belongs to the link, not the id.
         XCTAssertEqual(identifier("https://us02web.zoom.us/j/98765432?pwd=aBcDeF")?.value, "98765432")
     }
 
@@ -64,8 +61,7 @@ final class MeetingIdentifierTests: XCTestCase {
     // MARK: - Google Meet
 
     func testGoogleMeetCodeKeepsItsHyphens() {
-        // The hyphenated form is canonical for Meet — stripping them would make
-        // the value harder to use, not easier.
+        // The hyphenated form is canonical for Meet, so it is kept.
         let result = identifier("https://meet.google.com/abc-defg-hij")
         XCTAssertEqual(result?.value, "abc-defg-hij")
         XCTAssertEqual(result?.kind, .meetingID)
@@ -83,9 +79,7 @@ final class MeetingIdentifierTests: XCTestCase {
     // MARK: - Teams: the deliberate nil
 
     func testTeamsYieldsNothingRatherThanAThreadID() {
-        // The thread id in a Teams URL is NOT the conference ID a dial-in prompt
-        // asks for. Offering it under "Copy meeting ID" would be confidently
-        // wrong, which is worse than offering nothing.
+        // The thread id in a Teams URL is not the dial-in conference ID.
         XCTAssertNil(identifier(
             "https://teams.microsoft.com/l/meetup-join/19%3ameeting_ZGJhY2Q%40thread.v2/0"
         ))

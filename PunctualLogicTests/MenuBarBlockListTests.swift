@@ -1,14 +1,10 @@
 //
 //  MenuBarBlockListTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the Menu Bar pane's block list (Preferences UX overhaul,
-//  Phase 2). The list is the complete inventory of what the menu bar can hold —
-//  showing blocks are ordered left to right, hidden ones sit below — so turning a
-//  block off can never delete it from the user's view, and turning it back on is
-//  one click rather than a re-discovery of a "+" menu.
+//  Tests for the Menu Bar pane's block list.
 //
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import XCTest
@@ -101,9 +97,6 @@ final class MenuBarBlockListTests: XCTestCase {
     }
 
     func testSwitchingOffThenOnLosesOnlyThePosition() {
-        // Nothing is destroyed: the block returns with one click. Its
-        // configuration (countdown style, world-clock zone…) lives in its own
-        // keys and is untouched by the switch.
         let off = MenuBarBlockList.setting(stored: ["icon", "title", "clock"], kind: .title, isOn: false)
         XCTAssertEqual(MenuBarBlockList.setting(stored: off, kind: .title, isOn: true), ["icon", "clock", "title"])
     }

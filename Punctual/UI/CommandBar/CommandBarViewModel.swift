@@ -1,20 +1,16 @@
 //
 //  CommandBarViewModel.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  App-target view model for the Command Bar. Maps [MBEvent] into the hostless
-//  CommandBarEventInput projection, builds localized action descriptors, calls
-//  the pure CommandBarSearch on every query change, and dispatches the chosen
-//  row to existing entry points (join / create / preferences / copy agenda /
-//  refresh). The SwiftUI view stays presentation-only.
+//  View model for the Command Bar: builds the hostless search inputs, ranks rows with
+//  CommandBarSearch on each query change, and dispatches the chosen row.
 //
 
 import AppKit
 import Defaults
 import Foundation
 
-/// Closures the Command Bar needs from the app, injected by AppDelegate so the
-/// view model stays decoupled from AppModel/WindowCoordinator.
+/// App closures the Command Bar needs, injected by AppDelegate.
 struct CommandBarHandlers {
     var events: @MainActor () -> [MBEvent]
     var send: @MainActor (AppAction) -> Void

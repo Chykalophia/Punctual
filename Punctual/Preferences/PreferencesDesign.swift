@@ -4,13 +4,9 @@
 //
 //  Copyright © 2026 Peter Krzyzek / Chykalophia. All rights reserved.
 //
-//  Rebuilt from scratch to follow the Ice 2 (teddychan/ice-2) visual
-//  language: annotation-style help text under controls, a group box with a
-//  material fill (no hairline border), a simpler callout, and a cleaner
-//  disclosure label. The old PreferencesCard used a windowBackgroundColor
-//  fill + separatorColor hairline that fought the grouped form style;
-//  the old PreferenceCallout had a heavy tinted background. Both are
-//  replaced with the Ice 2 equivalents.
+//  Shared Preferences building blocks: annotation help text, a persistent
+//  disclosure, layout constants, a group box and a callout. Visual language
+//  follows Ice 2 (teddychan/ice-2).
 //
 
 import Defaults
@@ -18,15 +14,10 @@ import SwiftUI
 
 // MARK: - Annotation (help text under a control)
 
-/// Places a help line beneath a control, matching Ice 2's `.annotation()`
-/// pattern. In a grouped form this renders as muted caption text directly
-/// under the toggle/picker it describes, rather than as a separate row.
-///
-/// Usage:
-///   Toggle("Show reminders", isOn: $show)
-///     .annotation("Reminders appear alongside calendar events.")
-///
 extension View {
+    /// Places a localized help line in caption style directly beneath this control, in the same form row.
+    ///
+    /// - Parameter key: Localization key of the help text.
     func annotation(_ key: String) -> some View {
         annotation(Text(key.loco()))
     }
@@ -42,9 +33,7 @@ extension View {
     }
 }
 
-/// A standalone help-text row for use inside a `Section` when the help text
-/// is not attached to a specific control (e.g. a section-level explanation).
-/// Matches the `.annotation()` visual: caption, secondary, wrapping.
+/// A standalone help-text row for a `Section`, styled like `.annotation()`.
 struct PreferencesHelpText: View {
     let key: String
 
@@ -58,9 +47,9 @@ struct PreferencesHelpText: View {
 
 // MARK: - Disclosure (state survives window close)
 
-/// A disclosure whose open/closed state survives closing the window.
-/// Rebuilt with a simpler label: just the title in `.subheadline.weight(.medium)`,
-/// no custom VStack. An optional subtitle line appears below in caption/secondary.
+/// A disclosure whose expanded state persists in `preferencesExpandedDisclosures`, keyed by `id`.
+///
+/// `opensAutomatically` expands it on appear; it never collapses it.
 struct PreferencesDisclosure<Content: View>: View {
     let id: String
     let titleKey: String
@@ -120,14 +109,9 @@ extension View {
 
 // MARK: - Group box (for non-form content like the About card)
 
-/// A titled content group matching Ice 2's `IceGroupBox`: a VStack with
-/// an optional header, content in a rounded rectangle with a
-/// `.regularMaterial` fill (no hairline border), and an optional footer. Uses
-/// `.focusSection()` for keyboard focus traversal.
+/// A group box with an optional title and subtitle over content on a `.regularMaterial` fill.
 ///
-/// Use this for content that sits OUTSIDE a grouped form (e.g. the About
-/// card). Inside a form, use `Section { }` directly — the form provides
-/// its own grouping.
+/// For content outside a grouped form; inside a form, use `Section`.
 struct PreferencesCard<Content: View>: View {
     private let title: String?
     private let subtitle: String?
@@ -180,9 +164,7 @@ struct PreferencesCard<Content: View>: View {
 
 // MARK: - Callout (advisory message)
 
-/// An SF Symbol plus a short advisory message on a muted background.
-/// Rebuilt to match Ice 2's `CalloutBox`: simpler, with an `.ultraThinMaterial`
-/// fill and no heavy tint.
+/// An SF Symbol plus a short advisory message on an `.ultraThinMaterial` background.
 struct PreferenceCallout: View {
     let systemImage: String
     let message: String

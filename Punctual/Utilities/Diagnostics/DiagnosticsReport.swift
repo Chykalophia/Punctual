@@ -7,10 +7,8 @@ import Foundation
 
 /// Permission/auth snapshot consumed by the diagnostics formatter.
 ///
-/// Lives here (not next to `PermissionReporter`) so the hostless logic target
-/// can compile the report writer without pulling in `EventKit` /
-/// `UserNotifications`. The host-target `PermissionReporter` populates this
-/// struct from the real OS APIs.
+/// Defined here rather than beside `PermissionReporter` so the hostless target can build the
+/// report without EventKit or UserNotifications.
 struct PermissionSnapshot: Equatable {
     enum CalendarAccess: Equatable {
         case notDetermined
@@ -66,8 +64,7 @@ struct DiagnosticsHealth: Equatable {
     }
 }
 
-/// Inputs needed to produce a plain-text diagnostics report. All fields are
-/// captured by the caller so the formatter is pure and testable.
+/// Inputs for the plain-text diagnostics report, captured by the caller.
 struct DiagnosticsContext {
     let appVersion: String
     let buildNumber: String
@@ -81,9 +78,8 @@ struct DiagnosticsContext {
 }
 
 enum DiagnosticsReport {
-    /// Renders a multi-line plain-text report suitable for pasting into a
-    /// GitHub issue. Dates are emitted in ISO-8601 so they are unambiguous
-    /// across locales; missing values become "never" / "none".
+    /// Renders a plain-text report for pasting into a GitHub issue. Dates are ISO-8601; missing
+    /// values become "never" or "none".
     static func text(from context: DiagnosticsContext) -> String {
         let formatter = ISO8601DateFormatter()
         let lastSuccess = context.health.lastSuccessfulRefresh.map(formatter.string) ?? "never"

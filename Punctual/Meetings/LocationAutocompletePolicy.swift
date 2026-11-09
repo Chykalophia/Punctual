@@ -1,18 +1,11 @@
 //
 //  LocationAutocompletePolicy.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The one decision that matters for location autocomplete: whether a query
-//  leaves this Mac.
+//  Decides whether a location query may leave this Mac. MapKit sends typed text to
+//  Apple, the app's only off-device request, so the gate is off by default and tested.
 //
-//  MeetingBarNG is local-first by design — no account, no servers, calendar data
-//  stays on the machine (see ROADMAP "Guiding principles"). Location suggestions
-//  are the single feature that breaks that, because MapKit sends the typed text
-//  to Apple. So the feature is OFF by default and the gate is hostless and
-//  unit-tested rather than an `if` buried in a view: "nothing is sent unless the
-//  user turned this on" should be provable, not inspected by hand.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
@@ -24,8 +17,7 @@ public enum LocationAutocompletePolicy {
 
     /// Whether `text` may be sent to the suggestion service.
     ///
-    /// Both conditions are required and the enabled check is FIRST, so a disabled
-    /// feature short-circuits before the query is even examined.
+    /// The enabled check runs first, so a disabled feature never examines the query.
     public static func shouldQuery(
         _ text: String,
         isEnabled: Bool,
@@ -38,10 +30,8 @@ public enum LocationAutocompletePolicy {
 
     /// Whether suggestions should be shown for the current field contents.
     ///
-    /// Separate from `shouldQuery` because a stale result set must disappear the
-    /// moment the field drops below the threshold — otherwise deleting back to
-    /// two characters leaves the previous suggestions on screen, looking like
-    /// live results for a query that was never sent.
+    /// Separate from `shouldQuery` so stale results disappear as soon as the field drops
+    /// below the threshold.
     public static func shouldPresentResults(
         for text: String,
         isEnabled: Bool,

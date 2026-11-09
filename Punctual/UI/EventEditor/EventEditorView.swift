@@ -1,15 +1,11 @@
 //
 //  EventEditorView.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Structured (non-AI) form for creating and editing a calendar event in-app
-//  (Dot parity). Presentation only: title, all-day toggle, start/end date
-//  pickers (time hidden when all-day), a writable-calendar picker with color
-//  swatches, location, notes, and URL. Save is disabled until the draft
-//  validates (first issue shown inline); Delete (edit mode) confirms via NSAlert
-//  in the view model before removing. All state lives in EventEditorViewModel.
+//  Form for creating and editing a calendar event. State, validation and delete confirmation
+//  live in EventEditorViewModel.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
@@ -91,8 +87,7 @@ struct EventEditorView: View {
         viewModel.isAllDay ? [.date] : [.date, .hourAndMinute]
     }
 
-    /// Scope picker shown only for recurring events: apply the edit/delete to
-    /// this occurrence, or this and all future occurrences.
+    /// Scope picker for recurring events: this occurrence, or this and all future ones.
     private var recurringSpanPicker: some View {
         Picker("event_editor_span_label".loco(), selection: $viewModel.editSpan) {
             Text("event_editor_span_this_event".loco()).tag(EventEditSpan.thisEvent)
@@ -137,9 +132,7 @@ struct EventEditorView: View {
             ForEach(locationSuggestions.suggestions) { suggestion in
                 Button {
                     viewModel.location = suggestion.fieldValue
-                    // Clear rather than re-query: the field now holds the chosen
-                    // address, and suggesting alternatives to a decision the user
-                    // just made is noise.
+                    // Clear rather than re-query: the field now holds the chosen address.
                     locationSuggestions.clear()
                 } label: {
                     VStack(alignment: .leading, spacing: 1) {
@@ -215,7 +208,7 @@ struct EventEditorView: View {
         .padding(20)
     }
 
-    /// Write failures win over validation hints (the user just tried to save).
+    /// A write failure takes precedence over validation hints.
     private var inlineMessage: String? {
         viewModel.errorMessage ?? viewModel.firstValidationMessage
     }

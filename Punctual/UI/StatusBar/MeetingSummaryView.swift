@@ -10,12 +10,10 @@ struct MeetingSummaryPresentation: Equatable {
     let sectionTitle: String
     let eventTitle: String
     let metadata: [String]
-    /// `var` so the panel can clear it when `showMeetingServiceIcon` is off —
-    /// that is a display preference, not part of what the copy says, so it is
-    /// applied at the call site rather than inside `MeetingSummaryPresenter`.
+    /// The meeting service, if any. Cleared by the caller when
+    /// `showMeetingServiceIcon` is off.
     var meetingService: MeetingServices?
-    /// Relative time until the meeting starts (e.g. "in 25m"); nil for
-    /// running meetings, where the section title already says enough.
+    /// Relative time until the meeting starts (e.g. "in 25m"); `nil` for running meetings.
     var countdown: String?
 
     var metadataText: String {
@@ -32,42 +30,28 @@ struct MeetingSummaryView: View {
     let presentation: MeetingSummaryPresentation
     var onJoin: (() -> Void)?
 
-    /// Whether the Join control should read as a call to action. Defaults to
-    /// `true` so a caller that has not opted in keeps the original bright button
-    /// rather than silently getting a muted one. Computed by
-    /// `EventActionProminence` at every real call site.
+    /// Whether the Join control reads as a call to action (see `EventActionProminence`).
     var isActionImminent: Bool = true
 
-    /// The card's own horizontal inset. Defaults to the standalone value the
-    /// classic `NSMenu` needs; the panel passes `0` because `PanelCard` already
-    /// supplies the inset, and stacking both indented the title past the rows
-    /// below it.
+    /// The card's horizontal inset. Pass `0` when the container (e.g. `PanelCard`)
+    /// already supplies one.
     var horizontalPadding: CGFloat = 12
 
     @State private var isHovered = false
 
-    /// Derived rather than passed in: every call site computed exactly this, and
-    /// letting them differ was how the card ended up indenting a title behind an
-    /// invisible icon. `nil` when the event has no online meeting — the icon is
-    /// then omitted entirely and the title sits flush, instead of reserving a
-    /// gutter for the blank "no_online_session" placeholder.
+    /// The meeting service icon; `nil` when there is no online meeting, so the
+    /// title sits flush with no reserved gutter.
     private var providerIcon: NSImage? {
         presentation.meetingService.map { getIconForMeetingService($0) }
     }
 
-    // Narrower, modern menu-bar-dropdown width. DaySummaryHeaderView and the
-    // timeline's NSHostingView both size off this constant, so the greeting,
-    // timeline, summary card, and event rows all share one ~330 width — which is
-    // itself the panel width in the hostless `DropdownMetrics` grid.
+    /// Shared content width for the dropdown's cards and header; equals the panel width.
     static let preferredWidth: CGFloat = DropdownMetrics.standard.panelWidth
     static let preferredHeight: CGFloat = 66
 
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                // Dropped entirely when empty, rather than drawn as a blank line.
-                // An empty `Text` still takes a row's height, which would leave a
-                // gap where the section line used to be.
                 if !presentation.sectionTitleText.isEmpty {
                     Text(presentation.sectionTitleText)
                         .font(.caption)
@@ -93,16 +77,11 @@ struct MeetingSummaryView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            // Priority so the text column wins the free space outright. Without
-            // it the Spacer below is an equally flexible sibling and takes
-            // roughly half, truncating a title that would otherwise have fit —
-            // the same bug the agenda rows had.
+            // Without this the Spacer below takes about half the width and truncates the title.
             .layoutPriority(1)
 
             if onJoin != nil {
                 Spacer(minLength: 8)
-                // Background comes from `joinControlSurface`, shared with the
-                // event rows' trailing pill so the two cannot drift.
                 Text("notifications_meetingbar_join_event_action".loco())
                     .font(.system(size: 12, weight: isActionImminent ? .semibold : .regular))
                     .foregroundStyle(
@@ -111,9 +90,7 @@ struct MeetingSummaryView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 5)
                     .joinControlSurface(isActionImminent: isActionImminent)
-                    // Never squeezed: a half-width "Jo…" button is worse than a
-                    // shorter title, so the pill keeps its intrinsic size and the
-                    // text column absorbs whatever is left.
+                    // The pill keeps its intrinsic size; the title truncates instead.
                     .fixedSize()
                     .opacity(isHovered ? 1.0 : 0.9)
             }
@@ -130,10 +107,8 @@ struct MeetingSummaryView: View {
                 .fill(isHovered && onJoin != nil ? Color.primary.opacity(0.15) : Color.clear)
         )
         .contentShape(Rectangle())
-        // Scoped pointer style (macOS 15+, at the deployment floor). The previous
-        // NSCursor.push/pop pair is the pattern `PanelRow` documents as able to
-        // strand a pointing-hand cursor when the panel closes mid-hover.
-        // https://developer.apple.com/documentation/swiftui/view/pointerstyle(_:)
+        // Scoped pointerStyle, not NSCursor push/pop, which can strand the cursor
+        // when the panel closes mid-hover.
         .pointerStyle(onJoin == nil ? nil : .link)
         .onHover { hovering in isHovered = hovering }
         .onTapGesture { onJoin?() }

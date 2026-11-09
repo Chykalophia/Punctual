@@ -12,12 +12,8 @@ struct ResolvedMeetingOpening: Equatable {
 }
 
 /// Value snapshot of the settings the opening path needs: per-provider browser
-/// preferences and the join-event script configuration.
-///
-/// `current` is the single place opening-related `Defaults` are read; the
-/// strategies, performer, and `MeetingOpener.open` all receive this snapshot
-/// instead of reaching into `Defaults` themselves. This collapses what used to
-/// be ~20 scattered `Defaults[…]` reads into one boundary.
+/// preferences and the join-event script configuration. `current` is the only place
+/// opening-related `Defaults` are read.
 struct MeetingOpenSettings {
     var defaultBrowser: Browser
     var providerBrowsers: [String: Browser]
@@ -129,8 +125,7 @@ struct SystemMeetingOpeningPerformer: MeetingOpeningPerforming {
             return
         }
 
-        // Join hooks use the same documented event payload contract as
-        // event-start hooks.
+        // Join hooks receive the same event payload as event-start hooks.
         let appleEvent = createAppleScriptEvent(event: event, type: .meetingStart)
         task.execute(withAppleEvent: appleEvent) { _, error in
             if let error {
@@ -155,7 +150,6 @@ struct SystemMeetingOpeningPerformer: MeetingOpeningPerforming {
 }
 
 /// Opens a meeting for a given event or performs email-attendees actions.
-/// `MBEvent` is now a data-only struct; all opening side effects live here.
 enum MeetingOpener {
     static func open(
         event: MBEvent,
@@ -223,11 +217,8 @@ enum MeetingOpener {
 
 // MARK: - Open strategies (per-provider URL transforms)
 
-/// Encapsulates how a meeting provider URL should be opened.
-///
-/// `opening` contains an optional provider mode and the resolved browser
-/// fallback. `defaultBrowser` is retained for legacy strategies whose existing
-/// fallback behavior uses the app-wide default.
+/// How a meeting provider URL is opened. `opening` carries an optional provider mode
+/// and the resolved browser; `defaultBrowser` is the app-wide fallback some strategies use.
 protocol MeetingOpenStrategy: Sendable {
     func open(
         url: URL,
@@ -708,7 +699,6 @@ func openStrategy(for service: MeetingServices?) -> any MeetingOpenStrategy {
 }
 
 private let strategiesByService: [MeetingServices: any MeetingOpenStrategy] = [
-    // Google Meet
     .meet: GoogleMeetOpenStrategy(),
     .meetStream: GoogleMeetOpenStrategy(),
 
@@ -719,25 +709,18 @@ private let strategiesByService: [MeetingServices: any MeetingOpenStrategy] = [
     // Zoom native app scheme → browser fallback
     .zoom_native: ZoomNativeOpenStrategy(),
 
-    // Microsoft Teams
     .teams: TeamsOpenStrategy(),
 
-    // Workplace
     .facebook_workspace: WorkplaceOpenStrategy(),
 
-    // Jitsi
     .jitsi: JitsiOpenStrategy(),
 
-    // Slack huddle
     .slack: SlackHuddleOpenStrategy(),
 
-    // Riverside
     .riverside: RiversideOpenStrategy(),
 
-    // FaceTime
     .facetime: NativeSchemeOpenStrategy(schemePrefix: "facetime://"),
     .facetimeaudio: NativeSchemeOpenStrategy(schemePrefix: "facetime-audio://"),
 
-    // Phone
     .phone: NativeSchemeOpenStrategy(schemePrefix: "tel://")
 ]

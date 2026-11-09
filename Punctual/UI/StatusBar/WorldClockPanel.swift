@@ -1,47 +1,31 @@
 //
 //  WorldClockPanel.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Pure, hostless core for the multi-zone world-clock panel (Dot parity). The
-//  panel is a small window listing several user-chosen time zones with their
-//  current local time and a "Tomorrow"/"Yesterday" tag when a zone's calendar
-//  day differs from the reference zone's. This complements the world-clock
-//  *token* (one zone in the menu bar, `MenuBarCompositionPolicy.worldClockText`)
-//  — the panel is many zones at once.
-//
-//  Mirrors `MenuBarCompositionPolicy.clockText` / `worldClockText` so the panel
-//  and the token format times identically. Kept free of AppKit/Defaults/I18N so
-//  it stays fully unit-testable; the SwiftUI view + window host live in the app
-//  target.
+//  Hostless core for the multi-zone world-clock panel: each zone's local time
+//  and its day offset from the reference zone.
 //
 
 import Foundation
 
-/// A single user-chosen zone in the panel: a time-zone identifier plus a display
-/// label (derived from the identifier via `WorldClockPanelPolicy.cityLabel`
-/// unless the caller supplies a custom one).
+/// A user-chosen zone: a time-zone identifier plus its display label.
 struct WorldClockZone: Equatable {
     let identifier: String
     let label: String
 }
 
-/// A rendered panel row: the label, the formatted local time in that zone, and
-/// the whole-day offset of that zone's calendar day vs the reference zone's day
-/// (-1 yesterday / 0 today / +1 tomorrow) so the view can show a Tomorrow /
-/// Yesterday tag.
+/// A rendered panel row.
 struct WorldClockEntry: Equatable {
     let label: String
     let time: String
+    /// Whole-day offset from the reference zone's day: -1 yesterday, 0 today, +1 tomorrow.
     let dayOffset: Int
 }
 
-/// Pure formatters for the world-clock panel. Hostless and fully unit-tested.
+/// Formatters for the world-clock panel.
 enum WorldClockPanelPolicy {
-    /// One `WorldClockEntry` per zone, preserving order. Each entry's `time` is
-    /// `now` formatted in that zone (12h/24h per `use24Hour`); `dayOffset` is the
-    /// whole-day difference between that zone's calendar day and the reference
-    /// zone's calendar day at `now`. An unresolvable identifier falls back to the
-    /// reference zone (offset 0). An empty `zones` yields `[]`.
+    /// One entry per zone, in order. An unresolvable identifier falls back to
+    /// `referenceZone`.
     static func entries(
         zones: [WorldClockZone],
         now: Date,
@@ -61,9 +45,7 @@ enum WorldClockPanelPolicy {
         }
     }
 
-    /// The current time in `timeZone`, formatted like
-    /// `MenuBarCompositionPolicy.clockText` (localized 12h/24h template), pinned
-    /// to the chosen zone.
+    /// The current time in `timeZone`, formatted like `MenuBarCompositionPolicy.clockText`.
     static func timeText(now: Date, timeZone: TimeZone, use24Hour: Bool, locale: Locale) -> String {
         let formatter = DateFormatter()
         formatter.locale = locale
@@ -72,11 +54,10 @@ enum WorldClockPanelPolicy {
         return formatter.string(from: now)
     }
 
-    /// Whole-day difference of `zone`'s calendar day vs `referenceZone`'s day at
-    /// `now`: -1 (yesterday), 0 (today), +1 (tomorrow), and beyond near the date
-    /// line. Computed by reading each zone's civil (year/month/day) at `now`,
-    /// re-anchoring both to UTC midnight, and counting whole days between them —
-    /// so it stays correct regardless of the zones' UTC offsets and DST.
+    /// Whole-day difference of `zone`'s calendar day from `referenceZone`'s at `now`.
+    ///
+    /// Compares each zone's civil date re-anchored to UTC midnight, so UTC offsets
+    /// and DST do not affect the result.
     static func dayOffset(now: Date, zone: TimeZone, referenceZone: TimeZone, locale: Locale) -> Int {
         let referenceDay = civilDay(now: now, zone: referenceZone, locale: locale)
         let zoneDay = civilDay(now: now, zone: zone, locale: locale)
@@ -102,10 +83,8 @@ enum WorldClockPanelPolicy {
         ) ?? now
     }
 
-    /// A readable default label derived from a time-zone identifier: the last
-    /// "/"-separated component with underscores replaced by spaces, e.g.
-    /// "America/Los_Angeles" → "Los Angeles", "Europe/Isle_of_Man" → "Isle of
-    /// Man", "UTC" → "UTC".
+    /// A default label from a time-zone identifier: its last path component with
+    /// underscores as spaces, e.g. "America/Los_Angeles" becomes "Los Angeles".
     static func cityLabel(fromIdentifier identifier: String) -> String {
         let lastComponent = identifier.split(separator: "/").last.map(String.init) ?? identifier
         return lastComponent.replacingOccurrences(of: "_", with: " ")

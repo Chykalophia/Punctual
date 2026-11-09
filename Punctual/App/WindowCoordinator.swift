@@ -61,9 +61,8 @@ final class OnboardingWindow: NSWindow {
     }
 }
 
-/// Borderless "What's New" window: the ChangelogView paints its own rounded
-/// chrome (matching Onboarding), and Escape / the primary button close it —
-/// which is what acknowledges the changelog via the close handler.
+/// Borderless "What's New" window. Closing it acknowledges the changelog via
+/// the close handler.
 final class ChangelogWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -88,8 +87,7 @@ enum ChangelogWindowPresentationPolicy {
     static let level: NSWindow.Level = .normal
 }
 
-/// Borderless Spotlight-style Command Bar. Floats above the frontmost app (it is
-/// invoked by a global shortcut) and paints its own rounded chrome.
+/// Borderless Spotlight-style Command Bar that floats above the frontmost app.
 final class CommandBarWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -106,25 +104,18 @@ final class CommandBarWindow: NSWindow {
         close()
     }
 
-    /// Click-away dismiss (Spotlight behavior). Only fires after the window has
-    /// been key, so the open sequence (which *gains* key) never self-closes.
-    ///
-    /// Deferred for the same reason as `DropdownPanelWindow.resignKey`: closing
-    /// inside AppKit's key-change callback over-releases the window.
+    /// Click-away dismiss, deferred a run-loop turn: closing inside AppKit's
+    /// key-change callback over-releases the window.
     override func resignKey() {
         super.resignKey()
         DispatchQueue.main.async { [weak self] in self?.close() }
     }
 }
 
-/// Borderless host for the SwiftUI dropdown panel (MeetingBarNG). Behaves
-/// like a menu: floats at the pop-up-menu level, closes on Escape and on
-/// click-away (`resignKey`), and never appears in the window cycle.
+/// Borderless host for the SwiftUI dropdown panel. Behaves like a menu: pop-up-menu
+/// level, closes on Escape and click-away, excluded from the window cycle.
 final class DropdownPanelWindow: NSWindow {
-    /// Invoked exactly once, just before the window closes, so the coordinator
-    /// can record the dismissal (see the toggle suppression in
-    /// `openDropdownPanel`). Cleared after firing — `isReleasedWhenClosed` means
-    /// the window may be gone immediately after `super.close()`.
+    /// Called once just before the window closes, then cleared.
     var onClose: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
@@ -142,30 +133,13 @@ final class DropdownPanelWindow: NSWindow {
         close()
     }
 
-    /// Click-away dismiss (menu behavior). Only fires after the window has been
-    /// key, so the open sequence (which *gains* key) never self-closes.
-    ///
-    /// The close is deferred to the next run-loop turn ON PURPOSE: closing
-    /// synchronously here tears the window down *inside* AppKit's key-change
-    /// processing, while AppKit still holds an autoreleased reference to it.
-    /// That over-releases the window and crashes with EXC_BAD_ACCESS in
-    /// `objc_release` when the autorelease pool drains (seen after a few
-    /// open/close cycles).
+    /// Click-away dismiss, deferred a run-loop turn: closing inside AppKit's
+    /// key-change processing over-releases the window (EXC_BAD_ACCESS).
     override func resignKey() {
         super.resignKey()
         #if DEBUG
-        // Development aid: the panel dismisses the instant anything else takes
-        // focus, which makes it impossible to screenshot or inspect from another
-        // process. Holding it open needs a switch that survives a NORMAL launch —
-        // an environment variable does not, because `open` launches the app
-        // bundle through LaunchServices rather than inheriting the caller's
-        // environment, and running the executable directly skips the bundle so
-        // the status item never appears.
-        //
-        //   defaults write com.chykalophia.MeetingBarNG debugPinDropdownPanel -bool true
-        //
-        // DEBUG-only: it defeats the panel's defining behaviour, so it must be
-        // unreachable in a release build.
+        // Keeps the panel open for screenshots and inspection; set with
+        // `defaults write com.chykalophia.Punctual debugPinDropdownPanel -bool true`.
         if Self.isPinnedForDebugging { return }
         #endif
         DispatchQueue.main.async { [weak self] in self?.close() }
@@ -179,8 +153,7 @@ final class DropdownPanelWindow: NSWindow {
     }
 
     #if DEBUG
-    /// Read once per launch: a screenshot run sets the key before launching, and
-    /// re-reading it on every focus change would be a defaults hit per keystroke.
+    /// Read once per launch rather than on every focus change.
     static let isPinnedForDebugging = UserDefaults.standard.bool(
         forKey: "debugPinDropdownPanel"
     )
@@ -188,13 +161,11 @@ final class DropdownPanelWindow: NSWindow {
 }
 
 enum DropdownPanelPresentationPolicy {
-    /// Menus float above ordinary windows; match that so the panel is never
-    /// hidden behind the frontmost app.
+    /// Menu level, so the panel is never hidden behind the frontmost app.
     static let level: NSWindow.Level = .popUpMenu
 
-    /// Clicking the status item while the panel is open first resigns key (which
-    /// closes the panel) and only then delivers the button's action. Without a
-    /// short suppression window that same click would immediately reopen it.
+    /// Ignores a reopen this soon after closing: clicking the status item while the
+    /// panel is open closes it via `resignKey` before the button action fires.
     static let reopenSuppressionInterval: TimeInterval = 0.3
 }
 
@@ -203,8 +174,7 @@ enum CommandBarWindowPresentationPolicy {
     static let height: CGFloat = 440
     static let contentRect = NSRect(x: 0, y: 0, width: width, height: height)
     static let level: NSWindow.Level = .floating
-    /// Fraction of the screen height from the top where the palette centers —
-    /// slightly above the middle, like Spotlight.
+    /// Fraction of the screen height, from the top, where the palette is centered.
     static let verticalAnchor: CGFloat = 0.28
 }
 
@@ -216,66 +186,28 @@ enum OnboardingWindowPresentationPolicy {
     static let isMovableByWindowBackground = true
 }
 
-/// The dropdown panel's translucent surface on macOS 15–25.
-///
-/// SwiftUI's `.regularMaterial` inside an `NSHostingView` blends WITHIN the
-/// window. Over a borderless transparent window that means sampling nothing, so
-/// the panel composited over emptiness and read as flat. Desktop translucency
-/// there needs an AppKit surface with `.behindWindow` blending, which is what
-/// this builds.
-///
-/// On macOS 26 it builds nothing: Liquid Glass is drawn by SwiftUI and an AppKit
-/// wrapper actively prevents it. See `wrap(_:radius:)`.
+/// The dropdown panel's translucent surface: an `NSVisualEffectView` with
+/// `.behindWindow` blending, because a SwiftUI material in a borderless transparent
+/// window has nothing to sample.
 private enum PanelBackdrop {
     @MainActor
     static func wrap(_ content: NSView, radius: CGFloat) -> NSView {
-        // Deliberately NOT `NSGlassEffectView`, on any version.
-        //
-        // Two things were learned the hard way here, both by screenshot:
-        //
-        // 1. Wrapping the hosting view in `NSGlassEffectView` broke every
-        //    `glassEffect` INSIDE the panel. WWDC25 session 310, verbatim:
-        //    "glass can't directly sample other glass" — an inner glass control
-        //    sitting inside the outer glass samples glass, finds nothing to
-        //    refract, and collapses to a flat fill.
-        // 2. Removing it and letting SwiftUI draw the panel's own glass did fix
-        //    the controls, but the surface came out far too clear: compared side
-        //    by side against a real NSMenu over the same wallpaper, colour
-        //    streaks from the desktop read straight across the agenda.
-        //
-        // `.menu` material is the answer to both. It is the material AppKit
-        // gives real menus, so the density matches native by construction rather
-        // than by a tint constant someone has to keep re-tuning.
+        // Not `NSGlassEffectView`: glass cannot sample glass, so it flattens the panel's
+        // inner `glassEffect` controls. `.menu` matches native menu density.
         let reduceTransparency = NSWorkspace.shared
             .accessibilityDisplayShouldReduceTransparency
 
         let effect = NSVisualEffectView()
-        // `.menu` rather than `.popover`: this IS a menu, and the material
-        // carries the vibrancy AppKit gives real menus.
         effect.material = .menu
         effect.blendingMode = .behindWindow
-        // System Reduce Transparency asks for an opaque surface, and this is the
-        // one place that can honour it — the SwiftUI content draws no background
-        // of its own.
+        // The SwiftUI content draws no background, so Reduce Transparency is honored here.
         effect.state = reduceTransparency ? .inactive : .active
-        // Rounded by MASK IMAGE, not by a layer corner radius. A vibrancy
-        // material is composited by the window server, which does not respect
-        // `masksToBounds` — on macOS 26 that left opaque white squares in the
-        // corners where the square material outran the rounded layer. The mask
-        // image is the supported way to shape one, and it clips the material
-        // itself rather than a layer drawn from it.
+        // Rounded by mask image: the window server ignores `masksToBounds` for vibrancy
+        // materials, which leaves square corners.
         effect.maskImage = roundedMask(radius: radius)
 
-        // A contrast floor between the material and the content.
-        //
-        // Behind-window vibrancy takes its lightness from the DESKTOP, while the
-        // content's colours take theirs from the APPEARANCE. Over a pale
-        // wallpaper the two disagree: the surface rises toward the colour the
-        // content assumed it could draw on, and everything tuned against a dark
-        // panel — the accent dot, the section heads, the icons — loses contrast
-        // at once. The scrim stops the desktop pushing the surface past a
-        // threshold. It costs some translucency, which is the honest trade for a
-        // panel that has to stay readable over any wallpaper.
+        // Contrast scrim: behind-window vibrancy takes its lightness from the desktop,
+        // so a pale wallpaper would wash out content tuned to the appearance.
         let scrim = PanelScrimView()
         scrim.opacity = reduceTransparency ? 1 : 0.32
         scrim.frame = effect.bounds
@@ -288,11 +220,7 @@ private enum PanelBackdrop {
         return effect
     }
 
-    /// A resizable rounded-rectangle mask.
-    ///
-    /// Cap insets make it nine-part: the corners keep their radius at any size
-    /// while the edges stretch, so one small image masks the whole panel however
-    /// tall the day makes it.
+    /// A nine-part rounded-rectangle mask; cap insets keep the corner radius at any size.
     @MainActor
     private static func roundedMask(radius: CGFloat) -> NSImage {
         let edge = radius * 2 + 1
@@ -315,12 +243,8 @@ private enum PanelBackdrop {
     }
 }
 
-/// A flat wash of the window background colour, sat between the vibrancy and the
-/// panel's content.
-///
-/// A plain `NSView` with a `cgColor` set once would freeze at whatever appearance
-/// was current when it was built; `updateLayer` re-resolves it, so the scrim
-/// follows a switch between light and dark like everything else in the panel.
+/// A wash of the window background colour between the vibrancy and the content.
+/// Drawn in `updateLayer` so it re-resolves when the appearance changes.
 private final class PanelScrimView: NSView {
     var opacity: CGFloat = 0.32 {
         didSet { needsDisplay = true }
@@ -337,19 +261,15 @@ private final class PanelScrimView: NSView {
 
 private enum WindowStylePolicy {
     @MainActor
-    /// - Parameter roundsContentView: pass `false` when the content view is a
-    ///   backdrop that already owns its rounding (`PanelBackdrop`). Layer-masking
-    ///   an `NSGlassEffectView` shears off the specular rim it draws just outside
-    ///   its own bounds, which is the difference between glass and a grey box.
+    /// - Parameter roundsContentView: pass `false` when the content view already owns
+    ///   its rounding (`PanelBackdrop`).
     static func applyRoundedCorners(
         to window: NSWindow,
         radius: CGFloat = 12,
         roundsContentView: Bool = true
     ) {
-        // Clear, non-opaque window so AppKit derives the drop shadow from the
-        // opaque SwiftUI content (which paints its own rounded background and
-        // hairline border). A shadow set on the content layer itself can't
-        // work here: masksToBounds clips the rounded corners *and* the shadow.
+        // Clear, non-opaque window so AppKit derives the shadow from the SwiftUI content;
+        // a layer shadow would be clipped by `masksToBounds`.
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = true
@@ -362,34 +282,22 @@ private enum WindowStylePolicy {
     }
 }
 
-/// Owns AppKit window lifecycle for app-level windows.
-///
-/// Behavior stays outside this type: callers provide closures for close-time
-/// decisions such as terminating after incomplete onboarding or marking the
-/// changelog as read.
+/// Owns AppKit window lifecycle for app-level windows. Close-time behavior is
+/// supplied by callers as closures.
 @MainActor
 final class WindowCoordinator {
-    /// Key AppKit stores the Preferences window's frame under. Changing it
-    /// silently discards everyone's saved geometry, so it is pinned here rather
-    /// than written inline at the call site.
+    /// Frame autosave key for the Preferences window. Renaming it discards saved geometry.
     static let preferencesFrameAutosaveName = "PunctualPreferencesWindow"
 
-    /// Whether the dropdown panel is currently on screen. Lets a deep link
-    /// open the panel IDEMPOTENTLY: `openDropdownPanel` toggles, which is right
-    /// for a status-item click and wrong for "punctual://dropdown", where a
-    /// second invocation should leave it open rather than dismiss it.
+    /// Whether the dropdown panel is on screen; lets a deep link open it without toggling.
     var isDropdownPanelOpen: Bool { dropdownPanel != nil }
 
-    /// Told `true` once the dropdown panel is on screen and `false` as it
-    /// closes, however it closes (status-item click, Escape, click-away, an
-    /// action inside it). The app uses it to keep the status item highlighted
-    /// while the panel is open.
+    /// Called with `true` when the dropdown panel appears and `false` when it closes.
     var onDropdownPanelVisibilityChange: (@MainActor (Bool) -> Void)?
 
     private weak var preferencesWindow: NSWindow?
 
-    /// Live move/resize observers for the Preferences window. Held so a second
-    /// open cannot stack a duplicate set on top of the first.
+    /// Move/resize observers that save the Preferences window frame.
     private var preferencesFrameObservers: [NSObjectProtocol] = []
     private weak var onboardingHandler: OnboardingHandler?
     private weak var commandBarWindow: NSWindow?
@@ -397,10 +305,8 @@ final class WindowCoordinator {
     private weak var worldClockWindow: NSWindow?
     private weak var eventEditorWindow: NSWindow?
     private weak var cameraPreviewWindow: NSWindow?
-    /// Held STRONGLY (and released on the next run-loop turn after close) rather
-    /// than self-releasing via `isReleasedWhenClosed`: the panel closes from
-    /// inside `resignKey`, and letting AppKit free it there over-released it
-    /// (EXC_BAD_ACCESS in `objc_release` on autorelease-pool drain).
+    /// Held strongly and released a run-loop turn after close: letting AppKit free it
+    /// inside `resignKey` over-releases it (EXC_BAD_ACCESS).
     private var dropdownPanel: DropdownPanelWindow?
     private var dropdownPanelClosedAt: Date?
 
@@ -410,15 +316,8 @@ final class WindowCoordinator {
     private var debugHarness: DebugHarnessWindow?
     #endif
 
-    /// Opens the SwiftUI dropdown panel below the status item, or closes it if
-    /// it is already open (toggle).
-    ///
-    /// `anchor` is the status-item button's rect in screen coordinates; the
-    /// window is placed by the hostless `DropdownPanelPlacement` so it hangs
-    /// under the item and stays inside the screen's visible frame. Like the
-    /// Command Bar, the window is self-releasing (`isReleasedWhenClosed`) with no
-    /// NSWindowController, so the weak ref nils on close and the next click opens
-    /// a fresh panel with a fresh state snapshot.
+    /// Opens the SwiftUI dropdown panel below the status item, or closes it if open.
+    /// - Parameter anchor: the status-item button's rect in screen coordinates.
     func openDropdownPanel(
         state: StatusBarMenuState,
         handlers: DropdownPanelHandlers,
@@ -450,9 +349,7 @@ final class WindowCoordinator {
         resolvedHandlers.dismiss = { [weak window] in window?.close() }
 
         window.title = ""
-        // NOT self-releasing: the coordinator owns the panel and drops it a
-        // run-loop turn after close (see `dropdownPanel`), so AppKit is never
-        // holding a freed window.
+        // Not self-releasing; see `dropdownPanel`.
         window.isReleasedWhenClosed = false
         let contentHeight = installDropdownPanelSurface(
             in: window,
@@ -477,14 +374,11 @@ final class WindowCoordinator {
         window.onClose = { [weak self] in
             self?.dropdownPanelClosedAt = Date()
             self?.onDropdownPanelVisibilityChange?(false)
-            // Release on the NEXT run-loop turn: `onClose` fires from inside
-            // `close()`, where AppKit is still using the window. Dropping the
-            // last reference there is exactly the over-release that crashed.
+            // Release on the next run-loop turn; AppKit is still using the window inside `close()`.
             DispatchQueue.main.async { self?.dropdownPanel = nil }
         }
 
-        // LSUIElement accessory app: activate before keying so the panel takes
-        // keyboard focus (Escape to dismiss) and accent controls render filled.
+        // Accessory app: activate before keying so the panel takes keyboard focus.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -493,23 +387,17 @@ final class WindowCoordinator {
         onDropdownPanelVisibilityChange?(true)
     }
 
-    /// Installs the panel's visible surface into `window` and reports the height
-    /// the SwiftUI content wants (already clamped by the view's own maximum).
-    ///
-    /// Shared by the real panel and the DEBUG inspector so what gets inspected
-    /// cannot drift from what ships — the backdrop, corner radius and shadow are
-    /// built in exactly one place.
+    /// Installs the panel backdrop and SwiftUI content into `window`. Shared with the
+    /// DEBUG inspector.
+    /// - Returns: the content's fitting height.
     @discardableResult
     private func installDropdownPanelSurface(
         in window: NSWindow,
         state: StatusBarMenuState,
         handlers: DropdownPanelHandlers
     ) -> CGFloat {
-        // Pinned on the WINDOW, not via SwiftUI's preferredColorScheme: the
-        // backdrop is an AppKit vibrancy view composited by the window server, so
-        // a SwiftUI-level scheme would restyle the content and leave the material
-        // behind it in the system appearance. `nil` deliberately leaves the window
-        // alone so it keeps following the system as that changes.
+        // Appearance is pinned on the window, not via `preferredColorScheme`, so the AppKit
+        // backdrop follows it too. `nil` follows the system.
         window.appearance = PanelThemePolicy
             .appearance(fromRaw: Defaults[.panelAppearance])
             .nsAppearance
@@ -517,18 +405,14 @@ final class WindowCoordinator {
         let hosting = NSHostingView(
             rootView: DropdownPanelView(state: state, handlers: handlers)
         )
-        // The hosting view goes INSIDE a vibrancy/glass backdrop rather than being
-        // the content view itself — see `PanelBackdrop` for why SwiftUI's own
-        // material cannot do this job here.
+        // Hosted inside `PanelBackdrop`; see there for why a SwiftUI material can't do this.
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = .clear
         window.contentView = PanelBackdrop.wrap(
             hosting,
             radius: DropdownPanelView.cornerRadius
         )
-        // The shadow is derived from the content's alpha. With a translucent
-        // backdrop that derivation has to be redone AFTER the content is in
-        // place, or AppKit keeps a shadow shaped like the window's square frame.
+        // Recompute the alpha-derived shadow once the translucent content is installed.
         window.invalidateShadow()
         WindowStylePolicy.applyRoundedCorners(
             to: window,
@@ -539,12 +423,8 @@ final class WindowCoordinator {
     }
 
     #if DEBUG
-    /// Opens the dropdown panel in a window that stays put, or closes it if it is
-    /// already up (toggle, so the same deep link both shows and hides it).
-    ///
-    /// Development aid only — see `DropdownInspectorWindow`. `anchor` is the real
-    /// status-item rect when the caller has one, so the panel lands where a click
-    /// would put it; `nil` falls back to the top-right of the main screen.
+    /// Toggles a DEBUG-only copy of the dropdown panel that does not dismiss on click-away.
+    /// - Parameter anchor: the status-item rect, or `nil` for the main screen's top-right.
     func toggleDropdownInspectorWindow(
         state: StatusBarMenuState,
         handlers: DropdownPanelHandlers,
@@ -577,8 +457,7 @@ final class WindowCoordinator {
             state: state,
             handlers: resolvedHandlers
         )
-        // Movable, unlike the real panel: dragging it off a busy desktop is often
-        // the fastest way to see how the glass reads over a different backdrop.
+        // Movable, unlike the real panel, so it can be checked over other backdrops.
         window.isMovableByWindowBackground = true
         window.hidesOnDeactivate = false
         window.level = DropdownInspectorPresentationPolicy.level
@@ -608,13 +487,7 @@ final class WindowCoordinator {
         dropdownInspector = window
     }
 
-    /// Opens the debug harness, or brings it forward if it is already up.
-    ///
-    /// Not a toggle, unlike the dropdown inspector: that one is reached by a deep
-    /// link and has no close button, so re-running the link is the only way to
-    /// dismiss it. This is an ordinary titled window you close with its own
-    /// button, and a toggle would make the menu item close a window you had just
-    /// gone looking for.
+    /// Opens the debug harness, or brings it forward if it is already open.
     func openDebugHarnessWindow(handlers: DebugHarnessHandlers) {
         if let existing = debugHarness {
             NSApp.activate(ignoringOtherApps: true)
@@ -631,8 +504,7 @@ final class WindowCoordinator {
         window.title = "Debug harness"
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: DebugHarnessView(handlers: handlers))
-        // Above ordinary windows so it stays visible while you click the status
-        // item it is driving — the whole workflow is harness, menu bar, harness.
+        // Floating so it stays visible while you drive the status item.
         window.level = .floating
         window.hidesOnDeactivate = false
         window.center()
@@ -647,9 +519,8 @@ final class WindowCoordinator {
     }
     #endif
 
-    /// The visible frame of the screen the status item lives on, falling back to
-    /// the main screen (and finally to a sane rect when there is no screen at
-    /// all, e.g. in tests).
+    /// The visible frame of the screen containing `anchor`, falling back to the main
+    /// screen, then to a fixed rect when there is no screen (tests).
     private func visibleFrame(containing anchor: NSRect) -> NSRect {
         let screen = NSScreen.screens.first { $0.frame.intersects(anchor) }
             ?? NSScreen.main
@@ -657,11 +528,8 @@ final class WindowCoordinator {
         return screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 875)
     }
 
-    /// Opens the month calendar window, or brings it forward if it is already
-    /// open. A standard titled/resizable window (like Preferences) held by a
-    /// weak ref and reused — no borderless focus fiddliness. The window loads its
-    /// own month window of events via the injected handlers; it never touches the
-    /// main today/tomorrow sync.
+    /// Opens the month calendar window, or brings it forward if it is already open.
+    /// The window loads its own month of events through `handlers`.
     func openCalendarWindow(handlers: CalendarWindowHandlers) {
         if let calendarWindow {
             if calendarWindow.isMiniaturized {
@@ -694,8 +562,6 @@ final class WindowCoordinator {
         controller.showWindow(self)
         window.center()
 
-        // LSUIElement accessory app: activate before keying so the window opens
-        // focused rather than merely ordered to the front.
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -703,11 +569,7 @@ final class WindowCoordinator {
         calendarWindow = window
     }
 
-    /// Opens the multi-zone world-clock panel window, or brings it forward if it
-    /// is already open. A small standard titled/resizable window held by a weak
-    /// ref and reused (like the calendar window). The view reads its zones and
-    /// time-format from `Defaults` and refreshes itself each minute, so no
-    /// handlers are injected.
+    /// Opens the world-clock window, or brings it forward if it is already open.
     func openWorldClockWindow() {
         if let worldClockWindow {
             if worldClockWindow.isMiniaturized {
@@ -739,8 +601,6 @@ final class WindowCoordinator {
         controller.showWindow(self)
         window.center()
 
-        // LSUIElement accessory app: activate before keying so the window opens
-        // focused rather than merely ordered to the front.
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -748,15 +608,8 @@ final class WindowCoordinator {
         worldClockWindow = window
     }
 
-    /// Opens the camera/mic pre-call preview ("mirror check") window, or brings
-    /// it forward if already open. A standard titled/resizable window held by a
-    /// weak ref, like the calendar window. The `CameraPreviewController` lives in
-    /// the SwiftUI view as a `@StateObject`, so the capture session is created
-    /// when the window's content is built and — critically — the session is
-    /// stopped and the camera released on the view's `onDisappear` (and the
-    /// controller's `deinit`) when the window closes, so the camera light turns
-    /// off. The coordinator injects the real `dismiss` (close) closure since it
-    /// owns the window.
+    /// Opens the camera/mic preview window, or brings it forward if it is already open.
+    /// The capture session stops and the camera is released when the window closes.
     func openCameraPreviewWindow(handlers: CameraPreviewHandlers) {
         if let cameraPreviewWindow {
             if cameraPreviewWindow.isMiniaturized {
@@ -791,8 +644,6 @@ final class WindowCoordinator {
         controller.showWindow(self)
         window.center()
 
-        // LSUIElement accessory app: activate before keying so the window opens
-        // focused rather than merely ordered to the front.
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -800,11 +651,7 @@ final class WindowCoordinator {
         cameraPreviewWindow = window
     }
 
-    /// Opens the in-app event editor for `mode` (create or edit). A standard
-    /// titled/resizable window (like Preferences) held by a weak ref. Any open
-    /// editor is replaced so the form always reflects the requested mode. The
-    /// coordinator owns the window, so it injects the real `dismiss` (close)
-    /// closure into the handlers before building the view model.
+    /// Opens the event editor for `mode`, replacing any editor that is already open.
     func openEventEditorWindow(mode: EventEditorMode, handlers: EventEditorHandlers) {
         eventEditorWindow?.close()
 
@@ -832,8 +679,6 @@ final class WindowCoordinator {
         controller.showWindow(self)
         window.center()
 
-        // LSUIElement accessory app: activate before keying so the editor opens
-        // focused rather than merely ordered to the front.
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -841,12 +686,8 @@ final class WindowCoordinator {
         eventEditorWindow = window
     }
 
-    /// Opens the Command Bar, or closes it if it's already open (toggle). The
-    /// window closes on Escape, on running a row, and on click-away (the window's
-    /// `resignKey` override), so it behaves like Spotlight. The window is
-    /// self-releasing (isReleasedWhenClosed), so the weak ref nils on close and
-    /// the next shortcut press opens a fresh one — no NSWindowController, which
-    /// would otherwise keep the reference alive and break the toggle.
+    /// Opens the Command Bar, or closes it if open. Self-releasing with no
+    /// `NSWindowController`, so the weak ref nils on close and the toggle works.
     func openCommandBarWindow(handlers: CommandBarHandlers) {
         if let existing = commandBarWindow {
             existing.close()
@@ -872,8 +713,6 @@ final class WindowCoordinator {
         window.level = CommandBarWindowPresentationPolicy.level
         positionCommandBar(window)
 
-        // LSUIElement accessory app: activate before keying so the search field
-        // gains first-responder focus and accent controls render filled.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -923,18 +762,14 @@ final class WindowCoordinator {
         let controller = NSWindowController(window: onboardingWindow)
         controller.showWindow(self)
 
-        // Standard level: onboarding should open focused, but it must not stay
-        // above Chrome or other apps during provider authorization.
+        // Normal level so it doesn't cover the browser during provider authorization.
         onboardingWindow.level = OnboardingWindowPresentationPolicy.level
         onboardingWindow.center()
-        // MeetingBar is a menu-bar agent, so it isn't the active app when the
-        // setup window opens. Without activating, the window never becomes key
-        // until the user clicks it, and prominent (accent) controls render
-        // without their fill — making the Continue button look absent.
+        // Accessory app: without activating, the window isn't key and accent buttons
+        // render without their fill.
         NSApp.activate(ignoringOtherApps: true)
         onboardingWindow.makeKeyAndOrderFront(nil)
-        // `activate` is async for an accessory app, so force initial ordering
-        // only once. The standard window level still lets other apps cover it.
+        // `activate` is async for an accessory app, so force the initial ordering.
         onboardingWindow.orderFrontRegardless()
     }
 
@@ -955,11 +790,8 @@ final class WindowCoordinator {
         let controller = NSWindowController(window: changelogWindow)
         controller.showWindow(self)
 
-        // Standard level (not .floating): it shouldn't hover above every app.
         changelogWindow.level = ChangelogWindowPresentationPolicy.level
         changelogWindow.center()
-        // Menu-bar agent isn't active; activate so the prominent button renders
-        // with its accent fill and the window becomes key.
         NSApp.activate(ignoringOtherApps: true)
         changelogWindow.makeKeyAndOrderFront(nil)
         changelogWindow.orderFrontRegardless()
@@ -1016,24 +848,14 @@ final class WindowCoordinator {
             if preferencesWindow.isMiniaturized {
                 preferencesWindow.deminiaturize(nil)
             }
-            // Activate the (accessory) app first, then key the existing window,
-            // so reopening Preferences brings it to front *and* focused.
             NSApplication.shared.activate(ignoringOtherApps: true)
             preferencesWindow.makeKeyAndOrderFront(nil)
-            // `activate` is async for an accessory app, so force the window to
-            // the front regardless of when activation lands; otherwise it can
-            // be ordered behind other apps' windows.
+            // `activate` is async for an accessory app, so force the window to the front.
             preferencesWindow.orderFrontRegardless()
             return
         }
 
-        // Sized so the Dropdown pane — the only one pairing a form with a second
-        // full-height column (a 340pt live preview) — opens with both readable.
-        // The 240pt sidebar comes off the top of every number here, so the old
-        // 900pt default left the form ~319pt: narrower than its own segmented
-        // controls, which pushed the preview off the trailing edge. Keep these in
-        // step with the `.frame` in `PreferencesShellV2`, or the window and its
-        // content disagree about how wide they are allowed to be.
+        // Keep `PreferencesWindowMetrics` in step with the `.frame` in `PreferencesShellV2`.
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: PreferencesWindowMetrics.defaultSize.width,
                                 height: PreferencesWindowMetrics.defaultSize.height),
@@ -1047,76 +869,29 @@ final class WindowCoordinator {
         window.title = WindowTitles.preferences
         window.titleVisibility = .visible
 
-        // A real (empty) NSToolbar is what makes the titlebar draw a background.
-        // Without one there is nothing for AppKit to render behind the title, so
-        // with a transparent titlebar the pane's Form scrolled straight up into
-        // bare window and collided with the title text.
-        //
-        // Deliberately the platform's own chrome rather than a hand-built blurred
-        // header: AppKit then draws whatever the running OS considers current —
-        // standard material on macOS 15, Liquid Glass on 26 — and supplies the
-        // scroll-edge effect for free. A hand-rolled `.ultraThinMaterial` strip
-        // would be frozen at one OS's look and read as wrong on the others.
-        //
-        // `.unified` merges titlebar and toolbar into the single bar the sidebar
-        // sits under, which is the System Settings shape this window is copying.
+        // An empty unified toolbar gives the titlebar its system background and
+        // scroll-edge effect, so scrolled content doesn't run under the title.
         let toolbar = NSToolbar(identifier: "PunctualPreferences")
         toolbar.showsBaselineSeparator = false
         window.toolbar = toolbar
         window.toolbarStyle = .unified
         window.titlebarAppearsTransparent = false
 
-        // NSHostingController (not NSHostingView) applies the window's safe
-        // area regions to the SwiftUI content. safeAreaRegions = .all makes
-        // NavigationSplitView receive the title-bar safe-area inset, so the
-        // sidebar List clears the traffic lights and the detail column's Form
-        // gets a properly bounded scroll height. NSHostingView does NOT
-        // propagate safe areas, which is why NavigationSplitView clipped.
+        // NSHostingController, not NSHostingView: only the controller propagates safe-area
+        // insets, which NavigationSplitView needs to clear the titlebar.
         let hostingController = NSHostingController(rootView: contentView)
         hostingController.safeAreaRegions = .all
         window.contentViewController = hostingController
 
-        // MUST come after assigning the content view controller. Doing so makes
-        // AppKit adopt the controller's fitting size, and a SwiftUI `.frame`
-        // carrying only min/max resolves its fitting width to the MINIMUM — so
-        // the `contentRect` above was silently discarded and Preferences opened
-        // at its smallest allowed size, narrow enough that the Dropdown pane
-        // dropped its preview on every launch.
+        // Must follow `contentViewController`, which resizes the window to the SwiftUI
+        // content's minimum fitting size.
         window.setContentSize(PreferencesWindowMetrics.defaultSize)
-
-        // Standard window level (not .floating): clicking another app should
-        // send Preferences behind it, like any normal window.
 
         let controller = NSWindowController(window: window)
         controller.showWindow(self)
 
-        // Restore where and how big the user left it. Order matters: the default
-        // size above establishes FIRST-launch geometry, and this overwrites it
-        // only when a saved frame actually exists — `setFrameUsingName` reports
-        // whether it restored anything, so a first run falls through to `center()`
-        // at the default size rather than being centred on top of a restore that
-        // never happened.
-        //
-        // Paired with the explicit `saveFrame(usingName:)` in
-        // `handleWindowClosed`; see the note there for why the save is not left to
-        // `setFrameAutosaveName`. `minSize`/`maxSize` still apply, so a frame
-        // saved by an older build outside the current range is clamped rather
-        // than honoured.
-        // Save on every move and resize, not only on close. The close path needs
-        // the app to shut down cleanly, and a crash — or a force-quit — would
-        // otherwise throw away the geometry the user had just set. These fire
-        // only while a window is actually being dragged, so the cost is nothing,
-        // and it keeps the saved frame correct at all times rather than only
-        // after a well-behaved exit.
-        //
-        // Registered BEFORE the restore below so the `center()` fallback is
-        // itself persisted: otherwise a first run saves nothing until the user
-        // happens to drag the window.
-        //
-        // The stored reference has to be live before then too — the observers
-        // read the window back off it, and it used to be assigned only at the end
-        // of this method, by which time `center()` had already fired against a
-        // nil one.
+        // Save the frame on every move and resize so a crash doesn't lose it. Registered
+        // before the restore so the first-run `center()` is persisted too.
         preferencesWindow = window
         preferencesFrameObservers.forEach(NotificationCenter.default.removeObserver)
         preferencesFrameObservers = [
@@ -1127,10 +902,7 @@ final class WindowCoordinator {
                 forName: name,
                 object: window,
                 queue: .main
-            // Reads the window back off `self` rather than out of the
-            // notification: `Notification` is not `Sendable`, so carrying it into
-            // the MainActor closure is a data race the compiler rejects, whereas
-            // this @MainActor class is.
+            // Reads the window off `self` because `Notification` isn't `Sendable`.
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.preferencesWindow?
@@ -1141,20 +913,12 @@ final class WindowCoordinator {
 
         if !window.setFrameUsingName(Self.preferencesFrameAutosaveName) {
             window.center()
-            // Persist the first-run geometry immediately rather than waiting for
-            // the user to move the window. Without this the very first session
-            // has nothing saved, so a crash before any drag loses the placement.
             window.saveFrame(usingName: Self.preferencesFrameAutosaveName)
         }
 
-        // This is an LSUIElement accessory app, so it isn't frontmost by
-        // default. Activate the app *before* keying the window so Preferences
-        // opens focused rather than just ordered to the front.
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        // `activate` is async for an accessory app, so force the window to the
-        // front regardless of when activation lands; otherwise it can open
-        // behind other apps' windows.
+        // `activate` is async for an accessory app, so force the window to the front.
         window.orderFrontRegardless()
 
         preferencesWindow = window
@@ -1166,12 +930,7 @@ final class WindowCoordinator {
         onIncompleteOnboardingClosed: () -> Void,
         onChangelogClosed: () -> Void
     ) {
-        // Persist Preferences' geometry HERE rather than relying on
-        // `setFrameAutosaveName`. That was tried first and wrote nothing: AppKit's
-        // implicit save never fired for this window, even across a graceful quit,
-        // so the user's size silently reset every launch. `saveFrame(usingName:)`
-        // and `setFrameUsingName(_:)` are a matched pair over the same defaults
-        // key, and calling the save explicitly on close makes it deterministic.
+        // Saved explicitly on close: `setFrameAutosaveName` never persisted this window.
         if let window, window === preferencesWindow {
             window.saveFrame(usingName: Self.preferencesFrameAutosaveName)
         }

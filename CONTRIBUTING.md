@@ -51,10 +51,16 @@ Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before changing app flow, ca
 
 Direct app dependencies are Xcode Swift Package references pinned by `Punctual.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`. `Package.swift` defines the hostless `PunctualLogic` package used for fast policy tests. Do not update only `Package.resolved`; change the Xcode package requirement intentionally and review the resolved diff. StoreKit is a system framework, not an external package dependency.
 
+## Code Comments
+
+Comments are documentation, written the way Swift expects it: `///` doc comments on types, functions and properties that say what they are and do, with `- Parameter`, `- Returns` and `- Throws` where useful. A `//` comment explaining *why* is only for code that is deliberately non-standard and would otherwise look wrong (an unusual run-loop mode, a workaround for a specific macOS bug, an ordering dependency). Keep it to a line or two.
+
+Comments are not a changelog or a story. Bug histories, version notes and design reasoning go in the commit message, the test name, `CHANGELOG.md` or `docs/`.
+
 Update `CHANGELOG.md` for user-visible changes and notable architecture, dependency, or release-process changes. For new source strings, update `Punctual/Resources /Localization /en.lproj/Localizable.strings` and run `make validate-strings`; non-English translations are managed through Weblate.
 
 ## License And Attribution
 
 Punctual is built on [MeetingBar](https://github.com/leits/MeetingBar) by Andrii Leitsius and is licensed under the Apache License 2.0. By contributing, you agree that your contributions are licensed under the Apache License 2.0.
 
-When you modify a file that carries an upstream `Copyright © … Andrii Leitsius` header, retain that header (Apache-2.0 §4(c)) and add a change notice for significant modifications (§4(b)) rather than removing the original notice. See [`NOTICE`](NOTICE).
+When you modify a file that carries an upstream `Copyright © … Andrii Leitsius` header, retain that header (Apache-2.0 §4(c)) and add a one-line change notice (`Modified for Punctual by …`, §4(b)) rather than removing the original notice. The notice states that the file changed; it does not list the changes. See [`NOTICE`](NOTICE).

@@ -1,18 +1,8 @@
 //
 //  AdapterMappingTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
-//  Characterization tests for the Defaults → logic-type adapter layer.
-//  These tests pin the exact mapping between Defaults enums and the pure
-//  Core types so that a mistake during the SettingsStore migration (Stage 3)
-//  is caught automatically rather than discovered in production.
-//
-//  Coverage:
-//    EventFiltering+MeetingBar  — EventFilterSettings.current
-//    StatusBarPresentation+MeetingBar — StatusBarPresentationSettings.current,
-//                                       StatusBarTimeDisplay init,
-//                                       StatusBarEventTitleFormat init,
-//                                       StatusBarParticipationDisplay init
+//  Pins the mapping from Defaults enums to the hostless logic types.
 //
 
 import Defaults
@@ -50,8 +40,7 @@ final class EventFilterSettingsAdapterTests: BaseTestCase {
     }
 
     func test_nonAllDayEvents_showInactiveWithoutLink_mapsToShow() {
-        // show_inactive_without_meeting_link is a visual hint only —
-        // the event is still shown, so the filter mode stays .show.
+        // show_inactive_without_meeting_link is a visual hint only; the event is still shown.
         Defaults[.nonAllDayEvents] = .show_inactive_without_meeting_link
         XCTAssertEqual(EventFilterSettings.current.nonAllDayEvents, .show)
     }
@@ -130,13 +119,48 @@ final class EventFilterSettingsAdapterTests: BaseTestCase {
 final class StatusBarPresentationSettingsAdapterTests: BaseTestCase {
 
     func test_noSelectedCalendars_setsHasSelectedCalendarsFalse() {
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDsByProvider] = [EventStoreProvider.macOSEventKit.rawValue: []]
         Defaults[.selectedCalendarIDs] = []
         XCTAssertFalse(StatusBarPresentationSettings.current.hasSelectedCalendars)
     }
 
     func test_withSelectedCalendars_setsHasSelectedCalendarsTrue() {
-        Defaults[.selectedCalendarIDs] = ["cal-1", "cal-2"]
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: ["cal-1", "cal-2"]
+        ]
         XCTAssertTrue(StatusBarPresentationSettings.current.hasSelectedCalendars)
+    }
+
+    func test_googleOnlyTicks_withMacOSPrimaryUnticked_countAsSelected() {
+        Defaults[.enabledCalendarSources] = [.macOSEventKit, .googleCalendar]
+        Defaults[.eventStoreProvider] = .macOSEventKit
+        Defaults[.selectedCalendarIDs] = []
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: [],
+            EventStoreProvider.googleCalendar.rawValue: ["peter@example.com"]
+        ]
+
+        let settings = StatusBarPresentationSettings.current
+        XCTAssertTrue(settings.hasSelectedCalendars)
+        let now = Date()
+        XCTAssertEqual(
+            StatusBarPresentationPolicy.mode(
+                nextEventStartDate: now.addingTimeInterval(600), settings: settings, now: now
+            ),
+            .nextEvent
+        )
+    }
+
+    func test_ticksUnderADisconnectedSource_doNotCountAsSelected() {
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDs] = []
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: [],
+            EventStoreProvider.googleCalendar.rawValue: ["peter@example.com"]
+        ]
+        XCTAssertFalse(StatusBarPresentationSettings.current.hasSelectedCalendars)
     }
 
     func test_showEventMaxTimeUntilEventEnabled_passedThrough() {
@@ -210,8 +234,7 @@ final class StatusBarParticipationDisplayMappingTests: XCTestCase {
     }
 
     func test_pendingHide_mapsToNormal() {
-        // .hide means the event is hidden at the filter layer; if it somehow
-        // reaches the presenter, display it normally.
+        // .hide is applied at the filter layer; the presenter displays such an event normally.
         XCTAssertEqual(StatusBarParticipationDisplay(PendingEventsAppereance.hide), .normal)
     }
 
@@ -328,10 +351,7 @@ final class EventFilterEventAdapterTests: BaseTestCase {
 
 // MARK: - Google OAuth config guard
 
-/// The guard that keeps an unconfigured build from crashing on Google sign-in:
-/// when the credentials are still placeholders (or empty), `isConfigured` is
-/// false and `GCEventStore.signIn` throws `.notConfigured` instead of
-/// force-unwrapping an invalid redirect URL.
+/// `GoogleOAuthConfig.isConfigured` rejects placeholder or empty credentials.
 final class GoogleOAuthConfigTests: XCTestCase {
     func test_placeholderValuesAreNotConfigured() {
         XCTAssertFalse(GoogleOAuthConfig.isConfigured(
@@ -365,14 +385,8 @@ final class GoogleOAuthConfigTests: XCTestCase {
     }
 
     // MARK: - Empty secret must reach AppAuth as nil
-    //
-    // AppAuth branches on `if (_clientSecret)` in Objective-C, where an empty
-    // NSString is a non-nil object and therefore TRUE. Passing "" makes it
-    // authenticate the token request with `Authorization: Basic
-    // base64("<id>:")` instead of putting `client_id` in the body, and Google
-    // answers `invalid_client` for an "iOS"-type client — the type this app's
-    // reversed-domain redirect requires and the setup docs recommend. Which
-    // meant the RECOMMENDED configuration was the one that could not sign in.
+    // AppAuth treats an empty NSString secret as present and switches to Basic auth,
+    // which Google rejects for secretless "iOS"-type clients.
 
     func test_emptySecretIsNilSoAppAuthOmitsBasicAuth() {
         XCTAssertNil(GoogleOAuthConfig.normalizedSecret(""))

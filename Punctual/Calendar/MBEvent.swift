@@ -5,11 +5,8 @@
 //  Created by Andrii Leitsius on 09.04.2022.
 //  Copyright © 2022 Andrii Leitsius. All rights reserved.
 //
-//  Licensed under the Apache License, Version 2.0. Modified for MeetingBarNG by
-//  Peter Krzyzek / Chykalophia, 2026: add `externalIdentifier` (EventKit's
-//  `EKCalendarItem.calendarItemExternalIdentifier`, shared across copies of the
-//  same underlying event in different calendars/accounts) so cross-calendar
-//  duplicate events can be collapsed by a stable shared key.
+//  Licensed under the Apache License, Version 2.0.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
@@ -62,17 +59,12 @@ public struct MBEventAttendee: Hashable, Sendable {
 public struct MBEvent: Identifiable, Hashable, Sendable {
     public var id: String
 
-    /// The colour to draw this event in: its own when it has one, otherwise its
-    /// calendar's. Every event-drawing surface should use this rather than
-    /// reaching for `calendar.color`, or a Google event coloured "Tomato" would
-    /// render in its calendar's blue everywhere but Google's own UI.
+    /// The colour to draw this event in: its own when set, otherwise its calendar's.
+    /// Use this rather than `calendar.color`.
     public var displayColor: NSColor { color ?? calendar.color }
 
-    /// Identifier handed to `meetingStart` AppleScripts. Defaults to `id`, but
-    /// EventKit overrides it with the raw `calendarItemIdentifier` (shared
-    /// across a recurring series) so existing user scripts keep seeing the
-    /// identifier format they were written against, even though `id` is now
-    /// per-occurrence for internal dedup.
+    /// Identifier handed to `meetingStart` AppleScripts. Defaults to `id`; EventKit
+    /// sets the series-wide `calendarItemIdentifier` to keep user scripts' expected format.
     public let scriptIdentifier: String
 
     public let lastModifiedDate: Date?
@@ -85,34 +77,22 @@ public struct MBEvent: Identifiable, Hashable, Sendable {
     var alternateMeetingLinkCandidates: [MeetingLinkCandidate] = []
     public var organizer: MBEventOrganizer?
     public let url: URL?
-    /// Structured meeting URL exposed by the provider (e.g. Google Calendar's
-    /// `conferenceData.entryPoints[type=video]`). When set, this beats links
-    /// found in `url`, `location`, or `notes` regardless of what those fields
-    /// contain. EventKit has no equivalent, so this is `nil` for those events.
+    /// Structured meeting URL from the provider (Google's video `conferenceData` entry point).
+    /// Takes precedence over links found in `url`, `location` or `notes`; always `nil` for EventKit.
     public let conferenceURL: URL?
-    /// Provider-specific URL that opens this event in its source calendar app.
-    /// EventKit: an `ical://ekevent/<identifier>` link. Google: the event's web
-    /// `htmlLink` when available. `nil` when the source has no usable URL, in
-    /// which case the "Open in Calendar" menu action is hidden.
+    /// URL that opens this event in its source calendar app: `ical://ekevent/<id>` for EventKit,
+    /// the web `htmlLink` for Google. `nil` hides "Open in Calendar".
     public let calendarOpenURL: URL?
     public let notes: String?
     public let location: String?
-    /// A colour set on the EVENT itself, overriding its calendar's.
-    ///
-    /// Google-only: an event can carry a `colorId` naming one of the eleven
-    /// colours its web UI offers per event. EventKit has no equivalent —
-    /// `EKEvent` inherits its calendar's colour — so this is nil for every
-    /// EventKit event, and `displayColor` falls back accordingly.
+    /// A colour set on the event itself, overriding its calendar's. Google only; `nil` for EventKit.
     public let color: NSColor?
     public let startDate: Date
     public let endDate: Date
     public var isAllDay: Bool
     public let recurrent: Bool
-    /// EventKit's `EKCalendarItem.calendarItemExternalIdentifier`: a stable
-    /// identifier shared across copies of the same underlying event that appear
-    /// on multiple calendars/accounts. Used to collapse cross-calendar
-    /// duplicates. `nil` for providers that don't expose it (Google) or for
-    /// events without one.
+    /// EventKit's `calendarItemExternalIdentifier`, shared by copies of one event across
+    /// calendars and used for deduplication. `nil` for Google events.
     public let externalIdentifier: String?
     public var attendees: [MBEventAttendee] = []
 

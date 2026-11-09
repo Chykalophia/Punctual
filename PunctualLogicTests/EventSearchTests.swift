@@ -1,8 +1,8 @@
 //
 //  EventSearchTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the ranked event search (MeetingBarNG).
+//  Tests for the ranked event search.
 //
 
 import XCTest

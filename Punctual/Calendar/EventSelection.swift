@@ -1,5 +1,5 @@
 //
-//  EventSelectionPolicy.swift
+//  EventSelection.swift
 //  MeetingBar
 //
 
@@ -56,13 +56,10 @@ struct EventSelectionEvent: Equatable {
     let participationStatus: ParticipationStatus
 }
 
-/// Which events belong in the menu's day list. The dropdown starts at "now"
-/// rather than the start of the day: a meeting that finished more than a short
-/// grace period ago is dropped, while the in-progress meeting and everything
-/// still upcoming stay. Pure so it can be unit-tested hostlessly.
+/// Which events belong in the menu's day list: in-progress and upcoming meetings,
+/// plus those that ended within the grace period.
 enum EventListWindow {
-    /// Keep a just-ended meeting around briefly (e.g. to grab the link right
-    /// after a call ends) before it drops off the list.
+    /// Seconds a meeting stays listed after it ends.
     static let endedGracePeriod: TimeInterval = 5 * 60
 
     static func isVisible(endDate: Date, now: Date) -> Bool {

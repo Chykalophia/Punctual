@@ -1,6 +1,6 @@
 //
 //  MeetingLinkDetectionTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest

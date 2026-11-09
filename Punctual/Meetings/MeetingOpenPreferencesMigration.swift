@@ -2,12 +2,8 @@
 //  MeetingOpenPreferencesMigration.swift
 //  MeetingBar
 //
-//  One-time migration from per-provider Defaults keys (meetBrowser, zoomBrowser,
-//  …) to the unified providerBrowsers map.
-//
-//  Phase 3 PR 6: opening strategies now read from providerBrowsers instead of
-//  individual per-provider keys. Old keys are kept for one release cycle and
-//  removed in PR 7.
+//  One-time migration from the per-provider browser keys (meetBrowser, zoomBrowser,
+//  …) to the `providerBrowsers` map.
 //
 
 import Defaults

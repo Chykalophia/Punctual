@@ -1,30 +1,21 @@
 //
 //  EventReminderOverrides.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Storage for per-event start-reminder overrides: "remind me 30 minutes before
-//  THIS one", or "don't remind me about this one at all".
+//  Defaults storage for per-event start-reminder overrides. The planning logic lives in
+//  `NotificationPlanner`.
 //
-//  The decision logic is hostless in `NotificationPlanner.startAction`; this file
-//  is only the app-target storage, which needs `Defaults.Serializable`.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
 import Foundation
 
-/// One stored override.
-///
-/// Keyed on `MBEvent.id`, which is PER-OCCURRENCE — EventKit's series-shared
-/// identifier is kept separately as `scriptIdentifier`. So overriding one
-/// instance of a recurring standup affects only that instance, which is the
-/// behaviour someone silencing "this Thursday's" would expect.
+/// One stored override, keyed on the per-occurrence `MBEvent.id`, so it affects a single
+/// instance of a recurring event.
 struct EventReminderOverride: Codable, Defaults.Serializable, Hashable {
     let id: String
-    /// When the event ends, so a finished event's override can be pruned. Same
-    /// mechanism `ProcessedEvent` uses for dismissals — without it the list
-    /// grows forever, one entry per meeting ever adjusted.
+    /// When the event ends, so the override can be pruned afterwards.
     let eventEndDate: Date
     /// Seconds before the start. `nil` means no reminder for this event at all.
     let offsetSeconds: Int?
@@ -41,8 +32,7 @@ enum EventReminderOverrideStore {
         overrides.first { $0.id == id }?.planningOverride
     }
 
-    /// Drops overrides whose event has already ended, mirroring
-    /// `EventActionPolicy.cleanupExpired`.
+    /// Drops overrides whose event has already ended.
     static func cleanupExpired(
         _ overrides: [EventReminderOverride],
         now: Date
@@ -53,10 +43,6 @@ enum EventReminderOverrideStore {
     // MARK: - Writes
 
     /// Sets or replaces the override for an event.
-    ///
-    /// Replaces rather than appends: two entries for one id would make the
-    /// winner depend on array order, and `first(where:)` would silently pick the
-    /// stale one.
     @MainActor
     static func set(_ override: StartReminderOverride, for event: MBEvent) {
         let offsetSeconds: Int?
@@ -79,14 +65,12 @@ enum EventReminderOverrideStore {
         Defaults[.eventReminderOverrides].removeAll { $0.id == event.id }
     }
 
-    /// Prunes finished events' overrides. Called on the same cadence as the
-    /// other housekeeping rather than on a timer of its own.
+    /// Prunes overrides for events that have ended.
     @MainActor
     static func pruneExpired(now: Date = Date()) {
         let current = Defaults[.eventReminderOverrides]
         let pruned = cleanupExpired(current, now: now)
-        // Only write when something actually changed: an unconditional write
-        // wakes every Defaults observer, including the menu-bar redraw.
+        // Skip no-op writes, which would wake every Defaults observer.
         if pruned.count != current.count {
             Defaults[.eventReminderOverrides] = pruned
         }

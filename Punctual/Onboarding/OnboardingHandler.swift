@@ -2,17 +2,14 @@
 //  OnboardingHandler.swift
 //  MeetingBar
 //
-//  Holds the app-level callback that AuthorizationScreen invokes when the user
-//  authorises the calendar provider.  Injected as an EnvironmentObject so no
-//  view needs to reach into AppDelegate directly.
+//  Holds the onboarding callbacks that `AuthorizationScreen` invokes, injected as an
+//  environment object so no view reaches into `AppDelegate`.
 //
 
 import Foundation
 
-/// Observable wrapper around onboarding application workflows.
-///
-/// AppDelegate creates one instance, stores the completion logic in it, and
-/// injects it into `OnboardingView` via `.environmentObject(handler)`.
+/// Observable wrapper around the onboarding workflows. Created by `WindowCoordinator`
+/// and injected into `OnboardingView` as an environment object.
 @MainActor
 final class OnboardingHandler: ObservableObject {
     var onProviderSelected:

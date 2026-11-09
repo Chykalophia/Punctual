@@ -1,15 +1,9 @@
 //
 //  WorldClockPanelView.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Multi-zone world-clock panel window (Dot parity). A small titled window that
-//  lists the user's chosen time zones with their current local time and a
-//  Tomorrow/Yesterday tag when a zone's calendar day differs from the local
-//  (reference) zone. Presentation only: all time/day formatting lives in the
-//  hostless `WorldClockPanelPolicy`; the rows are rebuilt each minute by a
-//  `TimelineView(.periodic)` anchored to the top of the current minute. An
-//  "Edit" mode reveals a per-row remove button and an "Add time zone" picker,
-//  both writing `Defaults[.worldClockPanelZones]`.
+//  World clock panel: the chosen time zones with their local time and a Tomorrow/Yesterday tag,
+//  refreshed each minute, with an edit mode that writes `Defaults[.worldClockPanelZones]`.
 //
 
 import Defaults
@@ -26,8 +20,7 @@ struct WorldClockPanelView: View {
 
     @State private var isEditing = false
     @State private var pendingAddIdentifier = ""
-    // Anchor the periodic refresh to the top of the current minute so ticks land
-    // on hh:mm:00 (like the status-bar redraw loop) rather than 60 s after open.
+    // Anchored to the top of the minute so ticks land on hh:mm:00 rather than 60s after opening.
     @State private var minuteAnchor = WorldClockPanelView.startOfCurrentMinute()
 
     var body: some View {
@@ -207,8 +200,7 @@ private struct WorldClockRow: View {
         .contentShape(Rectangle())
     }
 
-    /// A "Tomorrow"/"Yesterday" tag when the zone's day differs from the local
-    /// reference day; `nil` for same-day zones (no tag).
+    /// A "Tomorrow"/"Yesterday" tag when the zone's day differs from the local day; `nil` otherwise.
     private var dayTag: String? {
         switch entry.dayOffset {
         case let offset where offset >= 1:

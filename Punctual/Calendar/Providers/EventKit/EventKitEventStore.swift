@@ -1,14 +1,12 @@
 //
-//  EKEventStore.swift
+//  EventKitEventStore.swift
 //  MeetingBar
 //
 //  Created by Andrii Leitsius on 12.06.2020.
 //  Copyright © 2020 Andrii Leitsius. All rights reserved.
 //
-//  Licensed under the Apache License, Version 2.0. Modified for MeetingBarNG by
-//  Peter Krzyzek / Chykalophia, 2026: thread `calendarItemExternalIdentifier`
-//  onto `MBEvent.externalIdentifier` so the same event appearing on multiple
-//  calendars/accounts can be collapsed by the cross-calendar deduplicator.
+//  Licensed under the Apache License, Version 2.0.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 import Defaults
 import EventKit
@@ -54,11 +52,7 @@ extension EKEventStore: AuthenticatedEventStore {
     }
 
     public func fetchAllCalendars() async throws -> [MBCalendar] {
-        // Move enumeration off the main thread so a large source/calendar
-        // list does not hang the UI. EKEventStore is @unchecked Sendable
-        // (declared at the top of this file), so accessing `shared` from a
-        // detached task is safe. A future iteration can promote this into a
-        // dedicated actor that owns its own EKEventStore instance.
+        // Off the main thread: enumerating a large store blocks.
         await Task.detached(priority: .userInitiated) {
             EKEventStore.shared.calendars(for: .event).map { ekCalendar in
                 MBCalendar(
@@ -73,8 +67,7 @@ extension EKEventStore: AuthenticatedEventStore {
     }
 
     public func fetchEventsForDateRange(for calendars: [MBCalendar], from dateFrom: Date, to dateTo: Date) async throws -> [MBEvent] {
-        // events(matching:) blocks while EventKit walks the store. For users
-        // with thousands of events this hung the menu bar. Push it off main.
+        // Off the main thread: `events(matching:)` blocks while EventKit walks the store.
         await Task.detached(priority: .userInitiated) {
             fetchEventsOffMain(knownCalendars: calendars, dateFrom: dateFrom, dateTo: dateTo)
         }.value
@@ -153,13 +146,8 @@ func mbEvent(from rawEvent: EKEvent, calendar: MBCalendar, customRegexes: [Strin
         attendees.append(attendee)
     }
 
-    // EventKit reuses calendarItemIdentifier for every occurrence of a
-    // recurring event, so suffix the start date to give each occurrence its
-    // own id — mirroring Google's per-instance event ids. True duplicates
-    // (same item, same start) still share an id, which keeps the id-keyed
-    // dedup collapsing them (34293d6) without eating recurring occurrences.
-    // The raw calendarItemIdentifier is still handed to meetingStart scripts
-    // via scriptIdentifier so existing user scripts keep their id format.
+    // EventKit shares calendarItemIdentifier across a recurring series, so the start
+    // date is appended to make the id per-occurrence; scripts get the raw identifier.
     return MBEvent(
         id: "\(rawEvent.calendarItemIdentifier):\(Int(rawEvent.startDate.timeIntervalSince1970))",
         scriptIdentifier: rawEvent.calendarItemIdentifier,
@@ -178,8 +166,6 @@ func mbEvent(from rawEvent: EKEvent, calendar: MBCalendar, customRegexes: [Strin
         recurrent: rawEvent.hasRecurrenceRules,
         calendar: calendar,
         customRegexes: customRegexes,
-        // Shared across copies of the same event in different calendars/accounts,
-        // so it keys cross-calendar duplicate detection in CalendarSync.
         externalIdentifier: rawEvent.calendarItemExternalIdentifier
     )
 }
@@ -189,10 +175,8 @@ func eventKitCalendarOpenURL(for identifier: String) -> URL? {
 }
 
 func getGmailAccount(_ text: String) -> String? {
-    // Hacky and likely to break, but should work until Apple changes something.
-    // Non-greedy quantifiers stop at the first closing quote, otherwise input
-    // with multiple mailto: occurrences captures everything between the first
-    // and last quote.
+    // Parses EKSource's undocumented `description` text; fragile if Apple changes its format.
+    // `[^"]` stops each capture at the first closing quote when several mailto: entries appear.
     guard let regex = try? NSRegularExpression(pattern: #""mailto:([^"@]+@[^"]+)""#) else { return nil }
     let range = NSRange(text.startIndex..., in: text)
     guard let match = regex.firstMatch(in: text, range: range),

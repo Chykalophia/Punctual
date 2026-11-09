@@ -1,10 +1,8 @@
 //
 //  FilterPresetsTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the Filters pane's pure logic (Preferences UX overhaul,
-//  Phase 2): preset apply/detect round-trips, the ended-meetings merge of two
-//  keys into one row, and the retirement of the "show as underlined" value.
+//  Tests for the Filters pane: presets, the ended-meetings row and retired values.
 //
 
 import XCTest
@@ -28,7 +26,6 @@ final class FilterPresetsTests: XCTestCase {
         var tuned = FilterPreset.everything.values
         tuned[FilterDefaultsKey.declined] = "hide"
         XCTAssertEqual(FilterPreset.detect(tuned), .custom)
-        // `.custom` writes nothing, so picking it can never destroy a layout.
         XCTAssertTrue(FilterPreset.custom.values.isEmpty)
     }
 

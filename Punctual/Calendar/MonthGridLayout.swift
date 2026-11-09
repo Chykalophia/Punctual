@@ -1,15 +1,9 @@
 //
 //  MonthGridLayout.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Pure, hostless month-grid math for the calendar window (Dot parity). Given a
-//  date, it produces whole weeks (respecting `Calendar.firstWeekday`) covering
-//  that date's month, padded with the leading/trailing days of the adjacent
-//  months so every week has exactly seven cells. It also folds down to a SINGLE
-//  week (`week(containing:)` + its first/last-day helpers) for the calendar
-//  window's week mode. No DateFormatter / locale
-//  strings live here — only the grid geometry — so it is trivially testable and
-//  compiles into the hostless MeetingBarLogic target.
+//  Pure month and week grid geometry for the calendar window: seven-day weeks
+//  starting on `Calendar.firstWeekday`, padded with adjacent-month days.
 //
 
 import Foundation
@@ -38,9 +32,7 @@ public enum MonthGridLayout {
         return calendar.date(from: components) ?? calendar.startOfDay(for: date)
     }
 
-    /// The top-left cell of the grid: the first day of `date`'s month stepped
-    /// back to the calendar's `firstWeekday`. This is also the lower bound the
-    /// app uses when fetching the month's events.
+    /// The top-left cell of the month grid: the month's first day stepped back to `firstWeekday`.
     public static func firstVisibleDay(forMonthContaining date: Date, calendar: Calendar) -> Date {
         let monthStart = startOfMonth(for: date, calendar: calendar)
         let weekday = calendar.component(.weekday, from: monthStart)
@@ -48,9 +40,7 @@ public enum MonthGridLayout {
         return calendar.date(byAdding: .day, value: -leading, to: monthStart) ?? monthStart
     }
 
-    /// The bottom-right cell of the grid: the last day of `date`'s month stepped
-    /// forward to the end of its week. This is the (inclusive) upper day the app
-    /// uses when fetching the month's events.
+    /// The bottom-right cell of the month grid (inclusive): the month's last day stepped forward to the week's end.
     public static func lastVisibleDay(forMonthContaining date: Date, calendar: Calendar) -> Date {
         let monthStart = startOfMonth(for: date, calendar: calendar)
         let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
@@ -60,9 +50,7 @@ public enum MonthGridLayout {
         return calendar.date(byAdding: .day, value: trailing, to: lastDay) ?? lastDay
     }
 
-    /// The first cell of a SINGLE-week grid: `date`'s own day stepped back to the
-    /// calendar's `firstWeekday`. This is the lower bound the app uses when
-    /// fetching events in week mode.
+    /// The first cell of a single-week grid: `date`'s day stepped back to `firstWeekday`.
     public static func firstVisibleDayOfWeek(containing date: Date, calendar: Calendar) -> Date {
         let day = calendar.startOfDay(for: date)
         let weekday = calendar.component(.weekday, from: day)
@@ -70,20 +58,15 @@ public enum MonthGridLayout {
         return calendar.date(byAdding: .day, value: -leading, to: day) ?? day
     }
 
-    /// The last cell of a SINGLE-week grid: six days after
-    /// `firstVisibleDayOfWeek`. This is the (inclusive) upper day the app uses
-    /// when fetching events in week mode.
+    /// The last cell of a single-week grid (inclusive): six days after `firstVisibleDayOfWeek`.
     public static func lastVisibleDayOfWeek(containing date: Date, calendar: Calendar) -> Date {
         let first = firstVisibleDayOfWeek(containing: date, calendar: calendar)
         return calendar.date(byAdding: .day, value: 6, to: first) ?? first
     }
 
-    /// The single seven-day week containing `date` (the week-mode fold).
+    /// The seven-day week containing `date`, starting on `firstWeekday`.
     ///
-    /// Always exactly seven cells, starting on the calendar's `firstWeekday`.
-    /// `isInMonth` is computed relative to `date`'s OWN month, so a week that
-    /// straddles a month boundary flags each half correctly; `isToday` matches
-    /// the day of `now`.
+    /// `isInMonth` is relative to `date`'s own month; `isToday` matches the day of `now`.
     public static func week(containing date: Date, calendar: Calendar, now: Date) -> [MonthGridDay] {
         let monthComponents = calendar.dateComponents([.year, .month], from: date)
         let first = firstVisibleDayOfWeek(containing: date, calendar: calendar)
@@ -146,19 +129,9 @@ public enum MonthGridLayout {
 
 // MARK: - Month / week fold
 
-/// Whether a compact grid shows a whole month or folds down to a single week,
-/// and what its step buttons then mean.
-///
-/// Expressed as a `Bool` rather than a second mode enum: the calendar WINDOW
-/// already owns `CalendarGridMode` for the same idea, and two enums naming one
-/// concept across two layers is how they drift apart. The hostless layer needs
-/// only "is it folded", so that is all it takes.
+/// Month or single-week grids. The fold is a `Bool` on purpose; the window layer owns `CalendarGridMode`.
 public extension MonthGridLayout {
-    /// The date a grid is anchored on, given how many steps the user has taken.
-    ///
-    /// The step UNIT follows the fold: paging a week view by a whole month would
-    /// skip four weeks of the thing being looked at, and paging a month view by
-    /// one week would barely move it.
+    /// The date a grid is anchored on after `offset` steps of a week (folded) or a month.
     static func anchor(
         from now: Date,
         offset: Int,
@@ -183,11 +156,8 @@ public extension MonthGridLayout {
         return [week(containing: date, calendar: calendar, now: now)]
     }
 
-    /// The range a folded grid actually covers, for a title that does not lie.
-    ///
-    /// A week can straddle two months, so "August 2026" over a row running
-    /// 30 Aug – 5 Sep would be wrong. Callers format the two dates; deciding
-    /// WHICH dates is the layout's business.
+    /// The first and last dates the grid covers, for its title.
+    /// A week may straddle two months; a month returns its own first and last day.
     static func visibleRange(
         anchoredOn date: Date,
         isWeekFold: Bool,

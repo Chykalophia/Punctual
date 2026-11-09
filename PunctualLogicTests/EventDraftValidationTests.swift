@@ -1,8 +1,8 @@
 //
 //  EventDraftValidationTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for in-app event create/edit draft validation (MeetingBarNG).
+//  Tests for event create/edit draft validation.
 //
 
 import XCTest

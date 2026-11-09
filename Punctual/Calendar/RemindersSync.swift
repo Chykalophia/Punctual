@@ -1,14 +1,11 @@
 //
 //  RemindersSync.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  @MainActor store of the reminders shown in the menu (Dot parity). Mirrors
-//  `CalendarSync` but much simpler: publishes `[MBReminder]` and refreshes on
-//  `.EKEventStoreChanged`, a periodic timer, and a manual subject. Only fetches
-//  when the feature is enabled AND reminders access has been granted, so a
-//  disabled or unauthorized install never touches EventKit here.
+//  Publishes the reminders shown in the menu, refreshing on store changes,
+//  settings changes, a timer and a manual subject.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Combine
@@ -67,8 +64,7 @@ final class RemindersSync: ObservableObject {
             .store(in: &cancellables)
     }
 
-    /// Refreshes the published reminders. Self-gates on the setting and access,
-    /// clearing the list when either is off so a toggled-off feature shows nothing.
+    /// Refreshes the published reminders, or clears them when the feature is off or access is not granted.
     func refresh() {
         guard Defaults[.showRemindersInMenu], store.isAccessGranted else {
             if !reminders.isEmpty { reminders = [] }

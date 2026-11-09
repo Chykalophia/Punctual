@@ -1,11 +1,11 @@
 //
-//  NotificationPlanningPolicy.swift
+//  NotificationPlanner.swift
 //  MeetingBar
 //
 
 import Foundation
 
-/// Categories of per-event reminders MeetingBar can produce.
+/// Categories of per-event reminders.
 enum NotificationKind: String, CaseIterable, Equatable, Sendable {
     case eventStart  // system notification before the event begins
     case eventEnd  // system notification before the event ends
@@ -14,12 +14,8 @@ enum NotificationKind: String, CaseIterable, Equatable, Sendable {
     case scriptOnStart  // run the user-configured AppleScript
 }
 
-/// A single concrete reminder the scheduler should reconcile to the OS.
-///
-/// `identity` is the stable key the scheduler uses to deduplicate against
-/// already-pending requests. Two `PlannedNotification` values with the same
-/// `identity` are considered the same scheduled action even if `fireDate`
-/// drifts (e.g. across calendar refreshes).
+/// A single reminder the scheduler reconciles to the OS. `identity` is its deduplication
+/// key against already-pending requests.
 struct PlannedNotification: Equatable, Sendable {
     let eventID: String
     let kind: NotificationKind
@@ -46,19 +42,11 @@ struct NotificationPlanningEvent: Equatable, Sendable {
     let isAllDay: Bool
     let hasMeetingLink: Bool
     /// Per-event override of the start reminder. `nil` follows the global setting.
-    ///
-    /// A `var` with a default so every existing construction site keeps compiling
-    /// and keeps its current behaviour — an override is opt-in per meeting.
     var startReminderOverride: StartReminderOverride?
 }
 
-/// A per-event override of the event-start reminder.
-///
-/// Three states in total, counting the absence of one: no override follows the
-/// global setting, `.suppressed` silences this meeting alone, and `.offset`
-/// gives it its own lead time. "Inherit" has to be distinguishable from "off",
-/// or turning the global reminder on later would silently un-silence a meeting
-/// the user had deliberately quieted.
+/// A per-event override of the event-start reminder. No override follows the global setting,
+/// which keeps "inherit" distinct from `.suppressed`.
 enum StartReminderOverride: Equatable, Sendable {
     /// No start reminder for this event, even when the global setting is on.
     case suppressed
@@ -117,14 +105,8 @@ struct NotificationPlanningSettings: Equatable, Sendable {
 }
 
 enum NotificationPlanner {
-    /// Returns the list of reminders that should be live for the given events
-    /// at `now`. Output is sorted ascending by `fireDate`.
-    ///
-    /// All-day events are deliberately not planned: timed system notifications
-    /// at midnight are not useful, and the runtime is responsible for firing
-    /// fullscreen / auto-join / script for an all-day event while `now` lies
-    /// inside the event range. The runtime layer can read the same `events`
-    /// list directly for that case.
+    /// Returns the reminders that should be live for `events` at `now`, sorted by `fireDate`.
+    /// All-day events are not planned.
     static func plan(
         events: [NotificationPlanningEvent],
         settings: NotificationPlanningSettings,
@@ -173,13 +155,7 @@ enum NotificationPlanner {
         return planned.sorted { $0.fireDate < $1.fireDate }
     }
 
-    /// The start-reminder action for one event, after its override.
-    ///
-    /// Only the START reminder is overridable. The end reminder, fullscreen,
-    /// auto-join and the on-start script stay global on purpose: they are
-    /// workflow settings rather than per-meeting ones, and "why did this meeting
-    /// auto-join when the others didn't" is a far worse surprise than a missing
-    /// reminder.
+    /// The start-reminder action for one event after its override. Only the start reminder is overridable.
     private static func startAction(
         global: NotificationPlanningSettings.Action,
         override: StartReminderOverride?
@@ -190,10 +166,7 @@ enum NotificationPlanner {
         case .suppressed:
             return .disabled
         case .offset(let seconds):
-            // An explicit per-event time wins even when the global reminder is
-            // OFF: asking for a reminder on this meeting is a clearer signal
-            // than the blanket setting, and the alternative is a control that
-            // silently does nothing.
+            // An explicit per-event time applies even when the global reminder is off.
             return NotificationPlanningSettings.Action(enabled: true, offset: seconds)
         }
     }

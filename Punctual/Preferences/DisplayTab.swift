@@ -1,30 +1,26 @@
 //
 //  DisplayTab.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The dropdown builder sections and the calendar window display section,
-//  composed by `DropdownTab` (PreferencesPanes.swift) and `CalendarWindowTab`
-//  respectively. The old `DisplayTab` pane struct is gone — the Phase 2 IA
-//  restructure split it into the Dropdown and Calendar Window panes.
+//  The dropdown sections composed by `DropdownTab` and the calendar window
+//  section composed by `CalendarWindowTab` (both in PreferencesPanes.swift).
 //
-//  DropdownComposerSection was moved here from MenuBuilderTab.swift, originally:
+//  DropdownComposerSection derives from MeetingBar's menu builder preferences, originally:
 //    Created by Andrii Leitsius on 13.01.2021.
 //    Copyright © 2021 Andrii Leitsius. All rights reserved.
-//  Licensed under the Apache License, Version 2.0. Modified for MeetingBarNG by
-//  Peter Krzyzek / Chykalophia, 2026.
+//  Licensed under the Apache License, Version 2.0.
+//  Modified for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Defaults
 import SwiftUI
 
-// MARK: - Composable menu dropdown (MeetingBarNG)
+// MARK: - Composable menu dropdown
 
-/// Lets the user toggle and reorder the sections shown in the menu dropdown,
-/// with a live preview. Mirrors `MenuBarComposerSection`'s UX: ordered rows with
-/// up/down/remove buttons and an "Add section" menu. The stored order
-/// (`dropdownModuleOrder`) is the full canonical order of every module; the
-/// per-module bools drive which are visible. The Preferences footer is pinned
-/// (not a module) so the user can never lock themselves out of Settings/Quit.
+/// Shows, hides and reorders the dropdown's modules, with per-module gear options.
+///
+/// `dropdownModuleOrder` stores the order of every module; per-module bools decide
+/// visibility. The Preferences footer is not a module, so Settings/Quit stay reachable.
 struct DropdownComposerSection: View {
     @Default(.dropdownModuleOrder) var dropdownModuleOrder
     @Default(.showGreetingInMenu) var showGreetingInMenu
@@ -35,7 +31,7 @@ struct DropdownComposerSection: View {
     @Default(.showBookmarksInMenu) var showBookmarksInMenu
     @Default(.showCalendarInMenu) var showCalendarInMenu
 
-    // Greeting gear: the name field.
+    // Greeting and meeting card gear options.
     @Default(.greetingName) var greetingName
     @Default(.greetingShowsDate) var greetingShowsDate
     @Default(.meetingCardShowsProgress) var meetingCardShowsProgress
@@ -44,7 +40,7 @@ struct DropdownComposerSection: View {
     @Default(.meetingCardShowsProvider) var meetingCardShowsProvider
     @Default(.meetingCardShowsSource) var meetingCardShowsSource
 
-    // Agenda gear: the per-event-row detail toggles.
+    // Agenda gear options.
     @Default(.shortenEventTitle) var shortenEventTitle
     @Default(.menuEventTitleLength) var menuEventTitleLength
     @Default(.showEventEndTime) var showEventEndTime
@@ -52,11 +48,9 @@ struct DropdownComposerSection: View {
     @Default(.showEventCalendarColor) var showEventCalendarColor
     @Default(.showMeetingPrepLinks) var showMeetingPrepLinks
 
-    // Which module's gear popover is open.
     @State private var gearOpenModule: DropdownModule?
 
-    /// The full canonical order of every module: the stored order parsed +
-    /// de-duped, with any missing module reappended in standard position.
+    /// Every module in stored order, de-duplicated, with missing modules appended in standard order.
     private var fullOrder: [DropdownModule] {
         var seen = Set<DropdownModule>()
         var ordered: [DropdownModule] = []
@@ -72,8 +66,7 @@ struct DropdownComposerSection: View {
         return ordered
     }
 
-    /// The visible (enabled) modules, in order — the same resolution the status
-    /// bar controller uses, so the preview matches the real dropdown.
+    /// The enabled modules in order, resolved by the same policy the live dropdown uses.
     private var visibleModules: [DropdownModule] {
         DropdownCompositionPolicy.resolve(order: dropdownModuleOrder, enabled: enabledRawValues)
     }
@@ -81,7 +74,7 @@ struct DropdownComposerSection: View {
     private var enabledRawValues: Set<String> {
         DropdownCompositionPolicy.enabledRawValues(
             greeting: showGreetingInMenu,
-            // The style picker owns the timeline's visibility.
+            // The timeline is visible unless its style is `off`.
             timeline: (TimelineSpan(rawValue: timelineStyleRaw) ?? .relative).isVisible,
             meeting: showMeetingControlInMenu,
             agenda: showAgendaInMenu,
@@ -125,11 +118,6 @@ struct DropdownComposerSection: View {
                 }
             }
         }
-
-        // No preview section here: the live preview pane beside this form already
-        // draws the real dropdown from this same resolved module list, including
-        // the pinned Preferences footer. A second, text-only preview inside the
-        // form was the "two previews" duplication.
     }
 
     // MARK: Rows
@@ -176,8 +164,7 @@ struct DropdownComposerSection: View {
         }
     }
 
-    /// Modules that have configurable options get a gear; others are just
-    /// show/hide with nothing to configure.
+    /// Whether the module has options, and so a gear popover.
     private func hasGear(_ module: DropdownModule) -> Bool {
         switch module {
         case .greeting, .agenda, .meeting: return true
@@ -326,8 +313,7 @@ struct DropdownComposerSection: View {
     private func setEnabled(_ module: DropdownModule, _ value: Bool) {
         switch module {
         case .greeting: showGreetingInMenu = value
-        // Hiding the timeline from the composer means choosing the `off`
-        // style; showing it restores the previous one.
+        // Timeline visibility is its style: hiding sets `off`, showing sets `relative`.
         case .timeline: timelineStyleRaw = value ? TimelineSpan.relative.rawValue : TimelineSpan.off.rawValue
         case .meeting: showMeetingControlInMenu = value
         case .agenda: showAgendaInMenu = value
@@ -345,8 +331,6 @@ struct DropdownComposerSection: View {
         guard visible.indices.contains(index), visible.indices.contains(target) else { return }
         visible.swapAt(index, target)
 
-        // Rebuild the full order: fill each enabled slot from the new visible
-        // sequence, leaving disabled modules exactly where they were.
         var iterator = visible.makeIterator()
         let rebuilt = fullOrder.map { module -> DropdownModule in
             isEnabled(module) ? (iterator.next() ?? module) : module
@@ -357,12 +341,8 @@ struct DropdownComposerSection: View {
 
 // MARK: - Dropdown display
 
-/// Dropdown settings that are NOT plain on/off duplicates of a composer module:
-/// the Reminders toggles. The greeting NAME field moved into the greeting
-/// block's gear popover. Reminders is not a composer module, so its on/off
-/// toggle stays here. It requests Reminders access as a side effect, as does the
-/// permission toggle on the Calendars pane — two entry points, one system
-/// permission; neither is exclusive.
+/// Dropdown settings that are not composer modules, such as appearance, density,
+/// row limits and Reminders.
 struct DropdownDisplaySection: View {
     @Default(.showRemindersInMenu) var showRemindersInMenu
     @Default(.remindersIncludeOverdue) var remindersIncludeOverdue
@@ -372,9 +352,7 @@ struct DropdownDisplaySection: View {
     @Default(.panelAppearance) var panelAppearanceRaw
     @Default(.panelAccent) var panelAccentRaw
 
-    /// Raw strings in Defaults, enums in the UI — the enums live in the hostless
-    /// module, which cannot import Defaults. Decoding leniently on read means a
-    /// value from a future build shows as System rather than refusing to load.
+    /// Bridges the raw-string Default to `PanelAppearance`; unknown values read as System.
     private var appearanceBinding: Binding<PanelAppearance> {
         Binding(
             get: { PanelThemePolicy.appearance(fromRaw: panelAppearanceRaw) },
@@ -392,9 +370,7 @@ struct DropdownDisplaySection: View {
     @Default(.timelineStyle) var timelineStyleRaw
     @Default(.timelineAppearance) var timelineAppearanceRaw
 
-    /// Bridges the raw-string Default to the hostless enum. An unrecognised
-    /// stored value reads back as `.standard` rather than leaving the picker
-    /// with no selection.
+    /// Bridges the raw-string Default to `DropdownDensity`; unknown values read as `.standard`.
     private var densityBinding: Binding<DropdownDensity> {
         Binding(
             get: { DropdownDensity(rawValue: dropdownDensityRaw) ?? .standard },
@@ -478,8 +454,7 @@ struct DropdownDisplaySection: View {
             Text("preferences_dropdown_max_rows_title".loco())
             PresetNumberPicker(
                 presets: [5, 10, 15, 0],
-                // 0 is the "off" value, and "0 meetings" would read as "hide them
-                // all" — the one preset whose number has to be spelled out.
+                // 0 means "no limit", so it is labelled rather than shown as a number.
                 presetLabel: { $0 == 0 ? "preferences_dropdown_max_rows_unlimited".loco() : "\($0)" },
                 customLabel: "preferences_preset_custom".loco(),
                 value: $dropdownMaxEventRows,
@@ -492,8 +467,7 @@ struct DropdownDisplaySection: View {
             Text("preferences_dropdown_action_highlight_title".loco())
             PresetNumberPicker(
                 presets: [0, 2, 5, 15],
-                // 0 is not "no lead time" to a reader, it is "when it starts" —
-                // the one preset whose number needs spelling out.
+                // 0 means "when it starts", so it is labelled rather than shown as a number.
                 presetLabel: { $0 == 0 ? "preferences_dropdown_action_highlight_now".loco() : "\($0)" },
                 customLabel: "preferences_preset_custom".loco(),
                 value: $eventActionHighlightMinutes,
@@ -503,10 +477,6 @@ struct DropdownDisplaySection: View {
                 example: "preferences_dropdown_action_highlight_example".loco(),
                 isEnabled: true
             )
-            // Reminders (Dot parity). Turning this on requests Reminders access
-            // and only flips on if granted. NOT the only such gate — the
-            // permission toggle on the Calendars pane requests the same access
-            // independently; both drive one system permission.
             Toggle(
                 preferenceLabel("preferences_dropdown_reminders_toggle"),
                 isOn: showRemindersBinding
@@ -520,8 +490,7 @@ struct DropdownDisplaySection: View {
         }
     }
 
-    /// Enabling the feature first requests Reminders access; the setting only
-    /// flips on when access is granted, so a denied prompt leaves the toggle off.
+    /// Turning on first requests Reminders access; the setting is stored only if access is granted.
     private var showRemindersBinding: Binding<Bool> {
         Binding(
             get: { showRemindersInMenu },
@@ -541,11 +510,8 @@ struct DropdownDisplaySection: View {
 
 // MARK: - Calendar window display
 
-/// Display options for the standalone calendar window (the month/week grid),
-/// kept separate from the dropdown options above because they affect a different
-/// surface. The window's own Month/Week fold lives in its header; the stored
-/// default, weekend dimming, first weekday, week numbers, and per-day event cap
-/// are persistent preferences.
+/// Display options for the calendar window (the month/week grid): default view, weekend
+/// dimming, first weekday, week numbers, per-day event cap and date markers.
 struct CalendarWindowDisplaySection: View {
     @Default(.dimWeekendsInCalendar) var dimWeekendsInCalendar
     @Default(.calendarGridMode) var calendarGridMode

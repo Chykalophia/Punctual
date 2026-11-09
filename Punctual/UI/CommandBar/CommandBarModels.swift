@@ -1,19 +1,15 @@
 //
 //  CommandBarModels.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless value types for the Command Bar (Dot parity). Foundation-only, so
-//  they compile into the MeetingBarLogic module and are unit-tested without a
-//  host. Localized strings are supplied by the app (CommandBarActionDescriptor
-//  carries already-localized text), keeping `.loco()` out of the pure module.
-//  No AI/LLM, no natural-language event creation — text matching only.
+//  Hostless value types for the Command Bar, compiled into PunctualLogic. Localized text is
+//  supplied by the app, keeping `.loco()` out of the module. Plain text matching only, no AI.
 //
 
 import Foundation
 
-/// Flat projection of an event for the Command Bar. `sourceIndex` maps a result
-/// row back to the caller's `[MBEvent]`. `subtitle` is preformatted app-side so
-/// locale/time formatting stays out of the pure module.
+/// Flat projection of an event for the Command Bar. `sourceIndex` maps a row back to the caller's
+/// `[MBEvent]`; `subtitle` is preformatted by the app.
 struct CommandBarEventInput: Equatable {
     let sourceIndex: Int
     let id: String
@@ -29,8 +25,7 @@ struct CommandBarEventInput: Equatable {
     let attendees: [String]
 }
 
-/// The fixed quick actions the Command Bar can run. Wired to existing entry
-/// points app-side (createMeeting / join / openPreferences / clipboard).
+/// The fixed quick actions the Command Bar can run.
 enum CommandBarAction: String, Equatable, CaseIterable {
     case joinNext
     case createMeeting
@@ -39,8 +34,7 @@ enum CommandBarAction: String, Equatable, CaseIterable {
     case refreshCalendars
 }
 
-/// An action plus its localized presentation and match synonyms. Built app-side
-/// so the pure matcher never localizes.
+/// An action plus its localized presentation and match synonyms, built by the app.
 struct CommandBarActionDescriptor: Equatable {
     let action: CommandBarAction
     let title: String
@@ -54,12 +48,11 @@ struct CommandBarActionDescriptor: Equatable {
 /// What a row resolves to when the user runs it.
 enum CommandBarResult: Equatable {
     case action(CommandBarAction)
-    /// The event's id — the app resolves it back to an MBEvent.
+    /// The event's id, resolved back to an `MBEvent` by the app.
     case event(String)
 }
 
-/// A ranked, display-ready row. Presentation-only fields (title/subtitle) are
-/// already localized/preformatted; `result` is what to execute.
+/// A ranked, display-ready row with localized text; `result` is what to execute.
 struct CommandBarResultRow: Equatable {
     let result: CommandBarResult
     let title: String

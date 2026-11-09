@@ -1,8 +1,8 @@
 //
 //  StatusBarCompositionPolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the composable menu-bar policy (MeetingBarNG).
+//  Tests for the composable menu-bar policy.
 //
 
 import XCTest
@@ -273,7 +273,7 @@ final class StatusBarCompositionPolicyTests: XCTestCase {
             event: event(),
             settings: settings(titleFormat: .none)
         )
-        // No leading separator, no title text — clock only.
+        // No leading separator and no title text: clock only.
         XCTAssertFalse(result.title.hasPrefix(" "), result.title)
         XCTAssertFalse(result.title.contains("Standup"), result.title)
         XCTAssertFalse(result.title.isEmpty, result.title)
@@ -550,11 +550,8 @@ final class StatusBarCompositionPolicyTests: XCTestCase {
     func testComposedRendersProgressWeekWorldClockInEventMode() {
         let result = present(tokens: [.progress, .weekNumber, .worldClock], event: event())
         XCTAssertEqual(result.mode, .nextEvent)
-        // Progress bar glyphs present.
         assertMatches(result.title, "[█▏▎▍▌▋▊▉░]")
-        // Week number present.
         assertMatches(result.title, "W[0-9]{1,2}")
-        // World-clock label present.
         XCTAssertTrue(result.title.contains("SF"), result.title)
     }
 

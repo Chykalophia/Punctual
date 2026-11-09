@@ -1,6 +1,6 @@
 //
 //  StatusBarIconPolicyTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -112,10 +112,6 @@ final class StatusBarIconPolicyTests: XCTestCase {
     // MARK: - boundary cases
 
     func testFormatAssetNameOverridesAssetsForCustomFormat() {
-        // Even if a future build adds new EventTitleIconFormat cases, the
-        // policy passes the format's rawValue through transparently for
-        // .appicon / .calendar so user-visible behavior matches the asset
-        // pinned to the Defaults enum, not the StatusBarIconAssets table.
         let custom = icon(
             mode: .nextEvent,
             format: .calendar,

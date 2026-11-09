@@ -1,32 +1,17 @@
 //
 //  FilterPresets.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless resolution for the Filters pane (Preferences UX overhaul, Phase 2).
+//  Hostless logic for the Filters pane: presets, the merged "ended meetings"
+//  row, and the retired-value migration. Values are raw strings, not the app's
+//  `Defaults` enums, so this compiles into PunctualLogic.
 //
-//  Three pieces of pure logic that the SwiftUI pane must not own:
-//
-//    1. `FilterPreset` — the "Everything / Meetings only / Only what I accepted"
-//       chips. A chip WRITES a set of stored values; the selected chip is
-//       DERIVED from the stored values, so `Custom` can never be a mode you get
-//       stuck in (or lose on window close).
-//    2. `EndedMeetingsVisibility` — the merge of `pastEventsAppereance` and
-//       `hideFinishedEventsInMenu` into one Show / Dim / Hide row. The two keys
-//       overlapped, could contradict, lived on two different tabs, and nothing
-//       stated precedence.
-//    3. `FilterVocabularyMigration` — "show as underlined" is deleted as an
-//       option, so anyone holding it is moved to Dim once, deliberately.
-//
-//  Values are plain raw strings, not the app's `Defaults`-serializable enums, so
-//  this file compiles into MeetingBarLogic and is unit-tested without a host.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
-/// The stored key names the Filters presets write. Raw strings so the hostless
-/// module never imports `Defaults`.
+/// The `Defaults` key names the Filters presets write.
 enum FilterDefaultsKey {
     static let allDay = "allDayEvents"
     static let noLink = "nonAllDayEvents"
@@ -38,11 +23,9 @@ enum FilterDefaultsKey {
     static let hideFinished = "hideFinishedEventsInMenu"
 }
 
-/// One-click starting points for the seven per-kind filter rows.
+/// Named sets of values for the per-kind filter rows.
 ///
-/// `custom` is a *label*, not a mode: it is what the pane shows when the stored
-/// values match no named preset. Nothing is stored to say "I am custom", so a
-/// hand-tuned set survives quitting Preferences.
+/// `custom` is never stored; it is what `detect(_:)` returns when the values match no named preset.
 enum FilterPreset: String, CaseIterable, Sendable {
     case everything
     case meetingsOnly
@@ -68,8 +51,7 @@ enum FilterPreset: String, CaseIterable, Sendable {
                 FilterDefaultsKey.solo: "show_active",
                 FilterDefaultsKey.pending: "show",
                 FilterDefaultsKey.tentative: "show",
-                // `strikethrough` is this key's only non-dim, non-hidden value —
-                // the enum has no plain `show` case (see FiltersTab).
+                // `DeclinedEventsAppereance` has no plain `show`; `strikethrough` is its visible value.
                 FilterDefaultsKey.declined: "strikethrough",
                 FilterDefaultsKey.ended: "show_inactive",
                 FilterDefaultsKey.hideFinished: "false"
@@ -107,7 +89,7 @@ enum FilterPreset: String, CaseIterable, Sendable {
     }
 }
 
-/// The single Show / Dim / Hide vocabulary the Filters rows speak.
+/// The Show / Dim / Hide values offered by the Filters rows.
 enum FilterVisibility: String, CaseIterable, Sendable {
     case show
     case dim
@@ -122,19 +104,17 @@ enum FilterVisibility: String, CaseIterable, Sendable {
     }
 }
 
-/// "Meetings that have ended" is one row over two stored keys.
+/// The "Meetings that have ended" row over `pastEventsAppereance` and `hideFinishedEventsInMenu`.
 ///
-/// Precedence, stated once and here only: **hide wins**. Either key asking to
-/// hide hides, because a user who set either one expects finished meetings gone.
+/// Hide wins: if either key hides, the row reads Hide.
 enum EndedMeetingsVisibility {
-    /// Read the merged row from both stored values.
+    /// Reads the merged row from both stored values.
     static func resolve(pastRawValue: String, hideFinished: Bool) -> FilterVisibility {
         if hideFinished || pastRawValue == "hide" { return .hide }
         return pastRawValue == "show_inactive" ? .dim : .show
     }
 
-    /// Write the merged row back to both stored values, so they can never
-    /// contradict each other again.
+    /// The values to write to both keys for `visibility`, keeping them consistent.
     static func storedValues(for visibility: FilterVisibility) -> (past: String, hideFinished: Bool) {
         switch visibility {
         case .show: ("show_active", false)
@@ -144,13 +124,9 @@ enum EndedMeetingsVisibility {
     }
 }
 
-/// "show as underlined" is deleted as an option value: three vocabularies
-/// (show/dim/underline/strikethrough) collapse into one (Show/Dim/Hide).
+/// Maps the retired "show as underlined" value to Dim.
 ///
-/// The stored case still exists on the enum, so nothing fails to decode; it is
-/// simply no longer offered. A one-shot value migration, not a schema change:
-/// anyone holding it lands on Dim — the honest neighbour — instead of meeting a
-/// picker with nothing selected.
+/// The case still exists on the stored enums so old values decode; it is no longer offered in the UI.
 enum FilterVocabularyMigration {
     static let retiredRawValue = "show_underlined"
     static let replacementRawValue = "show_inactive"

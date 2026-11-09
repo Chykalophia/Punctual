@@ -1,33 +1,26 @@
 //
 //  LocationSuggestions.swift
-//  MeetingBarNG
+//  Punctual
 //
 //  MapKit-backed location suggestions for the event editor.
 //
-//  ⚠️ This is the ONLY part of MeetingBarNG that sends anything off the machine.
-//  MapKit forwards the typed text to Apple to produce suggestions. That cuts
-//  against the local-first principle in ROADMAP.md, so the feature is OFF by
-//  default, the Preferences copy says plainly what leaves the Mac, and the gate
-//  itself lives in the hostless, unit-tested `LocationAutocompletePolicy` rather
-//  than in this file.
+//  MapKit sends the typed text to Apple, so the feature is off by default and gated by the
+//  hostless `LocationAutocompletePolicy`.
 //
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 import MapKit
 
-/// A single suggestion, flattened out of `MKLocalSearchCompletion` so the view
-/// never touches MapKit types.
+/// A single suggestion, flattened out of `MKLocalSearchCompletion` so the view never touches MapKit.
 struct LocationSuggestion: Identifiable, Hashable {
     /// Composed from both lines: two different addresses can share a title.
     var id: String { "\(title)|\(subtitle)" }
     let title: String
     let subtitle: String
 
-    /// What goes in the field when picked. The subtitle usually carries the
-    /// street and city, which is the part that makes a location useful to
-    /// someone reading the invite.
+    /// The text placed in the location field when the suggestion is picked.
     var fieldValue: String {
         subtitle.isEmpty ? title : "\(title), \(subtitle)"
     }
@@ -42,19 +35,14 @@ final class LocationSuggestionsModel: NSObject, ObservableObject {
     override init() {
         super.init()
         completer.delegate = self
-        // Addresses and points of interest; explicitly NOT `.query`, which
-        // returns search phrases rather than places.
+        // Not `.query`, which returns search phrases rather than places.
         completer.resultTypes = [.address, .pointOfInterest]
     }
 
-    /// Updates the suggestion list for `text`, or clears it.
-    ///
-    /// Every caller goes through the hostless gate, so a disabled feature makes
-    /// no request and holds no stale results.
+    /// Updates the suggestion list for `text`, or cancels and clears it when the policy says not to query.
     func update(for text: String, isEnabled: Bool) {
         guard LocationAutocompletePolicy.shouldQuery(text, isEnabled: isEnabled) else {
-            // Cancel in flight as well as clearing: a request started before the
-            // user deleted back to two characters would otherwise still land.
+            // Cancel too, so a request already in flight cannot land after clearing.
             completer.cancel()
             if !suggestions.isEmpty { suggestions = [] }
             return
@@ -62,7 +50,7 @@ final class LocationSuggestionsModel: NSObject, ObservableObject {
         completer.queryFragment = text
     }
 
-    /// Drops everything, for when the editor closes or a suggestion is taken.
+    /// Cancels any request and clears the suggestions.
     func clear() {
         completer.cancel()
         if !suggestions.isEmpty { suggestions = [] }
@@ -75,16 +63,13 @@ extension LocationSuggestionsModel: MKLocalSearchCompleterDelegate {
             LocationSuggestion(title: $0.title, subtitle: $0.subtitle)
         }
         Task { @MainActor [weak self] in
-            // Capped: the field sits in a small sheet, and a scrolling wall of
-            // twenty addresses is worse than the five most likely.
+            // Capped to fit the editor sheet.
             self?.suggestions = Array(results.prefix(5))
         }
     }
 
     nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-        // Suggestions are a convenience: offline, rate-limited, or refused, the
-        // field still works as a plain text field. Failing quietly is correct —
-        // an error banner for an optional autocomplete would be noise.
+        // Failures are silent; the field still works as plain text.
         Task { @MainActor [weak self] in
             self?.suggestions = []
         }

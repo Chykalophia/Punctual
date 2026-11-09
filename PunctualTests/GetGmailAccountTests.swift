@@ -1,6 +1,6 @@
 //
 //  GetGmailAccountTests.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import XCTest

@@ -1,25 +1,11 @@
 //
 //  IndirectLocalizationKeyTests.swift
-//  MeetingBarNGTests
+//  PunctualTests
 //
-//  Guards the localization keys the tooling structurally cannot see.
+//  Resolves every localization key reached through a property, which the string linters cannot
+//  see, and fails if the bundle returns the key itself.
 //
-//  `Scripts/validate_localizations.sh` scans for the literal call shape
-//  `"some_key".loco()`. `Scripts/strings-lint` additionally treats any bare
-//  identifier literal as a *reference*, which is what stops it reporting false
-//  orphans — but it cannot tell a key literal from any other string, so it
-//  cannot use that looser set to detect keys that are MISSING.
-//
-//  Keys reached through a property — `presentation.statusTextKey.loco()`,
-//  `option.titleKey.loco()`, `tab.purposeKey.loco()` — therefore fall in the gap
-//  between the two checks. The Phase 2 strings rewrite deleted ten of them and
-//  every gate stayed green; the Calendars pane shipped with the literal text
-//  "preferences_status_state_ok" where its sync status should be.
-//
-//  This test closes that gap: it resolves every key each of those properties can
-//  return, and fails if the bundle hands back the key itself.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import XCTest
@@ -58,10 +44,6 @@ final class IndirectLocalizationKeyTests: XCTestCase {
         }
     }
 
-    // The status-bar time options are gone: `PreferencesStatusBarTimeOption` fed
-    // the deleted "Time next to the title" picker, whose two capabilities now
-    // live on the Menu Bar pane as the Countdown block and One line / Two lines.
-
     // MARK: - Calendar source presentation
 
     func testEveryCalendarSourceKeyResolves() {
@@ -80,10 +62,7 @@ final class IndirectLocalizationKeyTests: XCTestCase {
 
     // MARK: - Calendar sync status
 
-    /// The regression that shipped: every reachable connection state must
-    /// produce a resolvable status line and empty-state line. Driving this
-    /// through `make(from:)` rather than asserting a hardcoded list means a new
-    /// state cannot be added without its strings.
+    /// Driven through `make(from:)` rather than a hardcoded list, so a new state cannot ship without its strings.
     func testEverySyncStatusKeyResolves() {
         for presentation in Self.allCalendarPresentations() {
             assertResolves(

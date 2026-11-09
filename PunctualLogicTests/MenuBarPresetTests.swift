@@ -1,9 +1,8 @@
 //
 //  MenuBarPresetTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for the composable menu-bar PRESETS (MeetingBarNG, Dot
-//  parity): the preset→tokens map and the `detect` round-trip.
+//  Tests for the menu-bar presets: the preset-to-tokens map and `detect`.
 //
 
 import XCTest
@@ -36,7 +35,7 @@ final class MenuBarPresetTests: XCTestCase {
     }
 
     func testNonMatchingOrderDetectsAsCustom() {
-        // The classic token set, reordered — not an exact ordered match.
+        // The classic token set, reordered, so not an exact ordered match.
         XCTAssertEqual(MenuBarPreset.detect(tokens: [.title, .icon, .countdown]), .custom)
     }
 

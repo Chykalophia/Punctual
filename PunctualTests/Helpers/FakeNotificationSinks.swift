@@ -1,6 +1,6 @@
 //
 //  FakeNotificationSinks.swift
-//  MeetingBarTests
+//  PunctualTests
 //
 
 import UserNotifications
@@ -8,9 +8,8 @@ import XCTest
 
 @testable import Punctual
 
-/// In-memory `NotificationRequestSink` that records every call so reconcile
-/// behaviour can be verified without touching the real notification center.
-/// Calls are serialised by the test's `@MainActor` runner; no locking needed.
+/// In-memory `NotificationRequestSink` that records every call. Used from `@MainActor` tests, so it
+/// needs no locking.
 final class FakeNotificationRequestSink: NotificationRequestSink, @unchecked Sendable {
     private var pending: [UNNotificationRequest] = []
     private(set) var addedIdentifiers: [String] = []

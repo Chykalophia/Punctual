@@ -1,9 +1,8 @@
 //
 //  StartReminderOverrideTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for per-event reminder times (MeetingBarNG): how an override
-//  interacts with the global setting, and what it deliberately does NOT touch.
+//  Tests for per-event start-reminder overrides against the global setting.
 //
 
 import XCTest
@@ -79,9 +78,7 @@ final class StartReminderOverrideTests: XCTestCase {
     }
 
     func testAnOverrideFiresEvenWhenTheGlobalReminderIsOff() {
-        // Asking for a reminder on THIS meeting is a clearer signal than the
-        // blanket setting; the alternative is a control that silently does
-        // nothing.
+        // An explicit per-event offset wins even with the global reminder off.
         let planned = startNotifications(
             event(override: .offset(600)), settings(startEnabled: false)
         )
@@ -101,8 +98,6 @@ final class StartReminderOverrideTests: XCTestCase {
     }
 
     func testSuppressedIsDistinctFromInherit() {
-        // The whole reason the override is three-state: turning the global
-        // reminder on must not un-silence a meeting deliberately quieted.
         XCTAssertTrue(startNotifications(event(override: .suppressed), settings(startEnabled: true)).isEmpty)
         XCTAssertFalse(startNotifications(event(override: nil), settings(startEnabled: true)).isEmpty)
     }
@@ -123,9 +118,7 @@ final class StartReminderOverrideTests: XCTestCase {
     }
 
     func testTheOverrideDoesNotTouchTheEndReminder() {
-        // Only the START reminder is per-event. The others are workflow settings,
-        // and a meeting that auto-joined when the others didn't is a far worse
-        // surprise than a missing reminder.
+        // Only the start reminder is per-event; the other notifications ignore the override.
         let settings = NotificationPlanningSettings(
             eventStart: .init(enabled: true, offset: 300),
             eventEnd: .init(enabled: true, offset: 0),

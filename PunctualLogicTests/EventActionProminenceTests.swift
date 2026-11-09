@@ -1,11 +1,8 @@
 //
 //  EventActionProminenceTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Hostless tests for whether an event's action control reads as a call to
-//  action. Three surfaces share this rule — the panel's event rows, the panel's
-//  meeting card, and the classic NSMenu's hosted card — so a change here is
-//  visible in all of them at once.
+//  Tests for whether an event's action control reads as a call to action.
 //
 
 import XCTest
@@ -38,8 +35,7 @@ final class EventActionProminenceTests: XCTestCase {
     }
 
     func testMeetingExactlyAtTheLeadBoundaryIsImminent() {
-        // Inclusive: at exactly two minutes out the button should already be lit,
-        // not flip on a moment later.
+        // Inclusive: exactly at the lead time the control is already lit.
         XCTAssertTrue(imminent(startsIn: 2))
     }
 
@@ -51,8 +47,7 @@ final class EventActionProminenceTests: XCTestCase {
     // MARK: - Running and finished
 
     func testRunningMeetingIsImminentRegardlessOfLead() {
-        // Started 10 minutes ago, 30 long: still going, so still actionable even
-        // though it is nowhere near the lead window.
+        // Started 10 minutes ago and 30 long, so still running despite a zero lead.
         XCTAssertTrue(imminent(startsIn: -10, leadMinutes: 0))
     }
 
@@ -61,8 +56,7 @@ final class EventActionProminenceTests: XCTestCase {
     }
 
     func testFinishedMeetingIsNotImminent() {
-        // Ended 5 minutes ago. A stale row left open in the panel must recede
-        // rather than stay lit indefinitely.
+        // Ended 5 minutes ago.
         XCTAssertFalse(imminent(startsIn: -35, lasting: 30))
     }
 
@@ -78,8 +72,7 @@ final class EventActionProminenceTests: XCTestCase {
     }
 
     func testNegativeLeadIsClampedRatherThanInverted() {
-        // A corrupt or hand-edited preference must degrade to "only while
-        // running", never light up everything by flipping the comparison.
+        // A negative lead degrades to "only while running".
         XCTAssertFalse(imminent(startsIn: 1, leadMinutes: -60))
         XCTAssertFalse(imminent(startsIn: 120, leadMinutes: -60))
         XCTAssertTrue(imminent(startsIn: -1, leadMinutes: -60))

@@ -1,6 +1,6 @@
 //
 //  MeetingLinkDetectorTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
 
 import XCTest
@@ -124,10 +124,8 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testDetectsZhumuMeetingLinkVariants() {
-        // Real Zhumu/WeMeeting join formats: a `/j/` link with an optional
-        // `?pwd=` passcode, and the web-client `/wc/join/` link with a `?wpk=`
-        // key. The original pattern used `[0-9]+?pwd=` (a lazy quantifier that
-        // ate the `?`), so it never matched a real link.
+        // Real Zhumu/WeMeeting join formats: a `/j/` link with an optional `?pwd=` passcode,
+        // and the web-client `/wc/join/` link with a `?wpk=` key.
         let urls = [
             "https://welink.zhumu.com/j/154051242?pwd=abc123",
             "https://welink.zhumu.com/j/150525986",
@@ -201,9 +199,7 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testDetectsLinkInsideHTMLAttributeWithoutStripping() {
-        // The raw-notes pass already matches because the link regex has no
-        // word boundaries, so `href="..."` markup around the URL does not
-        // prevent a match. Guards that change in future regex tightening.
+        // The link regex has no word boundaries, so `href="..."` markup does not prevent a match.
         let link = MeetingLinkDetector.detect(
             location: nil,
             eventURL: nil,
@@ -215,11 +211,8 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testDetectsLinkOnlyAfterHTMLStripping() {
-        // The URL prefix is encoded with hex entities AND wrapped in a real
-        // HTML tag. HTML stripping only triggers entity-decoding when
-        // it sees a tag (containsHTML check), so we need both. Raw pass has
-        // no literal "https://" and returns nil; the stripped pass produces
-        // "https://meet.google.com/abc-defg-hij" and matches.
+        // Hex entities plus a real tag: entity decoding only runs once a tag is seen, so the
+        // raw pass finds nothing and the stripped pass decodes to the Meet URL.
         let raw = "<p>&#x68;&#x74;&#x74;&#x70;&#x73;://meet.google.com/abc-defg-hij</p>"
 
         XCTAssertNil(
@@ -239,10 +232,7 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testEventURLBeatsLocation() {
-        // Phase 3 candidate-based detection: structured eventURL field beats
-        // free-text location. Old "first match wins" preferred location;
-        // candidate model treats EKEvent.url style structured URLs as more
-        // canonical than location text.
+        // A structured `eventURL` beats free-text location.
         let link = MeetingLinkDetector.detect(
             location: "https://meet.google.com/abc-defg-hij",
             eventURL: URL(string: "https://us02web.zoom.us/j/12345"),
@@ -254,8 +244,7 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testProviderConferenceURLBeatsAllOtherSources() {
-        // The headline #847 fix: Google Meet conferenceData beats a stale
-        // Zoom link pasted in notes.
+        // Google Meet conferenceData beats a stale Zoom link pasted in notes.
         let link = MeetingLinkDetector.detect(
             conferenceURL: URL(string: "https://meet.google.com/abc-defg-hij"),
             location: nil,
@@ -392,9 +381,8 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testGoogleMeetPrefersCurrentUserEmailOverCalendarEmail() {
-        // With multiple calendars connected to one account, the current-user
-        // attendee identity resolves the correct Google account better than
-        // the calendar's own email.
+        // With several calendars on one account, the current-user attendee identity picks
+        // the Google account better than the calendar's own email.
         let link = MeetingLinkDetector.detect(
             location: "https://meet.google.com/abc-defg-hij",
             eventURL: nil,
@@ -540,11 +528,8 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testCleanupOutlookSafeLinksTerminatesOnUndecodableTarget() {
-        // Regression: a SafeLink whose `url=` value contains an invalid percent
-        // escape ("%xx") makes `removingPercentEncoding` return nil, so the old
-        // `repeat … while !links.isEmpty` loop never rewrote the text and spun
-        // forever — wedging calendar sync on a single malformed event. The
-        // cleanup must now terminate (test would hang/time out if it regressed).
+        // An invalid percent escape makes `removingPercentEncoding` return nil; cleanup must
+        // still terminate, so a regression shows up as a hang.
         let malformed = "Join https://nam11.safelinks.protection.outlook.com/" +
             "?data=x&url=https%3A%2F%2Fzoom.us%2Fj%2F1%xx end"
 
@@ -568,9 +553,7 @@ final class MeetingLinkDetectorTests: XCTestCase {
     }
 
     func testDetectionSucceedsForEventCarryingUndecodableSafeLink() {
-        // The end-to-end path that hung in the field: an event whose notes carry
-        // a malformed SafeLink must still produce a detection result (here: the
-        // plain Zoom link present alongside it) without hanging.
+        // Notes with a malformed SafeLink still yield the plain Zoom link beside it.
         let notes = "Backup https://nam11.safelinks.protection.outlook.com/" +
             "?data=x&url=https%3A%2F%2Fbad%xx\nReal: https://zoom.us/j/9999"
 

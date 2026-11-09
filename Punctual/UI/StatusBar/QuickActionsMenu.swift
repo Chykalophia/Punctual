@@ -1,23 +1,19 @@
 //
 //  QuickActionsMenu.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  The compact menu shown when the status item is RIGHT-clicked: power-user
-//  actions without opening the agenda.
+//  The compact menu shown when the status item is right-clicked. The panel's
+//  "More actions" flyout mirrors it.
 //
-//  Extracted from `MenuBuilder` when the classic NSMenu dropdown was retired.
-//  This menu is not part of that path — it shows on a right-click regardless of
-//  which dropdown is in use, and the panel's "More actions" flyout mirrors it
-//  rather than replacing it.
-//
-//  Original work for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Original work for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import AppKit
 
 enum QuickActionsMenu {
-    /// Items target `target`'s existing @objc handlers, the same ones the panel's
-    /// flyout runs through `DropdownPanelHandlers`.
+    /// Builds the menu.
+    ///
+    /// - Parameter target: Receiver of the `StatusBarItemController` @objc actions.
     @MainActor
     static func build(target: AnyObject, state: StatusBarMenuState) -> NSMenu {
         let menu = NSMenu()
@@ -36,9 +32,7 @@ enum QuickActionsMenu {
             #selector(StatusBarItemController.createMeetingAction),
             target: target
         ))
-        // In-app event creation (EventKit only). Google-backed calendars are
-        // written through the macOS Calendar app's sync, so the write path is
-        // EventKit-only; hide the entry for the Google provider.
+        // In-app event creation writes through EventKit only; hidden for other providers.
         if state.activeProvider == .macOSEventKit {
             menu.addItem(item(
                 "status_bar_quick_action_new_event",

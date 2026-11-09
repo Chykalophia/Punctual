@@ -1,10 +1,8 @@
 //
 //  MeetingProviderTests.swift
-//  MeetingBarLogicTests
+//  PunctualLogicTests
 //
-//  Verifies that MeetingProvider catalogue is complete and consistent with
-//  the existing meetingLinkRegexPatterns dictionary so that migrating
-//  detection to the registry in Phase 3 PR 2 cannot silently regress.
+//  Tests that the MeetingProvider catalogue matches `meetingLinkRegexPatterns`.
 //
 
 import XCTest

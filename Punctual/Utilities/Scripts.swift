@@ -9,9 +9,9 @@ import Carbon
 import Foundation
 
 enum ScriptType: String, Codable, CaseIterable {
-    /// supported script type when a meeting will start
+    /// Script run when a meeting starts.
     case meetingStart
-    /// not supported yet to execute apple scripts for meeting end
+    /// Script run when a meeting ends; not supported yet.
     case meetingEnd
 }
 
@@ -57,7 +57,6 @@ func createAppleScriptParametersForEvent(event: MBEvent) -> NSAppleEventDescript
 
     parameters.insert(NSAppleEventDescriptor(string: event.notes ?? "EMPTY"), at: 0)
 
-    // Add calendar information
     parameters.insert(NSAppleEventDescriptor(string: event.calendar.title), at: 0)
     parameters.insert(NSAppleEventDescriptor(string: event.calendar.source), at: 0)
     let attendeesString = event.attendees.map { "\($0.name) <\($0.email ?? "unknown")>" }.joined(separator: ", ")
@@ -85,7 +84,7 @@ func createAppleScriptEvent(
     return appleEvent
 }
 
-// runs the predefined script with parameters.
+/// Runs the user script for `type` with the event as parameters.
 @MainActor func runMeetingStartsScript(event: MBEvent, type: ScriptType) {
     let appleEvent = createAppleScriptEvent(event: event, type: type)
 

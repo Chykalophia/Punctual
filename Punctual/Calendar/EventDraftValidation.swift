@@ -1,22 +1,16 @@
 //
 //  EventDraftValidation.swift
-//  MeetingBarNG
+//  Punctual
 //
-//  Hostless validation for the in-app event editor (Dot parity: create / edit
-//  calendar events). Pure value types + rules only — no AppKit/EventKit/Defaults
-//  and no localization — so it compiles into the MeetingBarLogic module and is
-//  unit-tested without a host. The UI layer maps `EventDraftError` cases to
-//  localized messages; the write service turns a validated `EventDraft` into an
-//  `EKEvent`. Mirrors the EventFiltering / ReminderSelection pure-logic pattern.
+//  Pure draft model and validation rules for the in-app event editor.
+//  The UI localizes `EventDraftError`; `EventKitEventWriter` saves a valid draft.
 //
-//  Created for MeetingBarNG by Peter Krzyzek / Chykalophia, 2026.
+//  Created for Punctual by Peter Krzyzek / Chykalophia, 2026.
 //
 
 import Foundation
 
-/// Flat, host-free description of an event the user is composing in the editor.
-/// `calendarID` is optional so the "no calendar chosen" state is representable
-/// and caught by validation rather than crashing the write path.
+/// An event being composed in the editor. A `nil` `calendarID` means no calendar is chosen yet.
 struct EventDraft: Equatable, Sendable {
     var title: String
     var startDate: Date
@@ -48,8 +42,7 @@ struct EventDraft: Equatable, Sendable {
     }
 }
 
-/// A single reason a draft can't be saved. The UI renders the first one inline
-/// and disables Save while any exist.
+/// A reason a draft cannot be saved.
 enum EventDraftError: Equatable, Sendable {
     case emptyTitle
     case endBeforeStart
@@ -57,12 +50,9 @@ enum EventDraftError: Equatable, Sendable {
 }
 
 enum EventDraftValidation {
-    /// Returns every problem with `draft`, in a stable order (title, then time,
-    /// then calendar). An empty result means the draft is savable.
+    /// Returns every problem with `draft` in order: title, time, calendar. Empty means savable.
     ///
-    /// - A timed event requires `endDate` strictly after `startDate`.
-    /// - An all-day event may have `endDate == startDate` (a single-day event),
-    ///   so only an end that falls *before* the start is rejected.
+    /// A timed event needs `endDate` after `startDate`; an all-day event may end on its start date.
     static func validate(_ draft: EventDraft) -> [EventDraftError] {
         var errors: [EventDraftError] = []
 
