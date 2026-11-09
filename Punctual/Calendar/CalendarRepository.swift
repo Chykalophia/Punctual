@@ -10,6 +10,7 @@
 //  direct Google provider can now be connected at the same time; calendars and
 //  events are fetched from every connected source and merged. A source that
 //  fails no longer blanks out the ones that worked — see `fetchOutcome`.
+//  Punctual, 2026-11-05: require Sendable results in `gather` (Xcode 16 SDK).
 //
 import Combine
 import Defaults
@@ -253,7 +254,7 @@ public final class CalendarRepository {
     /// deliberate: fetches are network- or XPC-bound and each provider already
     /// parallelizes internally, while a task group here would make the merged
     /// order non-deterministic and cost more than it saves for two sources.
-    private func gather<Element>(
+    private func gather<Element: Sendable>(
         _ work: (EventStore, EventStoreProvider) async throws -> [Element]
     ) async throws -> CalendarFetchOutcome<Element> {
         var elements: [Element] = []
