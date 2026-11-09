@@ -130,13 +130,48 @@ final class EventFilterSettingsAdapterTests: BaseTestCase {
 final class StatusBarPresentationSettingsAdapterTests: BaseTestCase {
 
     func test_noSelectedCalendars_setsHasSelectedCalendarsFalse() {
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDsByProvider] = [EventStoreProvider.macOSEventKit.rawValue: []]
         Defaults[.selectedCalendarIDs] = []
         XCTAssertFalse(StatusBarPresentationSettings.current.hasSelectedCalendars)
     }
 
     func test_withSelectedCalendars_setsHasSelectedCalendarsTrue() {
-        Defaults[.selectedCalendarIDs] = ["cal-1", "cal-2"]
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: ["cal-1", "cal-2"]
+        ]
         XCTAssertTrue(StatusBarPresentationSettings.current.hasSelectedCalendars)
+    }
+
+    func test_googleOnlyTicks_withMacOSPrimaryUnticked_countAsSelected() {
+        Defaults[.enabledCalendarSources] = [.macOSEventKit, .googleCalendar]
+        Defaults[.eventStoreProvider] = .macOSEventKit
+        Defaults[.selectedCalendarIDs] = []
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: [],
+            EventStoreProvider.googleCalendar.rawValue: ["peter@example.com"]
+        ]
+
+        let settings = StatusBarPresentationSettings.current
+        XCTAssertTrue(settings.hasSelectedCalendars)
+        let now = Date()
+        XCTAssertEqual(
+            StatusBarPresentationPolicy.mode(
+                nextEventStartDate: now.addingTimeInterval(600), settings: settings, now: now
+            ),
+            .nextEvent
+        )
+    }
+
+    func test_ticksUnderADisconnectedSource_doNotCountAsSelected() {
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDs] = []
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: [],
+            EventStoreProvider.googleCalendar.rawValue: ["peter@example.com"]
+        ]
+        XCTAssertFalse(StatusBarPresentationSettings.current.hasSelectedCalendars)
     }
 
     func test_showEventMaxTimeUntilEventEnabled_passedThrough() {

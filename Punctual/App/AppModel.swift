@@ -307,21 +307,11 @@ struct AppEnvironment {
                 }
                 .eraseToAnyPublisher(),
             providerHealthPublisher: calendarSync.$providerHealth.eraseToAnyPublisher(),
-            // The union of every CONNECTED source's selection, not the flat
-            // legacy key — that one mirrors the primary source only, so with
-            // Google also connected its calendars would render unticked no
-            // matter how many times the user ticked them.
-            //
-            // Disconnected sources are excluded so counts and the "nothing
-            // selected" empty state describe what is actually being fetched.
             selectedCalendarIDsPublisher: Defaults.publisher(
                 keys: .selectedCalendarIDsByProvider, .enabledCalendarSources,
                 options: [.initial]
             )
-            .map { _ in
-                let byProvider = Defaults[.selectedCalendarIDsByProvider]
-                return Defaults[.enabledCalendarSources].flatMap { byProvider[$0.rawValue] ?? [] }
-            }
+            .map { _ in CalendarSourceSelection.connectedSelectedCalendarIDs() }
             .eraseToAnyPublisher(),
             triggerRefresh: {
                 calendarSync.refreshSubject.send()

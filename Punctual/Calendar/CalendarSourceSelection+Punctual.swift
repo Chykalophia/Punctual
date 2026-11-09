@@ -9,6 +9,7 @@
 //
 
 import AppKit
+import Defaults
 import Foundation
 
 extension CalendarSourceKind {
@@ -56,6 +57,12 @@ extension CalendarSourceSelection {
 
     func isEnabled(_ provider: EventStoreProvider) -> Bool {
         isEnabled(provider.sourceKind)
+    }
+
+    /// `selectedCalendarIDs(byProviderKey:)`, read from `Defaults`.
+    static func connectedSelectedCalendarIDs() -> [String] {
+        CalendarSourceSelection(providers: Defaults[.enabledCalendarSources])
+            .selectedCalendarIDs(byProviderKey: Defaults[.selectedCalendarIDsByProvider])
     }
 
     /// The selection filtered down to what this build can actually reach.

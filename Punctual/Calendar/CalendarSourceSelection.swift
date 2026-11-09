@@ -144,6 +144,13 @@ public struct CalendarSourceSelection: Equatable, Sendable {
         return CalendarSourceSelection(enabled: surviving.isEmpty ? [.macOSEventKit] : surviving)
     }
 
+    /// Calendars ticked across the connected sources, in display order. Use this
+    /// rather than the flat `selectedCalendarIDs` key, which mirrors only the
+    /// primary source.
+    public func selectedCalendarIDs(byProviderKey: [String: [String]]) -> [String] {
+        enabled.flatMap { byProviderKey[$0.rawValue] ?? [] }
+    }
+
     /// One-time migration off the single `eventStoreProvider` key. The provider
     /// an existing install was using becomes its one enabled source, so updating
     /// changes nothing until the user opts into a second one.

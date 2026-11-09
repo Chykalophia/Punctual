@@ -162,7 +162,7 @@ extension StatusBarMenuState {
         var appState = AppState()
         appState.events = events
         appState.activeProvider = settings.calendar.eventStoreProvider
-        appState.selectedCalendarIDs = settings.calendar.selectedCalendarIDs
+        appState.selectedCalendarIDs = CalendarSourceSelection.connectedSelectedCalendarIDs()
         return makeSnapshot(
             appState: appState,
             settings: settings,

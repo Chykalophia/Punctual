@@ -138,15 +138,10 @@ final class StatusBarItemController {
 
     private var cancellables = Set<AnyCancellable>()
 
-    /// One-shot redraw timer, re-armed on every `updateTitle()`. See
-    /// `scheduleNextTick(now:event:)` — this is the app's only UI clock.
+    /// The app's only UI clock: one-shot, re-armed on every `updateTitle()`.
     private var tickTimer: Timer?
 
-    /// Removes the status item from the system status bar and tears down the
-    /// timer. Called from `AppDelegate.applicationWillTerminate` so the item
-    /// doesn't linger as a stale icon when the process is killed — a common
-    /// annoyance during local dev rebuilds where each run leaves a frozen
-    /// status item at whatever icon its state was in.
+    /// Removes the status item from the menu bar and stops the redraw timer.
     func removeFromStatusBar() {
         tickTimer?.invalidate()
         tickTimer = nil
@@ -206,10 +201,6 @@ final class StatusBarItemController {
             .showAgendaInMenu, .showJoinSectionInMenu, .showBookmarksInMenu,
             options: []
         )
-        // Only the title needs redrawing on a settings change now. The dropdown
-        // builds its whole state fresh every time it opens, so there is nothing
-        // to keep in sync between opens — that was an NSMenu requirement, since a
-        // menu is a long-lived object you mutate in place.
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in
             self?.updateTitle()
@@ -571,15 +562,10 @@ final class StatusBarItemController {
         let now = Date()
         let selectedEvent = events.nextEvent()
         let nextEvent = selectedEvent.map(StatusBarEventPresentationInput.init)
-        // Re-arm the clock against whatever meeting is now current. Doing it
-        // here (rather than only on a fixed interval) means the redraw lands
-        // exactly on the next state change, and re-arms itself whenever the
-        // calendar, the settings, or the selected meeting change.
         scheduleNextTick(now: now, event: selectedEvent)
 
         let presentation: StatusBarPresentation
         if let composition = MenuBarComposition.currentIfEnabled {
-            // User opted into a custom token layout (composable menu bar).
             presentation = StatusBarPresenter.composedPresentation(
                 nextEvent: nextEvent,
                 composition: composition,
@@ -588,7 +574,6 @@ final class StatusBarItemController {
                 calendar: statusBarCalendar()
             )
         } else {
-            // Classic path — byte-for-byte unchanged for existing installs.
             presentation = StatusBarPresenter.presentation(
                 nextEvent: nextEvent,
                 settings: .current,
@@ -606,16 +591,9 @@ final class StatusBarItemController {
 
     // MARK: - The clock
 
-    /// Re-arms the redraw timer for the next instant at which the menu bar's
-    /// contents change *because time passed* — a meeting starting or ending,
-    /// the "hide the current meeting N minutes after it starts" point, or
-    /// simply the next minute so a countdown stays honest.
-    ///
-    /// Before this existed the app had no clock: redraws were a side effect of
-    /// a Defaults change or of the 180-second calendar poll, so a meeting could
-    /// begin and the menu bar would keep showing the previous one for minutes.
-    /// One-shot and re-armed on every redraw, so it always targets the *current*
-    /// next meeting and never accumulates timers.
+    /// Arms the redraw for the next instant the menu bar changes because time
+    /// passed: a meeting starting or ending, the ongoing-meeting grace period
+    /// running out, or the next minute so a countdown stays current.
     private func scheduleNextTick(now: Date, event: MBEvent?) {
         tickTimer?.invalidate()
 
@@ -624,9 +602,6 @@ final class StatusBarItemController {
             eventEnd: event?.endDate,
             ongoingGracePeriod: Defaults[.ongoingEventVisibility].gracePeriod
         )
-        // The instant the Join chip is due. The minute boundary would show it
-        // within 60 seconds anyway; this is what makes a meeting starting at
-        // 10:00:30 get its full two minutes rather than one and a half.
         if let start = event?.startDate {
             if let due = MenuBarJoinActionPolicy.appearanceDate(
                 eventStart: start,
@@ -634,7 +609,6 @@ final class StatusBarItemController {
             ) {
                 transitions.append(due)
             }
-            // Same reasoning for the countdown block's own lead time.
             if let due = MenuBarCompositionPolicy.countdownAppearanceDate(
                 eventStart: start,
                 leadMinutes: Defaults[.menuBarCountdownLeadMinutes]
@@ -655,8 +629,7 @@ final class StatusBarItemController {
         ) { [weak self] _ in
             DispatchQueue.main.async { self?.updateTitle() }
         }
-        // .common so the countdown keeps advancing while a menu is tracking or
-        // a window is being resized, which .default would stall.
+        // .common keeps ticking while a menu is tracking or a window resizes.
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer
     }
@@ -738,7 +711,7 @@ final class StatusBarItemController {
             buttonWidth: statusItem?.button?.bounds.width ?? 0,
             eventCount: events.count,
             isOverridden: _eventsOverride != nil,
-            hasSelectedCalendars: !Defaults[.selectedCalendarIDs].isEmpty
+            hasSelectedCalendars: !CalendarSourceSelection.connectedSelectedCalendarIDs().isEmpty
         )
     }
     #endif

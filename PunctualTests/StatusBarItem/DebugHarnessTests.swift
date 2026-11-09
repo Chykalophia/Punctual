@@ -29,9 +29,11 @@ final class DebugHarnessTests: BaseTestCase {
     }
 
     private func makeController() -> StatusBarItemController {
-        // The mode policy renders `.idle` — app icon, no title — until a calendar
-        // is selected, whatever the event list holds.
-        Defaults[.selectedCalendarIDs] = ["debug-harness"]
+        // With no calendar selected the menu bar is icon-only, whatever the events.
+        Defaults[.enabledCalendarSources] = [.macOSEventKit]
+        Defaults[.selectedCalendarIDsByProvider] = [
+            EventStoreProvider.macOSEventKit.rawValue: ["debug-harness"]
+        ]
         Defaults[.menuBarShowJoinAction] = true
         Defaults[.menuBarJoinActionLeadMinutes] = 2
         Defaults[.menuBarTokens] = [

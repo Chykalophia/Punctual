@@ -7,17 +7,13 @@ import Defaults
 import Foundation
 
 extension StatusBarPresentationSettings {
-    /// Snapshot of the relevant `Defaults` keys the policy reads. The
-    /// renderer (`StatusBarItemController.updateTitle`) builds this on every
-    /// title update and passes it to `StatusBarPresentation.mode`.
+    /// The `Defaults` the menu bar's mode policy reads.
     static var current: StatusBarPresentationSettings {
         StatusBarPresentationSettings(
-            hasSelectedCalendars: !Defaults[.selectedCalendarIDs].isEmpty,
+            hasSelectedCalendars: !CalendarSourceSelection.connectedSelectedCalendarIDs().isEmpty,
             showEventMaxTimeUntilEventEnabled: Defaults[.showEventMaxTimeUntilEventEnabled],
             showEventMaxTimeUntilEventThreshold: Defaults[.showEventMaxTimeUntilEventThreshold],
             highlightImminentEvent: Defaults[.menuBarHighlightImminentEvent],
-            // Same key the dropdown's action buttons read, so "close enough to
-            // act on" means one thing everywhere rather than drifting apart.
             imminentLeadMinutes: Defaults[.eventActionHighlightMinutes]
         )
     }

@@ -28,6 +28,36 @@ final class CalendarSourceSelectionTests: XCTestCase {
         XCTAssertEqual(selection.disabling(.macOSEventKit).enabled, [.googleCalendar])
     }
 
+    // MARK: - Selected calendars across sources
+
+    func test_selectedCalendarIDs_unionsEveryConnectedSource_inDisplayOrder() {
+        let selection = CalendarSourceSelection(enabled: [.googleCalendar, .macOSEventKit])
+        let ids = selection.selectedCalendarIDs(byProviderKey: [
+            CalendarSourceKind.googleCalendar.rawValue: ["g1"],
+            CalendarSourceKind.macOSEventKit.rawValue: ["m1", "m2"]
+        ])
+        XCTAssertEqual(ids, ["m1", "m2", "g1"])
+    }
+
+    func test_selectedCalendarIDs_primaryEmpty_otherSourceTicked_isNotEmpty() {
+        let selection = CalendarSourceSelection(enabled: [.macOSEventKit, .googleCalendar])
+        let ids = selection.selectedCalendarIDs(byProviderKey: [
+            CalendarSourceKind.macOSEventKit.rawValue: [],
+            CalendarSourceKind.googleCalendar.rawValue: ["g1"]
+        ])
+        XCTAssertEqual(ids, ["g1"])
+    }
+
+    func test_selectedCalendarIDs_ignoresDisconnectedSourcesAndMissingKeys() {
+        let selection = CalendarSourceSelection(enabled: [.macOSEventKit])
+        XCTAssertEqual(
+            selection.selectedCalendarIDs(byProviderKey: [
+                CalendarSourceKind.googleCalendar.rawValue: ["g1"]
+            ]),
+            []
+        )
+    }
+
     // MARK: - Normalization
 
     func test_orderIsCanonicalRegardlessOfInputOrder() {
