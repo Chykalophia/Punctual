@@ -4,6 +4,13 @@ Punctual (formerly MeetingBarNG) is built on [MeetingBar](https://github.com/lei
 by Andrii Leitsius and the MeetingBar contributors. This file lists Punctual's own releases.
 Versions 0.2.0 and 0.3.0 shipped under the name MeetingBarNG.
 
+## 1.1.3 (2026-11-13)
+
+* **The meeting card's hover highlight has room to breathe.** Hovering the current or next
+  meeting drew its highlight right up against the title, details and Join button. The
+  highlight now extends past the content and sits evenly inside the card, at every density.
+  The keyboard selection outline on that card gets the same spacing.
+
 ## 1.1.2 (2026-11-09)
 
 * **The menu bar shows your next meeting again** when you have both macOS Calendar and
