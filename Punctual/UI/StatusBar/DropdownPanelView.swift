@@ -722,15 +722,22 @@ struct DropdownPanelView: View {
                             ? nil
                             : { handlers.joinEvent(event); handlers.dismiss() },
                         isActionImminent: isActionImminent(event),
-                        horizontalPadding: 0
+                        horizontalPadding: metrics.cardHighlightOutset,
+                        highlightCornerRadius: metrics.cardHighlightCornerRadius
                     )
+                    // Pulls the padded summary back into the card's content box: the
+                    // text stays aligned with the rows below while its hover highlight
+                    // and hit area extend into the card padding.
+                    .padding(.horizontal, -metrics.cardHighlightOutset)
                     meetingProgressBar(event)
                 }
                 .background(
                     PanelHighlight(
                         isSelected: isSelected(.meetingSummary(event.id)),
-                        isHovered: false
+                        isHovered: false,
+                        cornerRadius: metrics.cardHighlightCornerRadius
                     )
+                    .padding(.horizontal, -metrics.cardHighlightOutset)
                 )
             }
             .contextMenu { eventContextMenu(event) }
