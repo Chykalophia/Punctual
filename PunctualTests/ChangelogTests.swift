@@ -12,19 +12,19 @@ import XCTest
 final class ChangelogTests: XCTestCase {
     func testEveryReleaseSurfacesForAFreshInstallNewestFirst() {
         let unseen = ReleaseNotes.releases(newerThan: "0.0.0")
-        XCTAssertEqual(unseen.map(\.version), ["1.1.2", "1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"])
+        XCTAssertEqual(unseen.map(\.version), ["1.1.3", "1.1.2", "1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"])
     }
 
     func testOnlyTheNewerReleaseSurfacesAfterAcknowledgingAnOlderOne() {
-        XCTAssertEqual(ReleaseNotes.releases(newerThan: "1.1.1").map(\.version), ["1.1.2"])
+        XCTAssertEqual(ReleaseNotes.releases(newerThan: "1.1.2").map(\.version), ["1.1.3"])
     }
 
     func testNothingSurfacesOnceTheLatestIsAcknowledged() {
-        XCTAssertTrue(ReleaseNotes.releases(newerThan: "1.1.2").isEmpty)
+        XCTAssertTrue(ReleaseNotes.releases(newerThan: "1.1.3").isEmpty)
         // And the acknowledged releases move under "earlier releases".
         XCTAssertEqual(
-            ReleaseNotes.releases(upToAndIncluding: "1.1.2").map(\.version),
-            ["1.1.2", "1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"]
+            ReleaseNotes.releases(upToAndIncluding: "1.1.3").map(\.version),
+            ["1.1.3", "1.1.2", "1.1.1", "1.1.0", "1.0.2", "1.0.1", "1.0.0", "0.1.0"]
         )
     }
 

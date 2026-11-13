@@ -210,6 +210,16 @@ public struct DropdownMetrics: Equatable, Sendable {
     /// Distance from the panel's leading edge to a row's content box.
     public var rowLeadingInset: CGFloat { rowOuterPadding + rowInnerPadding }
 
+    /// Gap between a card's edge and a hover or selection highlight drawn inside it.
+    public var cardHighlightGap: CGFloat { 4 }
+
+    /// How far an in-card highlight extends past the card's content box on each
+    /// side, so it clears the content while staying `cardHighlightGap` inside the card.
+    public var cardHighlightOutset: CGFloat { cardHorizontalPadding - cardHighlightGap }
+
+    /// Corner radius of an in-card highlight, concentric with the card's corners.
+    public var cardHighlightCornerRadius: CGFloat { cardCornerRadius - cardHighlightGap }
+
     /// Leading inset for section headers; equal to `rowLeadingInset` so headers align with rows.
     public var sectionHeaderInset: CGFloat { rowLeadingInset }
 

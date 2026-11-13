@@ -90,6 +90,24 @@ final class DropdownDensityTests: XCTestCase {
         XCTAssertEqual(radii, radii.sorted())
     }
 
+    func test_cardHighlightClearsContentAndStaysInsideCard() {
+        for density in all {
+            let metrics = density.metrics
+            XCTAssertGreaterThanOrEqual(metrics.cardHighlightOutset, 4, "\(density)")
+            XCTAssertLessThan(
+                metrics.cardHighlightOutset,
+                metrics.cardHorizontalPadding,
+                "\(density)"
+            )
+            XCTAssertEqual(
+                metrics.cardHighlightCornerRadius,
+                metrics.cardCornerRadius
+                    - (metrics.cardHorizontalPadding - metrics.cardHighlightOutset),
+                "highlight corners must be concentric with the card: \(density)"
+            )
+        }
+    }
+
     func test_cardsLeaveUsableContentWidthAtEveryDensity() {
         for density in all {
             let metrics = density.metrics

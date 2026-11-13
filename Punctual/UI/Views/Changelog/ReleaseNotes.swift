@@ -70,6 +70,17 @@ enum ReleaseNotes {
     /// All shipped releases, newest first.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.1.3",
+            date: "November 2026",
+            highlights: [
+                ChangeEntry(
+                    kind: .fix,
+                    text: "The meeting card's hover highlight no longer presses against its text "
+                        + "and Join button."
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.1.2",
             date: "November 2026",
             highlights: [

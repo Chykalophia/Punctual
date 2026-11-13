@@ -37,6 +37,8 @@ struct MeetingSummaryView: View {
     /// already supplies one.
     var horizontalPadding: CGFloat = 12
 
+    var highlightCornerRadius: CGFloat = 7
+
     @State private var isHovered = false
 
     /// The meeting service icon; `nil` when there is no online meeting, so the
@@ -103,7 +105,7 @@ struct MeetingSummaryView: View {
             alignment: .leading
         )
         .background(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: highlightCornerRadius, style: .continuous)
                 .fill(isHovered && onJoin != nil ? Color.primary.opacity(0.15) : Color.clear)
         )
         .contentShape(Rectangle())
