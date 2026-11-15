@@ -11,6 +11,7 @@
 
 import AppKit
 import Defaults
+import ScreenCaptureKit
 import SwiftUI
 import XCTest
 @testable import Punctual
@@ -47,6 +48,14 @@ final class DocsScreenshotTests: BaseTestCase {
 
         let calendars = [PreviewFixtures.workCalendar, PreviewFixtures.personalCalendar, PreviewFixtures.focusCalendar]
         harness = AppModelTestHarness(now: PreviewFixtures.now)
+        // `model` is lazy and the harness publishers are passthrough subjects: create it
+        // first so it is subscribed before anything is sent, or the calendars are dropped.
+        _ = harness.model
+        harness.publishProviderHealth(ProviderHealth(
+            lastSuccessfulRefresh: PreviewFixtures.now,
+            lastAttemptedRefresh: PreviewFixtures.now,
+            lastSyncedChange: PreviewFixtures.now.addingTimeInterval(-120)
+        ))
         harness.publishCalendars(calendars)
         harness.publishSelectedCalendarIDs(calendars.map(\.id))
         harness.publishEvents(PreviewFixtures.sampleEvents)
@@ -58,27 +67,27 @@ final class DocsScreenshotTests: BaseTestCase {
 
     // MARK: - Preferences
 
-    func testPreferencesPanes() throws {
+    func testPreferencesPanes() async throws {
         try prepare()
         var selections = PreferencesTab.allCases.map { (slug(for: $0), SidebarSelection.tab($0)) }
         selections.append(("about", .about))
         for (name, selection) in selections {
-            try captureEachAppearance("preferences-\(name)") {
+            try await captureEachAppearance("preferences-\(name)") {
                 self.preferencesWindow(PreferencesShellV2(initialSelection: selection))
             }
         }
     }
 
-    func testPreferencesSearch() throws {
+    func testPreferencesSearch() async throws {
         try prepare()
-        try captureEachAppearance("preferences-search") {
+        try await captureEachAppearance("preferences-search") {
             self.preferencesWindow(PreferencesShellV2(initialSearchQuery: "notification"))
         }
     }
 
     // MARK: - Onboarding
 
-    func testOnboardingSteps() throws {
+    func testOnboardingSteps() async throws {
         try prepare()
         let steps: [(String, OnboardingStep)] = [
             ("welcome", .welcome),
@@ -88,7 +97,7 @@ final class DocsScreenshotTests: BaseTestCase {
             ("done", .success)
         ]
         for (name, step) in steps {
-            try captureEachAppearance("onboarding-\(name)") {
+            try await captureEachAppearance("onboarding-\(name)") {
                 let handler = OnboardingHandler(
                     onProviderSelected: { _ in
                         // Holds the Authorization step on "Waiting for authorization…" while it is captured.
@@ -112,13 +121,13 @@ final class DocsScreenshotTests: BaseTestCase {
 
     // MARK: - Dropdown
 
-    func testDropdownStates() throws {
+    func testDropdownStates() async throws {
         try prepare()
         let variants: [(String, Bool)] = [("dropdown", false), ("dropdown-with-finished", true)]
         for (name, includeFinished) in variants {
             // The dropdown drops ended meetings while this is on, which is the default.
             Defaults[.hideFinishedEventsInMenu] = !includeFinished
-            try captureEachAppearance(name) {
+            try await captureEachAppearance(name) {
                 let state = PreviewFixtures.makeState(includeFinished: includeFinished, includeReminders: true)
                 let view = DropdownPanelView(
                     state: state,
@@ -135,9 +144,9 @@ final class DocsScreenshotTests: BaseTestCase {
 
     // MARK: - Windows
 
-    func testCommandBar() throws {
+    func testCommandBar() async throws {
         try prepare()
-        try captureEachAppearance("command-bar") {
+        try await captureEachAppearance("command-bar") {
             let viewModel = CommandBarViewModel(
                 handlers: CommandBarHandlers(
                     events: { PreviewFixtures.sampleEvents },
@@ -156,10 +165,10 @@ final class DocsScreenshotTests: BaseTestCase {
         }
     }
 
-    func testCalendarWindow() throws {
+    func testCalendarWindow() async throws {
         try prepare()
         for mode in [CalendarGridMode.month, .week] {
-            try captureEachAppearance("calendar-window-\(mode == .month ? "month" : "week")") {
+            try await captureEachAppearance("calendar-window-\(mode == .month ? "month" : "week")") {
                 let viewModel = CalendarGridViewModel(
                     handlers: CalendarWindowHandlers(
                         fetchEvents: { _, _ in PreviewFixtures.sampleEvents },
@@ -177,14 +186,14 @@ final class DocsScreenshotTests: BaseTestCase {
         }
     }
 
-    func testEventEditor() throws {
+    func testEventEditor() async throws {
         try prepare()
         let modes: [(String, EventEditorMode)] = [
             ("new", .create),
             ("edit", .edit(PreviewFixtures.sampleEvents[0]))
         ]
         for (name, mode) in modes {
-            try captureEachAppearance("event-editor-\(name)") {
+            try await captureEachAppearance("event-editor-\(name)") {
                 let handlers = EventEditorHandlers(
                     create: { _ in },
                     update: { _, _, _ in },
@@ -201,10 +210,10 @@ final class DocsScreenshotTests: BaseTestCase {
         }
     }
 
-    func testWorldClock() throws {
+    func testWorldClock() async throws {
         try prepare()
         Defaults[.worldClockPanelZones] = ["America/Los_Angeles", "America/New_York", "Europe/London", "Asia/Tokyo"]
-        try captureEachAppearance("world-clock") {
+        try await captureEachAppearance("world-clock") {
             self.window(
                 WorldClockPanelView(),
                 size: WorldClockPanelPresentationPolicy.contentRect,
@@ -213,9 +222,9 @@ final class DocsScreenshotTests: BaseTestCase {
         }
     }
 
-    func testChangelog() throws {
+    func testChangelog() async throws {
         try prepare()
-        try captureEachAppearance("whats-new") {
+        try await captureEachAppearance("whats-new") {
             self.window(
                 ChangelogView(),
                 size: ChangelogWindowPresentationPolicy.contentRect.size,
@@ -225,7 +234,7 @@ final class DocsScreenshotTests: BaseTestCase {
         }
     }
 
-    func testFullscreenNotification() throws {
+    func testFullscreenNotification() async throws {
         try prepare()
         // Always dark, as in the app.
         let fullscreen = window(
@@ -234,7 +243,7 @@ final class DocsScreenshotTests: BaseTestCase {
             styleMask: [.borderless],
             title: ""
         )
-        try capture(fullscreen, appearance: .darkAqua, to: "fullscreen-notification")
+        try await capture(fullscreen, appearance: .darkAqua, to: "fullscreen-notification")
     }
 
     // MARK: - Helpers
@@ -292,29 +301,79 @@ final class DocsScreenshotTests: BaseTestCase {
         return window
     }
 
-    private func captureEachAppearance(_ name: String, make: () -> NSWindow) throws {
+    private func captureEachAppearance(_ name: String, make: () -> NSWindow) async throws {
         for (suffix, appearance) in Self.appearances {
-            try capture(make(), appearance: appearance, to: "\(name)-\(suffix)")
+            try await capture(make(), appearance: appearance, to: "\(name)-\(suffix)")
         }
     }
 
-    /// Shows `window` off to the side, lets SwiftUI lay out and load, and writes its frame view
-    /// (title bar included) to `<name>.png`.
-    private func capture(_ window: NSWindow, appearance: NSAppearance.Name, to name: String) throws {
+    /// Set once a window-server capture fails (usually no Screen Recording permission),
+    /// so the rest of the run goes straight to the offscreen fallback.
+    private static var windowServerCaptureUnavailable = false
+
+    /// Shows `window`, lets SwiftUI lay out and load, and writes it to `<name>.png`.
+    ///
+    /// Prefers a window-server capture (ScreenCaptureKit), which draws everything the user
+    /// sees, including the Preferences sidebar's vibrant rows. It needs Screen Recording
+    /// permission for the test host; without it, falls back to `cacheDisplay`, which leaves
+    /// vibrant content such as the sidebar list blank.
+    private func capture(_ window: NSWindow, appearance: NSAppearance.Name, to name: String) async throws {
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
         window.orderFrontRegardless()
-        settle()
+        try await Task.sleep(for: .seconds(0.8))
 
+        var png: Data?
+        if !Self.windowServerCaptureUnavailable {
+            let result = await Self.windowServerPNG(windowID: CGWindowID(window.windowNumber))
+            png = result.png
+            if let failure = result.failure {
+                Self.windowServerCaptureUnavailable = true
+                print("""
+                DocsScreenshotTests: ScreenCaptureKit capture failed (\(failure)). Grant Screen Recording \
+                to Punctual in System Settings ▸ Privacy & Security and run again. Using offscreen \
+                capture for now, which leaves the Preferences sidebar blank.
+                """)
+            }
+        }
+        let data = try png ?? offscreenPNG(of: window)
+        try data.write(to: outputDirectory.appendingPathComponent("\(name).png"))
+        window.orderOut(nil)
+        window.close()
+    }
+
+    /// The window as the window server composites it, title bar included and shadow left out,
+    /// as PNG data, or the reason it could not be captured.
+    ///
+    /// Nonisolated and keyed by window number so no ScreenCaptureKit object crosses actors.
+    private nonisolated static func windowServerPNG(windowID: CGWindowID) async -> (png: Data?, failure: String?) {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+                return (nil, "window \(windowID) was not found")
+            }
+            let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+            let configuration = SCStreamConfiguration()
+            configuration.width = Int(filter.contentRect.width * CGFloat(filter.pointPixelScale))
+            configuration.height = Int(filter.contentRect.height * CGFloat(filter.pointPixelScale))
+            configuration.showsCursor = false
+            configuration.ignoreShadowsSingleWindow = true
+            configuration.captureResolution = .best
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+            return (NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]), nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
+    /// Draws the window's frame view (title bar included) offscreen.
+    private func offscreenPNG(of window: NSWindow) throws -> Data {
         let contentView = try XCTUnwrap(window.contentView)
         let view = window.styleMask.contains(.titled) ? (contentView.superview ?? contentView) : contentView
         view.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: rep)
-        let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-        try png.write(to: outputDirectory.appendingPathComponent("\(name).png"))
-        window.orderOut(nil)
-        window.close()
+        return try XCTUnwrap(rep.representation(using: .png, properties: [:]))
     }
 
     /// Runs the main loop briefly so Combine publishers deliver and async loads finish.
