@@ -116,6 +116,8 @@ final class DocsScreenshotTests: BaseTestCase {
         try prepare()
         let variants: [(String, Bool)] = [("dropdown", false), ("dropdown-with-finished", true)]
         for (name, includeFinished) in variants {
+            // The dropdown drops ended meetings while this is on, which is the default.
+            Defaults[.hideFinishedEventsInMenu] = !includeFinished
             try captureEachAppearance(name) {
                 let state = PreviewFixtures.makeState(includeFinished: includeFinished, includeReminders: true)
                 let view = DropdownPanelView(
